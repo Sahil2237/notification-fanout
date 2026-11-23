@@ -1,0 +1,144 @@
+{
+  "release_sha": "57b3fbfb81743081b4b76382392e9ed2eed8fc27",
+  "ci_url": "https://github.com/Sahil2237/notification-fanout/actions/runs/45257513323",
+  "deployment_url": "https://github.com/Sahil2237/notification-fanout/actions/runs/45258726373",
+  "tests": {
+    "java_unit": 15,
+    "java_integration": 31,
+    "python_release_security": 12
+  },
+  "fixable_high_critical_findings": 0,
+  "cloud_checks": {
+    "public_https": true,
+    "credential_and_ingress_isolation": true,
+    "tested_image_identity": {
+      "verified_config_digest": "sha256:ee7aa40fc7db540dae5a5eaad9e12c2476fbfac5d6ab3062de9f8a486ec3a2b3",
+      "portable_identity": "55ca977500154ca9068fad11504d3e5c098b6b936e8c74352666303a5b361043",
+      "loaded_engine_id": "sha256:9114485daaddfffb24b841d21249331802e14dca74c02c4a6f3fc606ef875695"
+    },
+    "runtime_origin_approval_revocation_without_restart": true,
+    "broker_outage_recovery": true,
+    "retry_exhaustion": true,
+    "non_matching_event_has_no_delivery": true,
+    "external_capture_and_hmac": true,
+    "restart_persistence_and_revocation": true
+  },
+  "demo_events": [
+    {
+      "event_id": "4774037d-2f21-48fb-8c8c-89928850537b",
+      "delivery_id": "1dc4f086-0fad-4613-b6ce-7e8066ddbb59",
+      "http_status": 204,
+      "attempts": 1
+    },
+    {
+      "event_id": "de16aeb5-0e40-4ef8-8718-b000e7721634",
+      "delivery_id": "d8bb45e5-3c9c-47e7-9ee9-818c88d2cc5e",
+      "http_status": 204,
+      "attempts": 1
+    },
+    {
+      "event_id": "499135c0-961a-4a8e-8fbd-d545d22cc057",
+      "delivery_id": "d1c1363b-d467-44f8-b7e0-73b844696ceb",
+      "http_status": 204,
+      "attempts": 1
+    }
+  ],
+  "broker_outage_event": "f3649015-a082-4b9f-bccd-aa083721017b",
+  "intentional_failure": {
+    "event_id": "8f435c41-f5fd-4b54-b919-1e9ddbb528c4",
+    "status": "failed",
+    "attempts": [
+      {
+        "number": 1,
+        "startedAt": "2026-11-23T20:26:06.592818Z",
+        "finishedAt": "2026-11-23T20:26:06.781221Z",
+        "httpStatus": 503,
+        "outcome": "retry_scheduled",
+        "error": "http_503"
+      },
+      {
+        "number": 2,
+        "startedAt": "2026-11-23T20:26:07.796161Z",
+        "finishedAt": "2026-11-23T20:26:08.274401Z",
+        "httpStatus": 503,
+        "outcome": "retry_scheduled",
+        "error": "http_503"
+      },
+      {
+        "number": 3,
+        "startedAt": "2026-11-23T20:26:09.489433Z",
+        "finishedAt": "2026-11-23T20:26:09.945290Z",
+        "httpStatus": 503,
+        "outcome": "retry_scheduled",
+        "error": "http_503"
+      },
+      {
+        "number": 4,
+        "startedAt": "2026-11-23T20:26:12.122602Z",
+        "finishedAt": "2026-11-23T20:26:12.610912Z",
+        "httpStatus": 503,
+        "outcome": "retry_scheduled",
+        "error": "http_503"
+      },
+      {
+        "number": 5,
+        "startedAt": "2026-11-23T20:26:17.171004Z",
+        "finishedAt": "2026-11-23T20:26:17.637808Z",
+        "httpStatus": 503,
+        "outcome": "failed",
+        "error": "http_503"
+      }
+    ]
+  },
+  "capacity": {
+    "run_id": "2d5689aaae0a4c4089c53117d99e7891",
+    "release_sha": "57b3fbfb81743081b4b76382392e9ed2eed8fc27",
+    "event_type": "assessment.capacity.2d5689aaae0a4c4089c53117d99e7891",
+    "requested": 10000,
+    "accepted_http": 10000,
+    "persisted": 10000,
+    "dispatched": 10000,
+    "delivery_jobs": 0,
+    "failures": [],
+    "offered_events_per_second": 50,
+    "acceptance_duration_seconds": 200.04,
+    "acceptance_latency_ms": {
+      "p50": 13.63,
+      "p95": 73.81,
+      "p99": 191.01
+    },
+    "scope": "single-type synthetic HTTP ingestion and Kafka dispatch, zero matching subscribers; not a fanout throughput SLO",
+    "checked_at": "2026-11-23T20:30:08.557934+00:00"
+  },
+  "cumulative_topic_end_offsets": {
+    "0": 1613,
+    "1": 1617,
+    "2": 1655,
+    "3": 1738,
+    "4": 1694,
+    "5": 1694
+  },
+  "offset_scope": "End offsets sampled after the probe; include 11 earlier records, not an isolated per-probe partition count.",
+  "same_server_restore": {
+    "release_sha": "57b3fbfb81743081b4b76382392e9ed2eed8fc27",
+    "restored_demo_events": 3,
+    "restored_delivered_jobs": 3,
+    "restored_revocation": true,
+    "restored_origin_audit_rows": 3,
+    "scope": "temporary database on the same Droplet; no off-host disaster recovery claim",
+    "checked_at": "2026-11-23T20:30:31.295325+00:00"
+  },
+  "reboot": {
+    "release_sha": "57b3fbfb81743081b4b76382392e9ed2eed8fc27",
+    "boot_identity_changed": true,
+    "public_https_ready": true,
+    "persisted_capacity_events": 10000,
+    "dispatched_capacity_events": 10000,
+    "capacity_deliveries": 0,
+    "demo_delivery_history_preserved": true,
+    "failed_attempt_history_preserved": true,
+    "origin_revocation_preserved": true,
+    "checked_at": "2026-11-23T20:31:47.397664+00:00"
+  },
+  "functional_checked_at_utc": "2026-11-23T20:26:28Z"
+}

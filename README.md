@@ -22,7 +22,7 @@ For a packaged local run: `docker compose up -d db kafka kafka-init`, `docker co
 
 ## REST usage
 
-All `/v1` requests require a tenant bearer token. The current cloud tenant is `service`; authentication tokens and signing master stay in the server's root-only `.env`. The public HTTPS endpoint, when enabled, is fronted by Caddy; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
+Tenant `/v1` endpoints require a tenant bearer token; the separate administrator endpoints require the administrator token. The current cloud tenant is `service`; authentication tokens and signing master stay in the server's root-only `.env`. The deployed REST base is `https://64.227.168.29`, fronted by Caddy with a publicly trusted certificate; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
 
 Create a subscription **before** publishing its events:
 
