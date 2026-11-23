@@ -8,4 +8,4 @@ The DigitalOcean production configuration, App Platform spec generator and CI/CD
 
 The short earlier load probes describe the pre-Kafka baseline; they do not validate current Kafka throughput or 10,000 events/second. A representative Kafka load/retention/recovery benchmark is still required. Some original design/validation sections describe the previous PostgreSQL-only milestone; use architecture.md for the current messaging flow and this file for current submission status.
 
-GitHub Actions runs the complete suite with real Kafka and PostgreSQL. Hosted workflow results must be checked after publication. Automatic DigitalOcean deployment is gated on a successful main-branch CI run plus configured production environment variables/secrets; with no app ID configured, cloud deployment is skipped.
+GitHub Actions runs the complete suite with real Kafka and PostgreSQL. Hosted workflow results must be checked after publication. Automatic DigitalOcean deployment is gated on a successful default-branch CI run plus configured production environment variables/secrets; with no app ID configured, cloud deployment is skipped.

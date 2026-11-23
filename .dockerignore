@@ -3,3 +3,9 @@ target
 .env
 *.log
 reports
+.deploy
+.env.*
+*.pem
+*.key
+.idea
+.run
