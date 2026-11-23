@@ -56,6 +56,16 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
                     token.getBytes(StandardCharsets.UTF_8),
                     entry.getValue().getBytes(StandardCharsets.UTF_8))) tenant = entry.getKey();
         }
+        var adminRequest = path.startsWith("v1/admin/");
+        if (adminRequest) {
+            var validAdmin = !config.adminToken.isEmpty() && MessageDigest.isEqual(
+                    token.getBytes(StandardCharsets.UTF_8), config.adminToken.getBytes(StandardCharsets.UTF_8));
+            if (!validAdmin) {
+                reject(request, tenant == null ? 401 : 403, "administrator_required", "Administrator credentials required");
+                return;
+            }
+            tenant = "__administrator__";
+        }
         if (tenant == null) {
             reject(request, 401, "unauthorized", "A valid bearer token is required");
             return;
@@ -72,7 +82,7 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
                     }
 
                     public boolean isUserInRole(String role) {
-                        return "tenant".equals(role);
+                        return (adminRequest ? "administrator" : "tenant").equals(role);
                     }
 
                     public boolean isSecure() {

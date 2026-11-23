@@ -1,43 +1,75 @@
-# Current Kafka-backed architecture
+# Event Notification Fanout architecture
 
 ```mermaid
 flowchart LR
- P[Producer] --> A[Authenticated Dropwizard REST API]
- S[Manage subscription rules] --> A
- A -->|Match active subscriptions; atomically save event, jobs and outbox| D[(PostgreSQL)]
+ P[Producer] -->|Bearer + type/source/JSON| A[Dropwizard REST API]
+ S[Subscriber: create/list/delete rules] --> A
+ M[Private operator: approve/revoke origin] -->|Separate admin credential| A
+ A -->|Read active subscriptions and current origin policy| D[(PostgreSQL)]
+ A -->|Atomic event + matching jobs + outbox| D
  A -->|202 only after commit| P
- D --> O[Outbox publisher with expiring lease]
- O -->|Event ID key, acks all| K[Kafka topic, six partitions]
+ D --> O[Leased outbox publisher]
+ O -->|UUID key; idempotent producer; acks all| K[Kafka: six partitions]
  K --> C[Dispatch consumer]
- C -->|Activate persisted jobs idempotently| D
- C -->|Commit offset after DB commit| K
- D --> W[Delivery workers claim ready jobs]
- W -->|Signed HTTPS request| H[Approved subscriber webhook]
- H -->|Success, failure or timeout| W
- W -->|Attempt history and final state| D
- W -->|Persist retry schedule| D
- Q[Event or subscription audit query] --> A
- A -->|Tenant-scoped history| D
+ C -->|Activate jobs transactionally| D
+ C -->|Commit offset after database commit| K
+ C -->|Quarantine malformed envelope| D
+ D -->|Claim due job with fenced lease| W[Delivery worker]
+ W -->|Recheck origin / DNS; signed HTTPS POST| H[Subscriber receiver]
+ H -->|2xx / error / timeout| W
+ W -->|Attempt audit + delivered / failed / next due time| D
+ D -->|Due retry or expired lease| W
+ Q[Event/subscription delivery history] --> A
+ A -->|Tenant-scoped audit query| D
 ```
 
-An unavailable Kafka broker delays dispatch but accepted events remain in the database outbox. Workers cannot claim newly accepted Kafka-gated deliveries before dispatch. A publisher crash can repeat Kafka publication; duplicate consumption does not create extra delivery jobs. Kafka offsets commit after the database dispatch transaction. Events still undispatched after the reconciliation interval can be republished. Webhook delivery remains at-least-once-style with bounded attempts and possible duplicates, requiring receiver deduplication by delivery ID.
+Subscription matching is synchronous in the ingestion transaction, defining the membership snapshot. HTTP delivery is asynchronous. A broker outage delays dispatch but does not remove accepted DB events. Outbox publication and Kafka consumption may repeat after crashes; database uniqueness prevents duplicate jobs. A successful receiver request whose response/result is lost may be retried: stable delivery identity and receiver deduplication remain essential. Retries are bounded; see README for terminal-failure semantics. Event UUID keys distribute one event type across partitions; per-source ordering is not implemented.
 
-Matching remains in the ingestion transaction, preserving the original active-subscription snapshot. PostgreSQL schedules delayed retries because Kafka does not provide arbitrary per-message scheduled delivery. Event IDs distribute a single event type across partitions; per-source ordering is not currently implemented.
-
-For the selected low-cost DigitalOcean deployment, use one Bangalore Ubuntu 24.04 Droplet running Docker Compose: the API and delivery workers share one JVM, with a Kafka container and PostgreSQL container on the same private bridge. GitHub Actions deploys the tested revision over pinned SSH. PostgreSQL and Kafka persist in named volumes and have no published host ports. The API binds to host loopback; optional Caddy provides public HTTPS once a domain is configured. This is a single-server assessment deployment, with no host or broker failover. See [the deployment guide](../deploy/droplet/README.md) for setup and operational limits. The Bangalore Droplet is running the service, Kafka and PostgreSQL. GitHub CI/CD, live ingestion/dispatch, reboot persistence and a same-server backup restore have passed. A real outbound HTTPS receiver test and HMAC verification also passed using the requested temporary Webhook.site endpoint. Public API HTTPS still awaits an API domain. See submission-status.md for evidence and remaining limits.
+```mermaid
+sequenceDiagram
+ participant P as Producer
+ participant A as REST API
+ participant D as PostgreSQL
+ participant O as Outbox publisher
+ participant K as Kafka
+ participant C as Consumer
+ participant W as Delivery worker
+ participant H as HTTPS receiver
+ P->>A: POST structured event + optional idempotency key
+ A->>D: BEGIN; read subscriptions; save event, matches and outbox; COMMIT
+ A-->>P: 202 + event ID
+ O->>D: Claim outbox lease
+ O->>K: Publish with event UUID key
+ K-->>O: Broker acknowledgement
+ O->>D: Mark publication
+ K->>C: Event envelope
+ C->>D: Activate delivery jobs; COMMIT
+ C->>K: Commit consumed offset
+ W->>D: Claim due delivery + persist attempt; COMMIT
+ W->>D: Check latest approved-origin state
+ W->>H: Signed HTTPS POST; public-address DNS validation at connection
+ H-->>W: Response or timeout
+ W->>D: Save attempt and delivered/failed/retry schedule
+ Note over D,W: Expired claims recover with a new lease; stale completions are fenced
+```
 
 ```mermaid
 flowchart LR
-  G[Private GitHub repository] --> T[Unit, integration and Compose smoke tests]
-  T --> B[Build image from tested commit]
-  B -->|Pinned SSH transfer| D
-  subgraph D[Bangalore Ubuntu 24.04 Droplet]
-    C[Caddy optional HTTPS] --> A[Java API and delivery workers]
-    A <--> P[(PostgreSQL volume)]
-    A <--> K[(Kafka volume)]
-  end
-  U[Producer] -->|HTTPS or SSH tunnel| C
-  A -->|Signed HTTPS| H[Approved webhook]
+ G[Private GitHub default-branch push] --> T[Java and gateway security tests]
+ T --> B[Build one image]
+ B --> V[Vulnerability gate; real startup; rollback; restore]
+ V --> S[Sign tested bundle + image identity]
+ S -->|Pinned SSH; restricted upload user| R[Root-owned signature-verifying gateway]
+ R -->|Backup; migration; grants; readiness/TLS gate| A
+ subgraph Host[Bangalore Ubuntu 24.04 Droplet]
+  R
+  X[Caddy HTTPS; admin routes blocked] --> A[Java API / publisher / consumer / workers]
+  A <--> D[(PostgreSQL volume)]
+  A <--> K[(Kafka volume)]
+ end
+ U[REST client] -->|Public HTTPS when configured| X
+ M[Operator SSH tunnel] -->|Loopback API / admin token| A
+ A -->|Signed HTTPS| H[Approved subscriber receiver]
 ```
 
-The earlier App Platform/managed-cluster scaffolding is an unused alternative, not the active target. No managed Kafka will be provisioned for the selected deployment.
+The budget deployment has a single failure boundary. Named volumes preserve state across container replacement/reboot, not disk destruction. Local backups and a same-server restore do not establish off-host recovery. Public IP HTTPS uses an explicit short-lived ACME profile and persistent Caddy state; monitor renewal. Runtime destination policy is in PostgreSQL, so approvals/revocations require no restart. The operator key remains privileged; CI uses a different restricted key and a signed-release gateway. No managed Kafka or other new paid cloud service is used. Current evidence and remaining limits are in submission-status.md.

@@ -5,6 +5,7 @@ on:
     types: [completed]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: droplet-deployment
   cancel-in-progress: false
@@ -17,19 +18,24 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       vars.DROPLET_HOST != ''
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
       DROPLET_HOST: ${{ vars.DROPLET_HOST }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Download the artifact from the successful verification run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Build an immutable image from the tested revision
+          name: droplet-release
+          path: release
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Check the tested revision and artifact checksums
         run: |
-          docker build --platform linux/amd64 --target runtime -t "notification-fanout:$RELEASE_SHA" .
-          docker save "notification-fanout:$RELEASE_SHA" | gzip > deploy/droplet/image.tar.gz
-      - name: Set up SSH with pinned server identity
+          test "$(cat release/release-sha)" = "$RELEASE_SHA"
+          (cd release && sha256sum --check SHA256SUMS)
+          test -s release/SHA256SUMS.sig
+      - name: Set up restricted SSH credentials and pinned server identity
         env:
           SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
@@ -40,14 +46,15 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           test -s ~/.ssh/id_ed25519
           test -s ~/.ssh/known_hosts
-      - name: Transfer and deploy over SSH
+      - name: Transfer and promote the signed tested artifact
         run: |
           [[ "$DROPLET_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          destination="/opt/notification-fanout/releases/$RELEASE_SHA"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DROPLET_HOST" "umask 077; mkdir -p '$destination'"
-          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,image.tar.gz} "root@$DROPLET_HOST:$destination/"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DROPLET_HOST" "bash '$destination/release.sh' '$RELEASE_SHA'"
+          destination="/home/notification-deploy/incoming/$RELEASE_SHA"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "notification-deploy@$DROPLET_HOST" "umask 077; mkdir -p '$destination'"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes release/* "notification-deploy@$DROPLET_HOST:$destination/"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "notification-deploy@$DROPLET_HOST" "sudo /usr/local/sbin/notification-promote '$RELEASE_SHA'"
+          printf 'Deployed tested revision `%s` from verification run `%s`.\n' "$RELEASE_SHA" '${{ github.event.workflow_run.id }}' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove runner SSH credentials
         if: always()
         run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

@@ -152,7 +152,7 @@ class KafkaIT {
         }finally{pipeline.stop();}
     }
     private boolean ready(UUID id){return DB.withHandle(h->h.createQuery("SELECT COALESCE(bool_and(dispatch_ready),false) FROM deliveries WHERE event_id=:id").bind("id",id).mapTo(Boolean.class).one());}
-    private KafkaProducer<String,String> producer(){var p=settings.properties("test-producer");p.put("key.serializer",StringSerializer.class.getName());p.put("value.serializer",StringSerializer.class.getName());p.put("acks","all");return new KafkaProducer<>(p);}
+    private KafkaProducer<String,String> producer(){var p=settings.properties("test-producer");p.put("key.serializer",StringSerializer.class.getName());p.put("value.serializer",StringSerializer.class.getName());p.put("acks","all");p.put("max.in.flight.requests.per.connection","1");p.put("delivery.timeout.ms","10000");p.put("max.block.ms","5000");return new KafkaProducer<>(p);}
     private void send(Event event,int partition) throws Exception {try(var producer=producer()){
         var envelope=JSON.createObjectNode().put("schemaVersion",1).put("tenantId","demo");envelope.set("event",JSON.valueToTree(event));
         producer.send(new ProducerRecord<>(settings.topic,partition,event.id().toString(),JSON.writeValueAsString(envelope))).get(10,TimeUnit.SECONDS);
@@ -161,4 +161,18 @@ class KafkaIT {
         var deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(seconds);
         while(System.nanoTime()<deadline){if(condition.getAsBoolean())return;Thread.sleep(50);}fail("Condition not met within "+seconds+" seconds");
     }
+    @Test void tenThousandSingleTypeEventsDistributeAcrossSixPartitions() throws Exception {
+        var counts=new int[6];
+        try(var producer=producer()) {
+            var sends=new java.util.ArrayList<java.util.concurrent.Future<org.apache.kafka.clients.producer.RecordMetadata>>();
+            for(var index=0;index<10000;index++) {
+                var id=new UUID(0,index).toString();
+                sends.add(producer.send(new ProducerRecord<>(settings.topic,id,"{\"type\":\"single.type\"}")));
+            }
+            for(var send:sends) counts[send.get(20,TimeUnit.SECONDS).partition()]++;
+        }
+        assertEquals(10000,java.util.Arrays.stream(counts).sum());
+        for(var count:counts) assertTrue(count>0 && count<5000,java.util.Arrays.toString(counts));
+    }
+
 }

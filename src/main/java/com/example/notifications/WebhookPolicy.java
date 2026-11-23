@@ -4,26 +4,47 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.Locale;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.hc.client5.http.DnsResolver;
 
 /** Approved origins plus address checks on the actual HTTP connection lookup. */
 public final class WebhookPolicy {
-    private final Set<String> origins;
+    private final java.util.function.Predicate<String> approved;
     private final boolean allowLocal;
+    @FunctionalInterface interface AddressLookup { InetAddress[] resolve(String host) throws UnknownHostException; }
+    private final AddressLookup lookup;
     public WebhookPolicy(ServiceConfiguration config) {
+        this(config, config.allowedWebhookOrigins.stream().map(URI::create).map(WebhookPolicy::origin)
+                .collect(Collectors.toUnmodifiableSet())::contains);
+    }
+    public WebhookPolicy(ServiceConfiguration config, java.util.function.Predicate<String> approved) {
+        this(config,approved,InetAddress::getAllByName);
+    }
+    WebhookPolicy(ServiceConfiguration config, java.util.function.Predicate<String> approved,AddressLookup lookup) {
         allowLocal=config.allowLocalWebhooks;
-        origins=config.allowedWebhookOrigins.stream().map(URI::create).map(WebhookPolicy::origin).collect(Collectors.toUnmodifiableSet());
+        this.approved=approved;
+        this.lookup=lookup;
     }
     public URI validate(String value) {
         var uri=URI.create(value);
         if(uri.getHost()==null || uri.getUserInfo()!=null || uri.getFragment()!=null
                 || !("https".equals(uri.getScheme()) || allowLocal && "http".equals(uri.getScheme()))
-                || !origins.contains(origin(uri))) throw new IllegalArgumentException("Webhook destination is not approved");
+                || !approved.test(origin(uri))) throw new IllegalArgumentException("Webhook destination is not approved");
         try { checkedAddresses(uri.getHost()); }
         catch(UnknownHostException e){throw new IllegalArgumentException("Webhook destination does not resolve to approved addresses");}
         return uri;
+    }
+    public String validateOrigin(String value) {
+        var uri=URI.create(value);
+        if (uri.getHost()==null || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null
+                || !(uri.getRawPath().isEmpty() || "/".equals(uri.getRawPath()))
+                || uri.getPort() < -1 || uri.getPort()==0 || uri.getPort()>65535
+                || !("https".equals(uri.getScheme()) || allowLocal && "http".equals(uri.getScheme()))) {
+            throw new IllegalArgumentException("Supply a public HTTPS origin without a path, query or credentials");
+        }
+        try {checkedAddresses(uri.getHost());}
+        catch (UnknownHostException error) {throw new IllegalArgumentException("Origin does not resolve to public addresses");}
+        return origin(uri);
     }
     public DnsResolver resolver() {
         return new DnsResolver() {
@@ -32,7 +53,7 @@ public final class WebhookPolicy {
         };
     }
     private InetAddress[] checkedAddresses(String host) throws UnknownHostException {
-        var addresses=InetAddress.getAllByName(host);
+        var addresses=lookup.resolve(host);
         for(var address:addresses) if(!allowLocal && !publicAddress(address)) throw new UnknownHostException("Non-public destination blocked");
         return addresses;
     }
@@ -52,7 +73,7 @@ public final class WebhookPolicy {
         return (b[0]&0xe0)==0x20 && !((b[0]&255)==0x20 && (b[1]&255)==0x02)
             && !((b[0]&255)==0x20 && (b[1]&255)==0x01 && (b[2]&255)==0x0d && (b[3]&255)==0xb8);
     }
-    private static String origin(URI uri) {
+    static String origin(URI uri) {
         var port=uri.getPort()==-1?("https".equals(uri.getScheme())?443:80):uri.getPort();
         return uri.getScheme()+"://"+(uri.getHost()==null?"":uri.getHost().toLowerCase(Locale.ROOT))+":"+port;
     }

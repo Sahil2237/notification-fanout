@@ -45,7 +45,7 @@ public final class KafkaPipeline implements Managed {
             properties.put("value.serializer",StringSerializer.class.getName());
             properties.put("acks","all");
             properties.put("enable.idempotence","true");
-            properties.put("max.in.flight.requests.per.connection","5");
+            properties.put("max.in.flight.requests.per.connection","1");
             properties.put("max.block.ms","5000");
             properties.put("delivery.timeout.ms","10000");
             properties.put("linger.ms","5");

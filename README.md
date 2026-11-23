@@ -1,96 +1,34 @@
-# Event-driven notification fanout
+# Event Notification Fanout
 
-For the current low-cost DigitalOcean deployment, use the [single-Droplet guide](deploy/droplet/README.md). Kafka and PostgreSQL run on the Droplet; GitHub Actions deploys tested images over SSH.
+Java 25 / Dropwizard 5 service running on a DigitalOcean Bangalore Droplet. PostgreSQL durably accepts events and matching delivery jobs in one transaction; an outbox publisher sends them to Kafka, and consumers activate retryable webhook deliveries. [Deployment and current evidence](docs/submission-status.md), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).
 
-Java 25 + Dropwizard 5 REST service. PostgreSQL commits events, matching delivery jobs and an outbox together. The outbox publishes to Kafka; an idempotent Kafka consumer activates the delivery jobs. Bounded workers send signed webhooks, retry failures and retain delivery history. Small classes and explicit SQL keep the failure behavior inspectable.
+The selected deployment is one budget Droplet with self-hosted PostgreSQL and Kafka. Persistent volumes and reboot recovery are implemented. Host failover and off-host disaster recovery are outside this single-server availability boundary. Every production claim must be supported by the linked CI/cloud evidence.
 
-**Status:** local implementation; see [executed validation and remaining gaps](docs/validation.md). A managed-cloud deployment and verified hosted CI run are separate from local success. Default credentials and local HTTP are development settings.
+## Setup and development
 
-Read [current Kafka architecture](docs/architecture.md) and [submission status](docs/submission-status.md).
-
-Read [functional requirements and full A–I design](docs/design.md), [architecture diagrams](docs/architecture.md), [API reference](docs/api.md), [operations](docs/operations.md) and [interview walkthrough](docs/interview.md).
-
-```mermaid
-flowchart LR
- P[Producer] --> A[Dropwizard API]
- S[Subscription management] --> A
- A -->|One commit: event + jobs + outbox| DB[(PostgreSQL)]
- DB --> O[Outbox publisher]
- O --> K[Kafka: event ID partition key]
- K --> C[Idempotent dispatch consumer]
- C -->|Activate jobs, then commit offset| DB
- A -->|202 after commit| P
- DB -->|Claim due work with lease| W[Delivery workers]
- W -->|Signed POST| H[Webhook]
- H -->|2xx, failure, timeout| W
- W -->|Attempt audit + success/retry/failure| DB
- DB -->|Retry due / expired lease| W
- Q[Audit client] --> A
- A -->|Tenant-scoped histories| DB
-```
-
-## Development environment
-
-All assessment editing/building/testing must occur in `/workspaces/notification-fanout` inside Ubuntu 24.04, not on the host Desktop/Downloads. Java source uses release 25 without preview features. Pinned dependencies: Dropwizard 5.0.2, PostgreSQL JDBC 42.7.14, compiler plugin 3.15.0, Surefire/Failsafe 3.5.6; Dropwizard's dependency set manages Jersey/Jackson/Jdbi/Liquibase/JUnit together. Integration tests use a real PostgreSQL 17 database and HTTP receiver; they require no Docker socket inside the development container.
-
-### Existing prepared container
-
-Use **IntelliJ Remote Development** connected to the Rancher-managed `notification-dev` container, and open `/workspaces/notification-fanout`. See [IntelliJ setup](docs/intellij.md). In its terminal:
+All editing, builds and tests belong in `/workspaces/notification-fanout` inside the Rancher Ubuntu 24.04 container, using IntelliJ Remote Development. Do not save assessment source on the host Desktop or Downloads. See [IDE instructions](docs/intellij.md).
 
 ```bash
 cd /workspaces/notification-fanout
-java -version
-cat /etc/os-release
 mvn -B -ntp verify
+python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v
 java -jar target/notification-fanout.jar db migrate config/local.yml
 ./scripts/start-local.sh
 ```
 
-The prepared container uses persistent Docker volume `notification-workspaces`; its database is `notification-db` with separate `notifications` and `notifications_test` databases. Keep Rancher Desktop running. Do not delete these volumes; they contain the project and local data. No host GitHub credentials are mounted into the container.
+From a fresh clone on a Docker-capable machine, `docker compose --profile dev up --build -d db kafka kafka-init development` prepares the same development services. Open the development container in IntelliJ and execute the commands above. Never point `TEST_DB_URL` at production: tests migrate and truncate their dedicated test database. `mvn test` runs units; `mvn verify` includes real PostgreSQL/Kafka/HTTP tests. Local API defaults to port 8080, metrics/admin to 8081; development receiver is `scripts/receiver.py` on 9090. Do not start development and packaged app services on the same published ports.
 
-### Reproduce from a clone
+For a packaged local run: `docker compose up -d db kafka kafka-init`, `docker compose run --build --rm migrate`, then `docker compose up --build -d app`. Local-only credentials and HTTP destinations are defined in `config/local.yml`; never expose those defaults publicly.
 
-Open the repository through IntelliJ Dev Containers using `.devcontainer/devcontainer.json` (a Java-25-capable IntelliJ version is required). The same configuration is compatible with VS Code/Cursor if the assessment requires those editors. Docker Compose provisions the development environment and PostgreSQL, including the test database on the first empty-volume initialization. Do not start the `app` service simultaneously with the development service: they publish the same ports. Run the commands above inside the IDE container. Compose supplies DB_URL/TEST_DB_URL for its `db` hostname; the prepared environment defaults to `notification-db`.
+## REST usage
 
-Migrations are explicit. Tests migrate **only the configured test database**, then truncate its application tables between tests. Never point TEST_DB_URL at production or shared data. `mvn test` runs unit tests; `mvn verify` also runs integration tests and fails if PostgreSQL is unavailable.
+All `/v1` requests require a tenant bearer token. The current cloud tenant is `service`; authentication tokens and signing master stay in the server's root-only `.env`. The public HTTPS endpoint, when enabled, is fronted by Caddy; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
 
-### Packaged application
-
-From the repository directory on a Docker-capable machine:
-
-```bash
-docker compose up -d db
-docker compose run --build --rm migrate
-docker compose up --build -d app
-```
-
-This tests the runtime-image packaging. Application runs as an unprivileged user. Dev Compose is not production infrastructure. App/DB credentials default to documented local-only values; production must use separate configuration and secrets, strict webhook destinations and HTTPS.
-
-## Demonstrate retries and audit
-
-Start the Java server, then run in a second IDE-container terminal:
-
-```bash
-cd /workspaces/notification-fanout
-python3 scripts/receiver.py --fail-first 2
-```
-
-In a third container terminal:
-
-```bash
-cd /workspaces/notification-fanout
-./scripts/demo.sh
-```
-
-The demo creates a subscription, posts a matching event, waits for two 500 responses and a 204, prints the full audit history and deletes its subscription. It exits nonzero on failure. The receiver verifies HMAC and timestamp. Reset its process to reset in-memory receiver counters; receiver persistence is outside this sender's scope.
-
-API: `http://localhost:8080`; liveness `/health/live`, readiness `/health/ready`. Private development admin endpoint: `http://localhost:8081/metrics` and `/healthcheck`. Host ports bind only to 127.0.0.1; production needs network isolation as well.
-
-## Filter syntax
+Create a subscription **before** publishing its events:
 
 ```json
 {
-  "webhookUrl": "http://127.0.0.1:9090/hook",
+  "webhookUrl": "https://your-receiver.example/events",
   "filter": {
     "type": "order.created",
     "source": "checkout",
@@ -101,48 +39,75 @@ API: `http://localhost:8080`; liveness `/health/live`, readiness `/health/ready`
 }
 ```
 
-Omit filter/type/source/conditions for match-all at that level. All specified filters combine with AND. Paths use JSON Pointer: `/items/0/name`; escape `/` as `~1` and `~` as `~0`; empty path addresses the entire payload. Missing fields do not equal null. Strings are case-sensitive. JSON numeric scalar comparisons treat 1 and 1.0 as equal; booleans remain distinct. Object/array values use structural JSON equality. Only `eq` is supported; no executable expressions.
+Send that body to `POST /v1/subscriptions`. Send the following to `POST /v1/events`, optionally with `Idempotency-Key: order-123-created`:
 
-For security, webhook destinations must be administrator-approved **origins**; hostnames and literal IPs are supported with connection-time address checks. `config/local.yml` permits only `http://127.0.0.1:9090`, explicitly allowing local HTTP. Other URLs fail validation. Private, metadata and reserved destinations are blocked in production; certificate verification remains enabled.
+```json
+{"type":"order.created","source":"checkout","payload":{"orderId":"123","customer":{"tier":"gold"}}}
+```
 
-## Delivery contract and guarantees
+Ingestion returns `202` and `event.id` after the database commit. It does not wait for webhook receipt. Query `/v1/events/{id}/deliveries`, `/v1/subscriptions/{id}/deliveries` or `/v1/deliveries/{id}` for status and attempts. List/delete subscriptions through `/v1/subscriptions`; changes apply without restart. Existing queued jobs retain their original destination after subscription deletion. New subscriptions do not receive past events.
 
-- Return 202 only after event and matching delivery jobs commit. Each selected subscription gets one job, enforced by a unique constraint.
-- Matching uses active subscriptions visible to the ingestion SELECT. Subscriptions created later do not receive historical events. Soft deletion stops future matching; already queued jobs continue.
-- Delivery uses at-least-once-style processing with **five bounded attempts**, not an unconditional eventual-receipt guarantee. A receiver can process the same delivery twice after a timeout or worker crash. Receiver-side deduplication by `deliveryId` is required for idempotent side effects.
-- HTTP 2xx means delivered. Transport errors, timeouts, 408, 429 and 5xx retry. Other responses, including redirects, fail permanently. Redirects are disabled. Durable retries are controlled by the worker; the JDK client can perform internal connection recovery, so an application attempt is not a claim of exactly one network transmission. Retry-After is currently not honored; the configured bounded backoff applies.
-- Backoff uses positive 50–100% jitter on `min(cap, base × 2^(attempt-1))`; default base 1s, cap 60s. Next times are persisted, so restarts do not reset schedules.
-- Claims use a 30s lease; request timeout is 5s. HTTP occurs after claim commit, without holding row locks. Expired leases mark attempts `unknown`; old workers cannot overwrite a newer lease. Interrupted attempts count toward the attempt limit.
-- A null audit HTTP code means no code was durably recorded. Policy rejection does not fabricate a response code. Exhausted work remains queryable as failed.
-- PostgreSQL committed storage must survive. This design does not protect against losing the only database copy or skipping backups.
+### Filter syntax
 
-Ingestion accepts an optional tenant-scoped `Idempotency-Key`. Same key/content returns the existing event with `duplicate=true`; changed content returns 409. Object property order does not matter; numeric JSON representation can affect the content hash. Omitting the key allows repeated events. Keep keys as long as events are retained; future retention must define key expiry.
+Omitted type/source/conditions mean no restriction at that level; supplied conditions combine with AND. Payload paths are JSON Pointer: `/items/0/name`, `~1` escapes `/`, `~0` escapes `~`, and empty path selects the whole payload. Only `eq` is supported. Missing differs from null, strings are case-sensitive, scalar numbers 1 and 1.0 compare equal, and booleans differ from numbers. Objects/arrays use structural JSON equality. Maximum 20 conditions, 256 KiB request body, depth 32, and 128 characters for event type/source.
 
-## Configuration and security
+### Approve webhook origins without restart
 
-`config/local.yml` documents development settings. Environment: DB_URL, DB_USER, DB_PASSWORD, TEST_DB_URL, API_TOKEN, OTHER_API_TOKEN, WEBHOOK_SIGNING_SECRET, WORKER_ENABLED. API-only mode sets WORKER_ENABLED=false; a worker-enabled instance can process the same database. Worker-enabled instances also serve API routes; deploy behind appropriate routing if dedicated worker roles are desired.
+An independent `ADMIN_TOKEN` controls `GET/POST/DELETE /v1/admin/webhook-origins`. Tenant tokens cannot call these endpoints; the administrator token cannot ingest tenant events. Public Caddy routes reject administrator endpoints, so operators use the private SSH tunnel.
 
-Credentials map server-side tenants to bearer tokens. The supplied demo/other tokens are local examples; tenant ownership is checked on every resource query. Role-level permissions within a tenant are not implemented. Process-local fixed-window rate limits cover all authenticated requests; defaults support the local demo, not distributed quota enforcement.
+```bash
+curl -fsS -X POST "$BASE_URL/v1/admin/webhook-origins" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"origin":"https://your-receiver.example"}'
+```
 
-Outgoing signature: derive tenant key `HMAC-SHA256(master_secret, "tenant:" + tenant_id)`; then signature `HMAC-SHA256(tenant_key, timestamp + "." + raw_body)` in `X-Webhook-Signature: v1=<hex>`. Timestamp is in X-Webhook-Timestamp. Provision only that tenant's derived key to its receiver, never the master secret. Receiver verifies a short time window and deduplicates deliveryId. See the sample receiver. Key rotation/versioned key IDs are future work.
+PostgreSQL stores approvals, revocations and their audit. All instances consult the store at registration and before each delivery attempt; no cache or restart is involved. Startup seeds previously unknown configuration origins but never reactivates a revoked origin. Revocation can stop queued attempts; already in-flight HTTP requests may finish. HTTPS and connection-time public-address checks remain mandatory, including protection against DNS changing to private/metadata addresses. Origins contain scheme, host and optional port, not paths/query strings. Dynamic origin approval is an operator action; subscribers then register their complete receiver URL with their tenant token.
+
+## Architecture
+
+See [the complete diagrams](docs/architecture.md). Matching happens in the ingestion transaction; PostgreSQL holds event, jobs and outbox. Kafka uses event UUID keys so one event type is spread over partitions. Consumers commit offsets after their dispatch database transaction. Delivery workers claim due jobs using expiring leases, send signed requests outside the database transaction, and atomically save attempt history and the next state/schedule.
+
+## Delivery contract and failure conditions
+
+|Property|Contract|
+|---|---|
+|Acceptance|202 only after event + matching jobs + outbox commit; storage errors return a failure|
+|Processing|Durable, duplicate-tolerant processing while PostgreSQL storage survives|
+|Webhook delivery|Up to five total attempts with possible duplicates; permanent failures and exhausted retries become queryable `failed`|
+|At-most-once?|No: uncertain outcomes can cause repeated requests|
+|Exactly-once?|No: a receiver may commit a side effect and lose the response before the sender records success|
+|Unconditional eventual receipt?|No: finite retries, receiver outages, revocation, and loss of the sole database copy can prevent receipt|
+
+The practical guarantee is **at-least-once-style processing with bounded HTTP delivery attempts**, not exactly-once side effects. Receivers must deduplicate by stable `deliveryId`. A Kafka publication or dispatch can repeat after a crash without creating another delivery job. A crash after successful HTTP receipt but before recording it can repeat the webhook. Lease fencing prevents old workers from overwriting a newer attempt.
+
+HTTP 2xx succeeds. Network errors/timeouts, 408, 429 and 5xx retry; redirects and other responses fail permanently. Apache HttpClient automatic retries and redirects are disabled. Each request has a cancellation deadline (default 5 s); claims have a 30 s lease. Backoff is 50–100% jitter on `min(60s, 1s × 2^(attempt-1))`, persisted in PostgreSQL. Unknown/interrupted attempts count toward the total. `Retry-After` is not currently honored. Null HTTP codes mean no response code was durably recorded.
+
+A tenant-scoped idempotency key returns the original event on identical content and 409 on changed content; omitting it allows repeats. Keys last as long as retained events. Payload object property order is canonicalized; numerical representation can affect the content hash. Events with zero matches are retained and traverse Kafka.
+
+Outgoing authentication derives `tenant_key = HMAC-SHA256(master, "tenant:" + tenant_id)` and signs `timestamp + "." + raw_body`. Headers include `X-Delivery-ID`, `X-Event-ID`, `X-Webhook-Timestamp`, and `X-Webhook-Signature: v1=<hex>`. Provision only the derived tenant key to its receiver through a secure operator channel. Receivers verify freshness/signature and persist deduplication IDs. The free Webhook.site sink captures test requests; it is not a production receiver implementation.
+
+## CI/CD and verification
+
+GitHub Actions runs Java units/integrations and signed-bundle security tests on push/PR. It builds one image, gates on fixable HIGH/CRITICAL findings, validates Caddy, starts real containers, checks runtime DB permissions, exercises failed-startup rollback and restores a backup. Only then is that exact image packaged and signed for a trusted default-branch push. Deployment downloads the artifact from that successful run; it does not rebuild it.
+
+A dedicated SSH user has no Docker membership, cannot read application secrets, and can sudo only a root-owned promotion gateway. The gateway validates the signature, checksums, revision, image identity and safe bundle paths before release. Pinned SSH host identity and CI action commits constrain the trust boundary. See [Droplet setup](deploy/droplet/README.md) and [verification matrix](docs/validation.md).
 
 ## What we sacrifice for simplicity vs. what we would harden next
 
-|Baseline choice|Benefit|Next hardening / trigger|
+|Current choice|Benefit|Limit and next hardening trigger|
 |---|---|---|
-|Match in ingestion transaction|Atomic event/job guarantee|Async matcher and versioned membership when measured latency/fanout requires it|
-|Kafka dispatch plus PostgreSQL retry scheduling|Durable broker handoff and queryable retry state|Tune publisher/consumer throughput using sustained load tests|
-|One module, API+worker configurable|Understandable build and deployment|Separate services when ownership or scaling boundaries justify them|
-|Approved origins and connection-time DNS checks|Constrain webhook network access|Enforce outbound network policy and review destination approvals|
-|Shared DB, explicit tenant predicates|Small implementation|Database row-level security and stronger per-tenant quotas/fair scheduling|
-|No ordering or replay|Independent recoverable jobs|Per-source serial scheduling; bounded replay with new delivery generation|
-|Process-local throttling|Bounds one instance|Gateway/distributed limit when multiple replicas serve traffic|
-|Local credentials and HTTP|Reproducible demo|Managed secrets, HTTPS ingress and production configuration before exposure|
-|No automatic retention or backups|Avoid unsafe background deletion|Bounded purge excluding pending events; PITR and restore drills before production|
-|Correlation logs + metrics|Inspectable local failures|Tracing, provisioned dashboards and paging rules in real deployment|
-
-Full capacity calculations, cost assumptions, RPO/RTO proposals and decision reconsideration conditions are in the design. No performance or production-readiness claim is implied by estimated capacity.
+|One Droplet / one broker / one DB|Keeps the approved budget and operations small|Host failure stops service; add independent replicas and off-host recovery when availability/data-loss targets require it|
+|Match inside ingestion transaction|Atomic membership snapshot and fanout jobs|O(subscriptions + matches); move matching async with versioned membership if measured latency requires it|
+|Kafka dispatch, DB retry scheduler|Durable queue and queryable delayed attempts|Shared DB load; tune publisher/consumer counts using representative measurements|
+|Runtime administrator origin approvals|Immediate controlled onboarding/revocation|Origin-level permission, not per-path or tenant-specific approval; outbound network enforcement remains useful|
+|Static tenant credentials|Small, explicit authorization model|Operator provisioning/rotation; integrate identity management and tenant-specific quotas for broader service use|
+|Single-host plaintext internal bridge|No internal certificate infrastructure|Use authenticated TLS when components span machines; host administrators remain fully trusted|
+|Bounded retries, no ordering/replay|Independent, finite delivery work|Terminal failures need an explicit operator redrive policy; ordering/replay remain optional extensions|
+|Process-local request limit|Simple protection for one API instance|Use shared quota enforcement and fair scheduling when adding replicas or noisy tenants|
+|Local backup script and release backup|Consistent recovery snapshots and tested restore|Local disk loss destroys both; configure encrypted off-host backups before accepting production data-loss commitments|
+|Explicit retention policy, no automatic deletion|Avoids unapproved data removal|Implement bounded retention after business/audit and idempotency-key expiry requirements are agreed|
+|Logs, metrics and health checks|Inspect requests, backlog and errors|Configure external alerts, dashboards and paging; no unmeasured SLO claim|
 
 ## Submission
 
-The repository includes `.github/workflows/ci.yml`, which runs unit/integration tests with Java 25 and PostgreSQL on push/PR. Verify a hosted green run after pushing; local tests do not prove GitHub Actions has run. Commit the README and Mermaid diagrams with the source. Choose a personal repository and grant interviewer access before submission. Sign out of accounts used on the assessment workstation after verifying remote files and preserving the project.
+Source, Mermaid diagrams, tests, workflows and runbooks are in the personal GitHub repository. Grant interviewer access to the private repository. Sign out of personal accounts used on the assessment workstation before handing it back; retain authorized server deployment credentials separately. No claim of exhaustive testing, zero data loss after disk destruction, or high availability is made by a green pipeline.

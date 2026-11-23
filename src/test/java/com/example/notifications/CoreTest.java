@@ -150,6 +150,7 @@ class CoreTest {
     private ServiceConfiguration dropletConfig() {
         var config = new ServiceConfiguration();
         config.production = true;
+        config.adminToken = "independent-admin-token-at-least-32-characters";
         config.singleHostDeployment = true;
         config.signingSecret = "random-signing-secret-at-least-32-characters";
         config.credentials = java.util.Map.of("service", "random-api-token-at-least-32-characters");
@@ -180,6 +181,31 @@ class CoreTest {
         config = dropletConfig();
         config.singleHostDeployment = false;
         assertThrows(IllegalArgumentException.class, config::validateSettings);
+    }
+
+    @Test void connectionLookupRejectsDnsRebindingAndMixedAddresses() throws Exception {
+        var config=new ServiceConfiguration();
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        var policy=new WebhookPolicy(config,origin->true,host->new java.net.InetAddress[]{
+                java.net.InetAddress.getByName(calls.getAndIncrement()==0?"8.8.8.8":"127.0.0.1")});
+        assertNotNull(policy.validate("https://receiver.example/hook"));
+        assertThrows(java.net.UnknownHostException.class,()->policy.resolver().resolve("receiver.example"));
+        var mixed=new WebhookPolicy(config,origin->true,host->new java.net.InetAddress[]{
+                java.net.InetAddress.getByName("8.8.8.8"),java.net.InetAddress.getByName("169.254.169.254")});
+        assertThrows(IllegalArgumentException.class,()->mixed.validate("https://receiver.example/hook"));
+    }
+
+    @Test void administratorOriginApprovalKeepsPublicHttpsBoundary() {
+        var policy=new WebhookPolicy(new ServiceConfiguration(),origin->true);
+        assertEquals("https://8.8.8.8:443",policy.validateOrigin("https://8.8.8.8/"));
+        for(var value:List.of("http://8.8.8.8","https://127.0.0.1","https://169.254.169.254", "https://8.8.8.8/path", "https://8.8.8.8?query=x", "https://user@8.8.8.8", "https://8.8.8.8:0"))
+            assertThrows(IllegalArgumentException.class,()->policy.validateOrigin(value),value);
+    }
+
+    @Test void administratorCannotReuseTenantCredential() {
+        var config=dropletConfig();
+        config.adminToken=config.credentials.get("service");
+        assertThrows(IllegalArgumentException.class,config::validateSettings);
     }
 
 }

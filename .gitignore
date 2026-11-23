@@ -13,3 +13,7 @@ restart-result.json
 fanout-load-result.json
 
 .deploy/
+__pycache__/
+*.pyc
+.release/
+security-report.json

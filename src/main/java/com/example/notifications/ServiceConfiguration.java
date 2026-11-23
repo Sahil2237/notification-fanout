@@ -16,6 +16,7 @@ public class ServiceConfiguration extends Configuration {
     @NotEmpty @JsonProperty public Map<String, String> credentials = Map.of();
     @NotEmpty @JsonProperty public List<String> allowedWebhookOrigins = List.of();
     @JsonProperty public boolean allowLocalWebhooks = false;
+    @JsonProperty public String adminToken = "";
 
     @NotBlank
     @Size(min = 24)
@@ -85,6 +86,10 @@ public class ServiceConfiguration extends Configuration {
     public int requestsPerMinute = 600;
 
     public void validateSettings() {
+        if ((production || !adminToken.isEmpty()) && (adminToken.length() < 32
+                || credentials.containsValue(adminToken) || production && adminToken.startsWith("local-"))) {
+            throw new IllegalArgumentException("Use an independent administrator token of at least 32 characters");
+        }
         if (production && (!kafka.enabled || allowLocalWebhooks
                 || credentials.values().stream().anyMatch(v -> v.startsWith("local-"))
                 || signingSecret.startsWith("local-"))) {

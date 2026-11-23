@@ -50,14 +50,15 @@ jobs:
       DB_USER: notifications
       DB_PASSWORD: ci-only-password
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
       - run: mvn -B -ntp verify
-      - uses: actions/upload-artifact@v4
+      - run: python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: test-reports
@@ -65,11 +66,59 @@ jobs:
             target/surefire-reports/
             target/failsafe-reports/
 
-  droplet-smoke:
+  tested-release:
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      APP_IMAGE: notification-fanout:${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
-      - run: docker build --target runtime -t notification-fanout:smoke .
-      - run: bash deploy/droplet/smoke.sh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the release image once
+        run: docker build --platform linux/amd64 --target runtime --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$APP_IMAGE" .
+      - name: Scan fixable high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.APP_IMAGE }}
+          format: json
+          output: security-report.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Validate the public HTTPS proxy configuration
+        run: docker run --rm -e TLS_DOMAIN=example.com -v "$PWD/deploy/droplet/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.9-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Verify real services and runtime database permissions
+        run: bash deploy/droplet/smoke.sh
+      - name: Verify failed-release rollback and backup restore
+        run: sudo --preserve-env=APP_IMAGE,GITHUB_SHA,GITHUB_ACTIONS bash deploy/droplet/test-release.sh
+      - name: Package the exact tested image
+        run: |
+          mkdir -p .release
+          cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh} .release/
+          docker save "$APP_IMAGE" | gzip > .release/image.tar.gz
+          docker image inspect "$APP_IMAGE" --format '{{.Id}}' > .release/image-id
+          printf '%s\n' "$GITHUB_SHA" > .release/release-sha
+          cd .release
+          sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh > SHA256SUMS
+      - name: Sign a trusted default-branch release
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && vars.DROPLET_HOST != ''
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          test -n "$RELEASE_SIGNING_KEY"
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/release-signing.pem"
+          trap 'rm -f "$RUNNER_TEMP/release-signing.pem"' EXIT
+          openssl pkeyutl -sign -inkey "$RUNNER_TEMP/release-signing.pem" -rawin -in .release/SHA256SUMS -out .release/SHA256SUMS.sig
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: droplet-release
+          path: .release/
+          include-hidden-files: true
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: security-report
+          path: security-report.json

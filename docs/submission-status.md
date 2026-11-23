@@ -1,5 +1,14 @@
 # Submission and deployment status
 
+## Hardening candidate (cloud rollout pending verification)
+
+The current changes add durable runtime origin approvals/revocations with separate administrator credentials and audit, 46 Java tests plus 7 signed-bundle security tests, a 10,000-record single-type partition test, real slow-receiver and storage-failure tests, pinned CI actions, a fixable HIGH/CRITICAL vulnerability gate, build-once signed image promotion, restricted CI SSH, and CI startup/rollback/restore checks. Local Java and gateway tests passed. The restricted upload account/public signature trust key are installed on the existing Droplet; secrets are not committed.
+
+The next hosted run must prove the image scan, complete container/release test suite and signed-artifact deployment. Public-IP HTTPS, runtime admin operations and representative post-release cloud event/load checks are pending until that run succeeds. This candidate's production limits remain one host/broker/DB, no automated off-host backup, no external paging, no automated data retention, and no measured fanout SLO. Prior evidence below is historical and must not be mistaken for evidence of this candidate.
+
+## Previously verified deployment
+
+
 The service implements durable REST ingestion, dynamic subscription filters, Kafka outbox publication and idempotent dispatch, retrying signed webhooks, tenant-scoped delivery audits, and health/metrics endpoints. Java 25, Dropwizard 5, PostgreSQL 17 and Kafka 4.3.1 were exercised in Rancher.
 
 Verification: 12 unit tests and 26 PostgreSQL/HTTP/Kafka integration tests pass locally. Hosted run [45239397092](https://github.com/Sahil2237/notification-fanout/actions/runs/45239397092) also passed the application suite and a real Linux-amd64 Docker Compose startup smoke test. The smoke test exercises migrations, runtime DML access with DDL denied, authentication, ingestion and Kafka dispatch using the Droplet configuration. The first startup test caught a database pool-size mismatch; the explicit initial size fixed it. The earlier IntelliJ run preceded Kafka integration; its saved Verify configuration runs the current suite.

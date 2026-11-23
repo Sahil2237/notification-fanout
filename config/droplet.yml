@@ -1,4 +1,5 @@
 production: true
+adminToken: ${ADMIN_TOKEN}
 singleHostDeployment: true
 database:
   driverClass: org.postgresql.Driver

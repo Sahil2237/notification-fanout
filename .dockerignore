@@ -9,3 +9,6 @@ reports
 *.key
 .idea
 .run
+__pycache__
+.release
+security-report.json

@@ -62,7 +62,9 @@ public final class NotificationApplication extends Application<ServiceConfigurat
         }
         environment.metrics().register("kafka.outbox_pending",(Gauge<Long>)store::outboxPending);
         environment.metrics().register("kafka.oldest_undispatched_seconds",(Gauge<Double>)store::outboxOldestSeconds);
-        var destinations = new WebhookPolicy(config);
+        store.initializeWebhookOrigins(config.allowedWebhookOrigins);
+        var destinations = new WebhookPolicy(config,store::isWebhookOriginApproved);
+        environment.jersey().register(new AdminResource(store,destinations));
         DeliveryWorker worker = null;
         if (config.workerEnabled) {
             var sender = new WebhookSender(environment.getObjectMapper(), destinations, config);

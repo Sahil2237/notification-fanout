@@ -1,38 +1,43 @@
-# Operations and release notes
+# Operations, incidents and release acceptance
 
-> Current Kafka implementation and verified scope: see [submission-status.md](submission-status.md) and [architecture.md](architecture.md). Earlier milestone descriptions below are retained as historical design context.
+The selected environment is a single DigitalOcean Bangalore Ubuntu 24.04 Droplet. The root-only `/opt/notification-fanout/.env` contains tenant/admin tokens, database credentials and signing master. The API runs as UID 10001 in its container; PostgreSQL/Kafka use persistent Docker volumes. Never delete volumes as routine troubleshooting. Operator SSH and the restricted CI deployment account are different credentials.
 
-## Local processes
-Prepared development container: notification-dev; persisted project: Docker volume notification-workspaces at /workspaces. DB: notification-db; data: notification-postgres. Stop/start preserves volumes. `docker rm -v`/`docker volume rm` can destroy work: never use as routine cleanup.
+## Routine checks and alerts
 
-Inside the IDE container, build `mvn verify`, migrate `java -jar target/notification-fanout.jar db migrate config/local.yml`, start `java -jar target/notification-fanout.jar server config/local.yml`. Stop with SIGTERM/Ctrl-C; workers stop claiming, allow in-flight calls to finish, then shut down. SIGKILL leaves leases for recovery. Liveness independent of DB; readiness checks DB and recent worker polling when enabled. App-only WORKER_ENABLED=false disables worker checks. Admin endpoints must remain private.
+Application `/health/live` reports process health; `/health/ready` checks DB/worker/Kafka polling. The admin connector is bound to container loopback, not a published host port. Its `/metrics` exposes acceptance timers/counters, pending count/age, delivery attempts/failures/recoveries, Kafka publish/dispatch/quarantine errors and JVM/DB pools. JSON logs contain request/event/delivery identifiers and bounded error categories; no bearer token, signing key or event body belongs in logs. Caddy access logs use its default credential redaction. Host metrics are installed. External paging/dashboards are not configured; an operator must connect an approved alert destination before an availability commitment.
 
-## Operational signals
-/metrics on admin port exposes events.accepted/duplicates/acceptance_latency, delivery.pending, delivery.oldest_pending_seconds, delivery.attempts/succeeded/unsuccessful_attempts/recovered/stale_results/worker_errors plus JVM, HTTP and DB pool metrics. Acceptance timer includes idempotent responses. Queue gauges query PostgreSQL; metric scraping can fail during DB outage. Logs contain correlation ID and delivery/event/attempt identifiers, status and bounded errors; do not log bearer tokens, webhook bodies or signing keys. Full traces, provisioned dashboards and alert integrations remain future deployment work.
+Alert candidates: readiness unavailable >1 minute; oldest pending or undispatched event >60 seconds; rising terminal failures or poison records; disk >85%; DB pool exhausted; last successful backup >26 hours. Receiver-specific failures should not automatically declare global service outage. Measure SLOs against successful durable ingestion and on-time delivery to healthy receivers; do not count an arbitrary 2xx as proof of a subscriber business side effect.
 
-Proposed alerts: sustained readiness failure; pending>0 and oldest age>60s; increasing worker errors; sustained terminal failures; DB pool exhaustion/storage headroom. Receiver-specific failures are not automatically global availability incidents. Configure monitoring before external production release.
+## Backlog, receiver or broker incident
 
-## Backlog or receiver failure
-1. Check readiness, oldest pending age and worker errors.
-2. Check database connectivity/storage/connection limits and due-job query latency.
-3. Inspect one affected event/subscription history using tenant credentials. No direct cross-tenant audit API exists.
-4. Retryable webhook failures wait for persisted schedules. Do not reset attempt counts during an incident without an explicit redrive policy.
-5. Failed deliveries remain terminal; redrive/replay is not implemented. Document affected IDs/time range and obtain authorization for any repair.
-6. Restore capacity gradually; increasing worker threads without checking receiver/DB limits can worsen overload. Per-tenant fair scheduling is a known limitation.
+1. Check readiness and application/DB/Kafka logs with bounded tails; inspect backlog age, not only size.
+2. Check disk runway, DB connectivity/locks and receiver latency before increasing worker threads.
+3. Query tenant-scoped event/subscription/delivery histories; preserve attempt timestamps and real HTTP status/null.
+4. Kafka failure delays dispatch: accepted work stays in the DB outbox. A broker/consumer restart may repeat processing; uniqueness and receiver deduplication handle repeats.
+5. Expired leases record unknown outcomes. An old worker cannot overwrite a new claim. Never assume an unknown HTTP outcome means the receiver did nothing.
+6. Failed deliveries stay terminal after the configured attempt limit. Replay/redrive is not implemented; retain IDs and follow an explicitly authorized repair plan. Do not reset attempt counts silently.
+7. If queue capacity is reached, new ingestion returns 503 and rolls back, while an existing idempotent request can still return its event. Global capacity enforcement is an approximate admission threshold under concurrent tenants, not a distributed quota guarantee.
 
-## Recovery and backups
-Process restart preserves acknowledged commits if DB storage survives. Expired leases produce unknown attempts and can cause duplicate sends. Proposed production disaster RPO<=5min/RTO<=60min requires managed PITR, encrypted backups and regular restore drills; local Docker volumes do not provide these guarantees. Restore to a new DB, verify schema/counts and sample histories, then switch traffic; receiver deduplication handles uncertain sends. Do not claim a successful restore until tested.
+## Runtime destination policy
 
-## Retention and secrets
-Initial policy target: 7 days events/attempts, retain unresolved pending work. No automated deletion job is enabled. Implement bounded child-first cleanup with tenant policy and idempotency-key expiry before production volume grows. For incident logs prefer IDs; payload may contain PII. Replace demo API tokens and signing master; distribute only derived tenant signing keys. Planned signing rotation needs key IDs and overlapping acceptance windows. Runtime DB role should have DML only; a separate migration role owns DDL. TLS to managed DB/HTTPS ingress and storage encryption are deployment configuration requirements.
+Use the administrator bearer token only through the SSH tunnel. `/v1/admin/webhook-origins` supports list, approve and revoke. Revocation works even if DNS has become unavailable/private. All application instances read current DB state; no cached approval survives revocation. Initial configuration seeds unknown origins once; a revoked row stays revoked across restarts. Read policy-command history from `webhook_origin_audit` using an authorized database operator; the app can insert audit rows but cannot update/delete them. Origin permission covers the host/port, not individual paths. Signed receiver-key provisioning remains an operator responsibility.
 
-## Deployment sequence and rollback
-1. Separate dev/test/prod DBs and credentials; run tests in a disposable test DB only.
-2. Build immutable image; scan dependencies/image and record digest. Runtime is unprivileged; dev image intentionally includes tools.
-3. Check backup/recovery readiness. Run additive migration once before app rollout; Liquibase lock serializes migration execution.
-4. Start new API/worker instances and gate on readiness. Keep deployment termination allowance longer than max HTTP timeout plus DB result-save allowance.
-5. Verify a canary event and history, monitor backlog/error rates, drain old instances.
-6. Roll back to a schema-compatible prior app image if needed. Do not delete committed events or blindly roll back data/schema. Expand/contract changes require separate releases.
+## Deployment, rollback and trust
 
-## Release acceptance
-All local/CI tests green; fresh setup and signed retry demo pass; restart recovery checked; secrets replaced; destinations reviewed; HTTPS/network restrictions enabled; capacity benchmark at representative fanout; backups/restore and retention validated; monitoring installed; repository/interviewer access verified. Several production infrastructure checks remain deliberately outside this local baseline. DigitalOcean, managed queue, ordering and replay follow as distinct milestones.
+CI tests and scans one image; that exact image is checksummed and signed after real startup/rollback/restore verification. Signed artifacts are uploaded to the private repository's Actions storage. The deploy workflow downloads only from the successful same-repository default-branch verification run. The SSH upload user cannot read `.env`, has no Docker membership, and cannot sudo a shell. A root-owned gateway copies only regular named files, verifies the detached Ed25519 signature against the installed public key, validates checksums/revision/image identity and refuses changed contents for an existing revision. That gateway is deliberately privileged to run a trusted signed release; the CI signing key and repository write access therefore remain powerful credentials.
+
+Each release takes a consistent pre-migration database backup, applies additive migrations, grants runtime privileges, starts the application, and gates readiness/public TLS before moving `current`. Failure attempts to restore the previous application image; migrations are never blindly reversed. CI exercises an image that migrates but fails server startup. Preserve at least the current and previous images. A manual rollback needs its retained image/archive and schema compatibility. Re-running a previously removed image archive requires restoring the exact signed artifact; do not modify an existing revision in place.
+
+Rotate the CI SSH key and release signing key independently. Install a new trusted release public key before signing with its private key, or use a coordinated maintenance window; multiple overlapping signing keys are not implemented. Changing `.env` database passwords alone does not change database roles: rotate with ALTER ROLE and an application restart. Runtime origin changes need neither.
+
+## Backup and recovery
+
+`bash /opt/notification-fanout/current/backup.sh` writes a consistent custom-format PostgreSQL dump with mode protected by root's umask. The release path invokes it before migrations. Existing cloud evidence includes reboot recovery and a same-server restore into a newly created temporary database. CI repeats a restore on disposable containers. These checks do not prove off-host disaster recovery. Configure encrypted off-host storage and secrets escrow with an approved destination; no backup is exported to a third party by these scripts. Local disk loss can destroy both data and local backups. No numerical disaster RPO/RTO is claimed.
+
+Restore to a replacement environment with owner/runtime roles and their protected credentials, restore a compatible dump using pg_restore, apply required forward migrations/grants, recreate Kafka/topic, then start the outbox/consumer/workers. Verify counts, histories and synthetic delivery before switching traffic. Undispatched DB events can be republished. Restore can repeat deliveries whose receiver success was newer than the backup, so receiver deduplication is essential.
+
+## Retention and release acceptance
+
+No automatic deletion of events, attempts or audits is enabled because the business retention period and idempotency-key expiry have not been agreed. Monitor growth and local backup storage; do not promise indefinite retention on an 80-GB disk. Future cleanup must preserve unresolved work and respect tenant/audit policy.
+
+Accept a release only after unit/integration and bundle tests, vulnerability gate, real container smoke, failed-startup rollback and restore tests pass; the signed image identity matches; live auth/origin changes and representative synthetic events pass; audit/receiver capture agree; and relevant recovery checks pass. A 10,000-event no-match probe cannot establish delivery capacity for slow receivers or large fanout. HA, off-host recovery, retention and external alerting remain explicit limits of the budget deployment.

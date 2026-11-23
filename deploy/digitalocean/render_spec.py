@@ -8,7 +8,7 @@ if 'REQUIRED_' in json.dumps(config):raise SystemExit('Replace all REQUIRED_ dep
 for key in ('app_name','app_region','vpc_id','postgres_cluster_name','kafka_cluster_name','database_name','registry_name','image_tag','instance_size_slug'):
     if not config.get(key):raise SystemExit('Missing input: '+key)
 if not re.fullmatch('[0-9a-f]{40,64}',config['image_tag']):raise SystemExit('image_tag must identify the tested Git commit')
-secrets={name:os.environ.get(name,'') for name in ('API_TOKEN','WEBHOOK_SIGNING_SECRET','PG_RUNTIME_USER','PG_RUNTIME_PASSWORD','PG_MIGRATION_USER','PG_MIGRATION_PASSWORD')}
+secrets={name:os.environ.get(name,'') for name in ('API_TOKEN','ADMIN_TOKEN','WEBHOOK_SIGNING_SECRET','PG_RUNTIME_USER','PG_RUNTIME_PASSWORD','PG_MIGRATION_USER','PG_MIGRATION_PASSWORD')}
 if any(not value for value in secrets.values()):raise SystemExit('Required secret environment variables are missing; see deployment README')
 if len(secrets['API_TOKEN'])<32 or len(secrets['WEBHOOK_SIGNING_SECRET'])<32:raise SystemExit('Use at least 32-character API and signing secrets')
 if secrets['PG_RUNTIME_USER']==secrets['PG_MIGRATION_USER']:raise SystemExit('Runtime and migration database roles must differ')
@@ -18,7 +18,7 @@ image={'registry_type':'DOCR','registry':config['registry_name'],'repository':'n
 def env(key,value,secret=False):return {'key':key,'value':value,'scope':'RUN_TIME','type':'SECRET' if secret else 'GENERAL'}
 common=[env('DB_URL','jdbc:postgresql://${postgres.HOSTNAME}:${postgres.PORT}/'+config['database_name']),
  env('DB_USER',secrets['PG_RUNTIME_USER'],True),env('DB_PASSWORD',secrets['PG_RUNTIME_PASSWORD'],True),
- env('PG_CA_CERT','${postgres.CA_CERT}',True),env('API_TOKEN',secrets['API_TOKEN'],True),
+ env('PG_CA_CERT','${postgres.CA_CERT}',True),env('API_TOKEN',secrets['API_TOKEN'],True),env('ADMIN_TOKEN',secrets['ADMIN_TOKEN'],True),
  env('WEBHOOK_SIGNING_SECRET',secrets['WEBHOOK_SIGNING_SECRET'],True),
  env('WEBHOOK_ORIGINS',json.dumps(config['approved_webhook_origins'])),
  env('KAFKA_BOOTSTRAP_SERVERS','${events.HOSTNAME}:${events.PORT}'),env('KAFKA_USERNAME','${events.USERNAME}',True),

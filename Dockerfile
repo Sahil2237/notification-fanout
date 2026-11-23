@@ -12,6 +12,7 @@ COPY src ./src
 RUN mvn -B -ntp -DskipTests package
 
 FROM ${JAVA_IMAGE} AS runtime
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --create-home app
 WORKDIR /opt/app
 COPY --from=build /workspaces/notification-fanout/target/notification-fanout.jar ./notification-fanout.jar

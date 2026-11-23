@@ -76,6 +76,12 @@ class ServiceIT {
                     exchange.sendResponseHeaders(status, -1);
                     exchange.close();
                 });
+        receiver.createContext("/slow",exchange->{
+            exchange.getRequestBody().readAllBytes();
+            try {Thread.sleep(2000);exchange.sendResponseHeaders(204,-1);}
+            catch(InterruptedException error){Thread.currentThread().interrupt();}
+            finally{exchange.close();}
+        });
         receiver.createContext(
                 "/target",
                 exchange -> {
@@ -546,4 +552,79 @@ class ServiceIT {
         fail("No delivery became due");
         return null;
     }
+    @Test void administratorCanApproveAndRevokeOriginsWithoutRestart() throws Exception {
+        var admin=APP.getConfiguration().adminToken;
+        var origin="http://127.0.0.1:19091";
+        var path="/v1/admin/webhook-origins";
+        assertEquals(401,api("GET",path,null,null).statusCode());
+        assertEquals(403,api("GET",path,TOKEN,null).statusCode());
+        assertEquals(401,api("GET","/v1/subscriptions",admin,null).statusCode());
+        assertEquals(400,api("POST",path,admin,"{\"origin\":\"http://127.0.0.1:19091/path\"}").statusCode());
+        assertEquals(200,api("POST",path,admin,JSON.writeValueAsString(java.util.Map.of("origin",origin))).statusCode());
+        assertTrue(api("GET",path,admin,null).body().contains(origin));
+        var freshStore=new Store(DB,JSON);
+        assertTrue(freshStore.isWebhookOriginApproved(origin));
+        var input=JSON.writeValueAsString(new SubscriptionInput(origin+"/hook",Rules.all()));
+        var created=api("POST","/v1/subscriptions",TOKEN,input);
+        assertEquals(201,created.statusCode(),created.body());
+        var id=JSON.readTree(created.body()).path("id").asText();
+        assertTrue(api("GET","/v1/subscriptions",TOKEN,null).body().contains(id));
+        assertEquals(204,api("DELETE","/v1/subscriptions/"+id,TOKEN,null).statusCode());
+        var encoded=java.net.URLEncoder.encode(origin,StandardCharsets.UTF_8);
+        assertEquals(204,api("DELETE",path+"?origin="+encoded,admin,null).statusCode());
+        assertFalse(freshStore.isWebhookOriginApproved(origin));
+        STORE.initializeWebhookOrigins(List.of(origin));
+        assertFalse(freshStore.isWebhookOriginApproved(origin),"Startup must not resurrect a revoked origin");
+        assertEquals(400,api("POST","/v1/subscriptions",TOKEN,input).statusCode());
+        var changes=DB.withHandle(h->h.createQuery("SELECT count(*) FROM webhook_origin_audit WHERE origin=:origin")
+                .bind("origin",origin).mapTo(Integer.class).one());
+        assertTrue(changes>=2);
+    }
+
+    @Test void realSlowReceiverIsCancelledAndAuditedForRetry() throws Exception {
+        var config=new ServiceConfiguration();
+        config.allowLocalWebhooks=true;config.allowedWebhookOrigins=APP.getConfiguration().allowedWebhookOrigins;
+        config.signingSecret=APP.getConfiguration().signingSecret;config.requestTimeoutSeconds=1;config.workerThreads=1;
+        STORE.createSubscription("demo",new SubscriptionInput("http://127.0.0.1:19090/slow",Rules.all()));
+        STORE.ingest("demo",input("{}"),null);
+        var claim=STORE.claim(30,5);
+        var started=System.nanoTime();
+        try(var sender=new WebhookSender(JSON,new WebhookPolicy(config),config)) {
+            var result=sender.send(claim);
+            assertNull(result.httpStatus());assertNotNull(result.error());
+            assertTrue(Duration.ofNanos(System.nanoTime()-started).toMillis()<3500);
+            assertTrue(STORE.finish(claim,result,retry(5)));
+        }
+        var delivery=STORE.delivery("demo",claim.id());
+        assertEquals("pending",delivery.status());
+        assertEquals("retry_scheduled",delivery.attempts().getFirst().outcome());
+        assertNull(delivery.attempts().getFirst().httpStatus());
+    }
+
+    @Test void capacityRejectionRollsBackNewEventButAllowsIdempotentRetry() throws Exception {
+        var bounded=new Store(DB,JSON,true,1);
+        var first=bounded.ingest("demo",input("{}"),"capacity-first");
+        var failure=assertThrows(jakarta.ws.rs.WebApplicationException.class,
+                ()->bounded.ingest("demo",input("{}"),"capacity-second"));
+        assertEquals(503,failure.getResponse().getStatus());
+        assertTrue(bounded.ingest("demo",input("{}"),"capacity-first").duplicate());
+        assertEquals(1,DB.withHandle(h->h.createQuery("SELECT count(*) FROM events").mapTo(Integer.class).one()).intValue());
+        assertEquals(first.event().id(),bounded.ingest("demo",input("{}"),"capacity-first").event().id());
+    }
+
+    @Test void databaseWriteFailureReturns503AndDoesNotAcknowledgeOrPersistEvent() throws Exception {
+        DB.useHandle(h->{
+            h.execute("CREATE OR REPLACE FUNCTION notification_test_disk_full() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'simulated storage failure' USING ERRCODE='53100'; END $$");
+            h.execute("CREATE TRIGGER notification_test_disk_full BEFORE INSERT ON events FOR EACH ROW EXECUTE FUNCTION notification_test_disk_full()");
+        });
+        try {
+            var response=api("POST","/v1/events",TOKEN,"{\"type\":\"test\",\"source\":\"storage-test\",\"payload\":{}}");
+            assertEquals(503,response.statusCode(),response.body());
+            assertEquals(0,DB.withHandle(h->h.createQuery("SELECT count(*) FROM events").mapTo(Integer.class).one()).intValue());
+        } finally {
+            DB.useHandle(h->{h.execute("DROP TRIGGER notification_test_disk_full ON events");h.execute("DROP FUNCTION notification_test_disk_full()");});
+        }
+        assertEquals(202,api("POST","/v1/events",TOKEN,"{\"type\":\"test\",\"source\":\"storage-test\",\"payload\":{}}").statusCode());
+    }
+
 }

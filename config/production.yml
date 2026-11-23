@@ -1,4 +1,5 @@
 production: true
+adminToken: ${ADMIN_TOKEN}
 database:
   driverClass: org.postgresql.Driver
   url: ${DB_URL}

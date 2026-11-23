@@ -3,4 +3,5 @@
   <changeSet id="001-initial" author="notification-fanout"><sqlFile path="migrations/001_initial.sql"/></changeSet>
   <changeSet id="002-kafka-outbox" author="notification-fanout"><sqlFile path="migrations/002_kafka_outbox.sql"/></changeSet>
   <changeSet id="003-outbox-reconciliation" author="notification-fanout"><sqlFile path="migrations/003_outbox_reconciliation.sql"/></changeSet>
+  <changeSet id="004-webhook-origins" author="notification-fanout"><sqlFile path="migrations/004_webhook_origins.sql"/></changeSet>
 </databaseChangeLog>

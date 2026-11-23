@@ -17,7 +17,8 @@ export APP_IMAGE="notification-fanout:$release_sha"
 compose=(docker compose --project-name notifications --env-file "$root/.env" -f "$release_dir/compose.yaml")
 "${compose[@]}" config --quiet
 # Public ingress is opt-in: blank TLS_DOMAIN keeps the API on host loopback.
-public_domain=$(sed -n 's/^TLS_DOMAIN=//p' "$root/.env" | tr -d '')
+public_domain=$(sed -n 's/^TLS_DOMAIN=//p' "$root/.env" | tr -d '
+')
 if [[ -n "$public_domain" ]]; then
   [[ "$public_domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || { echo 'Invalid TLS_DOMAIN'; exit 1; }
   compose+=(--profile public)
@@ -34,19 +35,29 @@ rollback() {
   fi
 }
 trap rollback ERR
+test "$(cat "$release_dir/release-sha")" = "$release_sha"
+(cd "$release_dir" && sha256sum --check --status SHA256SUMS)
 docker load -i "$release_dir/image.tar.gz"
+test "$(docker image inspect "$APP_IMAGE" --format '{{.Id}}')" = "$(cat "$release_dir/image-id")"
+if [[ -n "$previous" && -f "$previous/backup.sh" ]]; then bash "$previous/backup.sh"; fi
 "${compose[@]}" up -d --wait --wait-timeout 300 db kafka
 "${compose[@]}" run --rm --no-deps kafka-init
 "${compose[@]}" run --rm --no-deps migrate
 "${compose[@]}" run --rm --no-deps grants
 "${compose[@]}" up -d --no-deps app
 ready=false
-for attempt in $(seq 1 90); do
+ready_attempts=${RELEASE_READY_ATTEMPTS:-90}
+[[ "$ready_attempts" =~ ^[0-9]+$ && "$ready_attempts" -ge 1 && "$ready_attempts" -le 90 ]] || exit 1
+for attempt in $(seq 1 "$ready_attempts"); do
   if curl --fail --silent --max-time 2 http://127.0.0.1:8080/health/ready >/dev/null; then ready=true; break; fi
   sleep 1
 done
 [[ "$ready" == true ]] || { echo 'New API did not become ready' >&2; false; }
-if [[ -n "$public_domain" ]]; then "${compose[@]}" up -d --no-deps proxy; fi
+if [[ -n "$public_domain" ]]; then
+  "${compose[@]}" up -d --no-deps proxy
+  curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 3 \
+    --connect-to "$public_domain:443:127.0.0.1:443" "https://$public_domain/health/ready" >/dev/null
+fi
 ln -sfn "$release_dir" "$root/current"
 trap - ERR
 rm -f "$release_dir/image.tar.gz"

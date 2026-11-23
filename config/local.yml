@@ -1,3 +1,4 @@
+adminToken: ${ADMIN_TOKEN:-local-admin-token-change-me-32-characters}
 database:
   driverClass: org.postgresql.Driver
   url: ${DB_URL:-jdbc:postgresql://notification-db:5432/notifications}

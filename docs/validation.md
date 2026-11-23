@@ -1,25 +1,25 @@
-# Executed validation and remaining gaps
+# Verification matrix
 
-> Current Kafka implementation and verified scope: see [submission-status.md](submission-status.md) and [architecture.md](architecture.md). Earlier milestone descriptions below are retained as historical design context.
+The current runtime suite contains 15 unit and 31 integration tests; release-gateway tests add 7 Python security tests. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
 
-Executed on November 23, 2026, inside Rancher Desktop's Java 25 / Ubuntu 24.04 development container. Project persisted at /workspaces/notification-fanout. Host PostgreSQL checkout was not modified.
-
-|Check|Observed result|
+|Requirement / material risk|Automated evidence|
 |---|---|
-|Runtime|Ubuntu 24.04; Temurin 25.0.5.1; Maven 3.8.7; PostgreSQL 17|
-|mvn verify|7 unit + 17 real PostgreSQL/HTTP integration tests passed, zero skips|
-|Signed webhook demo|500, 500, 204; three audited attempts; final delivered|
-|Actual Java process restart|Queued work accepted with worker disabled; Java process killed; after restart delivered in approximately 4.1 seconds, three attempts|
-|Database outage|Liveness 200; readiness 503; ingestion 503 without acknowledgment; readiness recovered after DB restart|
-|Runtime Docker image|Built from clean image using Dockerfile; non-root runtime started; readiness and authenticated subscription list passed|
-|Acceptance-only probe|100 requests, concurrency 4, zero matching subscriptions; 100 accepted, no failures, about 209 accepted/s and p95 42ms|
-|Fanout probe|100 requests, concurrency 4, three matches each; 100 accepted, 300 delivered, zero failed; about 240 accepted/s and p95 acceptance 31ms; queue drained about 10.9s after ingestion|
-|Fanout attempt breakdown|300 HTTP 204, 600 HTTP 500, 29 recorded transport errors; total 929 application attempts|
-|IDE|IntelliJ 2025.3.6.2 backend and matching client connected to Rancher; saved Maven Verify configuration executed on /opt/java/openjdk (Java 25), bundled Maven 3.9.11; UI visibly showed BUILD SUCCESS; 7 unit + 17 integration tests passed.|
-|GitHub|Repository initialized locally; no remote, no account authenticated, no hosted CI run yet|
+|Type/source/payload filters, null/missing, arrays and JSON Pointer|CoreTest filter cases; ServiceIT all JSON kinds|
+|Durable transaction and storage error response|ServiceIT event/fanout rollback and simulated SQLSTATE 53100 HTTP 503; KafkaIT atomic outbox rollback|
+|Dynamic subscription management and tenant isolation|ServiceIT REST lifecycle, deletion boundary and ownership tests|
+|Runtime origin approval / revocation / administrative isolation|ServiceIT approve/list/revoke without restart, fresh Store persistence and revoked seed protection; CoreTest public HTTPS approval|
+|Actual DNS rebinding / mixed private answers|CoreTest injected lookup changes between registration and connection resolver|
+|Concurrency / duplicate requests / stale workers|ServiceIT concurrent idempotency, distinct claims, lost HTTP-success result and lease fencing|
+|Retries / final failure / timeout / audit|ServiceIT real 500/500/204, permanent response, exhaustion, real slow receiver cancellation, retry timing and null HTTP status|
+|Backpressure rollback|ServiceIT bounded outbox rejects a new event but preserves a duplicate request|
+|Real REST → Kafka → webhook flow|KafkaIT full journey with dispatch gating and recorded HTTP response|
+|Kafka recovery / poison data / offset boundaries|KafkaIT broker outage, restarts, duplicate envelopes, quarantine, partition-specific dispatch failure and outbox lease recovery|
+|10,000 records with one type|KafkaIT sends 10,000 UUID-keyed records to a real six-partition topic and checks distribution; this is not a full-service throughput SLO|
+|Release authenticity / path safety|Python tests for tampered image/signature, symlinks, manifest paths, revision mismatch and immutable release reuse|
+|Container/schema/runtime privilege correctness|CI Compose smoke test with distinct migration/runtime roles, DDL denial, ingestion and dispatch|
+|Failed startup / rollback / database restore|CI executes the real release script with an image that migrates but fails server startup, checks rollback and restores a pre-release dump|
+|Dependency vulnerabilities|CI image scan gates on fixable HIGH/CRITICAL vulnerabilities and uploads its report|
 
-These are short local smoke probes, not sustained load/capacity tests, percentile SLO proof, or a production benchmark. Fanout receiver deliberately returns two failures per delivery; extra transport errors occurred during the local concurrent probe. Results reflect the whole local setup, including a busy developer workstation and the receiver, not an isolated sender ceiling. No 1000-subscription, slow-receiver fairness or long-duration saturation benchmark has been executed. The initial acceptance probe while an in-use JAR was being overwritten failed; start-local.sh now copies the JAR to avoid that packaging hazard. Test and demo receiver ports are isolated (19090 and 9090).
+Cloud verification is separate from CI: record the exact deployed revision and image ID, prove live admin changes do not restart the app, post synthetic matching/nonmatching events, verify audit and the external request/HMAC, and test service restart recovery. The existing deployment already passed reboot and same-host restore; each changed release needs its own live evidence. See submission-status.md for historical results and the latest workflow/release reports for new outcomes.
 
-Critical requirements map to ServiceIT: fullHttpJourneyAndAudit; fanoutFiltersTenantsAndDeletionBoundary; acceptsNoMatchesAndAllJsonKinds; concurrentIdempotencyCreatesOneEventAndOneDelivery; concurrentWorkersClaimDistinctJobs; realHttpFailuresRetryThenSucceed; permanentResponseAndRetryExhaustionAreAudited; expiredLeaseRecoversAcrossStoreRestartAndFencesOldWorker; finalInterruptedAttemptBecomesFailed; eventAndFanoutRollbackTogether; validationAuthenticationAndOwnershipOverHttp; redirectIsNotFollowedAndPolicyFailureHasNoInventedStatus; managedWorkerProcessesPersistedQueue; httpAcceptsNullPayloadRejectsMissingPayloadAndBoundsPages; retryScheduleIsNotClaimedEarly; lostSuccessResultCausesDuplicateWithStableDeliveryIdentity; connectionFailureIsRecordedWithoutHttpStatus. CoreTest covers filter semantics, destination rules, retry bounds, throttling and configuration validation.
-
-Remaining release gaps: personal GitHub destination/authentication and hosted Actions verification; fresh Compose IDE workflow (Compose configuration validated; runtime Dockerfile built/tested separately); arbitrary domain-name webhooks; distributed/per-tenant fair scheduling; managed secrets/TLS/least-privilege production roles; actual backup/restore and retention automation; sustained representative load; deployed monitoring/tracing; cloud deployment/managed broker; ordering/replay/redrive. No production certification or unconditional eventual delivery is claimed.
+Unproven boundaries include full host loss, independent replica failover, encrypted off-host restore, long-duration saturation, broad receiver-fairness testing, automated paging and agreed production p95/p99 SLOs. A load probe must state whether it includes HTTP ingestion, matching fanout, delivery, payload size, duration and receiver latency. No test suite is described as exhaustive. The 10,000-record test initially exposed a local Kafka sequencing failure with multiple in-flight batches; a single in-flight request and bounded producer deadlines passed the rerun.

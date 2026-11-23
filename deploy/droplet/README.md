@@ -1,71 +1,59 @@
-# GitHub to a Bangalore Droplet
+# Signed GitHub deployment to the Bangalore Droplet
 
-This is the active low-cost deployment path. It uses **one Ubuntu 24.04 Droplet**, Docker Compose, the Java service, self-hosted Kafka and self-hosted PostgreSQL. No managed Kafka, managed database, App Platform or paid registry is required. GitHub Actions transfers the tested container image over SSH; the private repository and its GitHub token are never cloned onto the server.
+The active deployment uses one Ubuntu 24.04 Droplet in `blr1`, regular Basic `s-2vcpu-4gb`, displayed base price $24/month. Kafka/PostgreSQL are self-hosted. No managed Kafka, managed DB, App Platform or registry is required. The current server is `notification-fanout`, IP `64.227.168.29`, in the authorized team `Blitz_team13_Hyd`. No additional paid resources are introduced by this release path. Powering off a Droplet does not stop its billing.
 
-## Size and limits
+## First setup
 
-Start with `s-2vcpu-4gb` in `blr1`: the regular Basic plan is listed at **$24/month**, before optional backups, tax or excess transfer. Provisioning checks availability and refuses a listed base price above $24. The 2 GB plan costs less but leaves little room for two JVMs, PostgreSQL, Linux and deployment overlap. This recommendation is an assessment starting point, not a measured throughput commitment.
+Development commands belong in the Rancher container at `/workspaces/notification-fanout`. `provision.sh` is an explicit paid-infrastructure action, refuses a duplicate Droplet name and checks plan availability/base price <=$24 before creation. Reuse the existing server; do not provision it again. Its `bootstrap.sh` installs Docker/Compose from the official Ubuntu Docker repository, creates root-only random secrets, and disables password SSH.
 
-There is one application process and one broker with six partitions. One Droplet is a single failure boundary: no server failover, no broker replication, brief downtime during releases. Persistent Docker volumes survive container replacement and reboot, not disk/Droplet loss. Production availability requires more infrastructure. See [DigitalOcean pricing](https://www.digitalocean.com/pricing/droplets).
+Independently verify the ED25519 SSH host fingerprint through the DigitalOcean Web Console before saving a scanned key. The current fingerprint is `SHA256:Jm3n0W3ncddd+viFM8avVYw6NKnp4IPWmPWtWI305GA`. Pin it in `.deploy/known_hosts`. The existing `.deploy/droplet-deploy` key is the privileged **operator** key; it is not the new CI key.
 
-## One-time account and server setup
-
-Run development commands from the Rancher Ubuntu container at `/workspaces/notification-fanout`.
-
-1. Run `doctl auth init` interactively. Never put its token in chat, Git, shell history or workflow YAML.
-2. Inspect existing Droplets first: `doctl compute droplet list`. Reuse a suitable server instead of provisioning twice.
-3. To create the documented paid Droplet: `bash deploy/droplet/provision.sh`. It checks the plan, creates a dedicated SSH key in ignored `.deploy/`, configures a tagged cloud firewall, and creates the server. It does not deploy the app yet. Do not reuse the generated deployment key for personal administration. Record the resulting Droplet ID/IP and firewall ID for cleanup.
-4. Confirm the SSH host-key fingerprint through DigitalOcean's Droplet Console (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`). Collect the host key with `ssh-keyscan -t ed25519 IP`, compare its fingerprint, then save the verified line in `.deploy/known_hosts`. Scanning alone does not authenticate a server. All SSH commands below must use this file and `StrictHostKeyChecking=yes`.
-5. Connect with `ssh -i .deploy/droplet-deploy -o UserKnownHostsFile=.deploy/known_hosts -o StrictHostKeyChecking=yes root@IP`. Run `cloud-init status --wait` and `docker compose version`. Bootstrap uses the [official Docker Ubuntu repository](https://docs.docker.com/engine/install/ubuntu/) and disables password-based SSH.
-6. Edit `/opt/notification-fanout/.env` on the server. Independent 256-bit owner, runtime, API and signing secrets were generated locally by bootstrap. Replace `WEBHOOK_ORIGINS` with a JSON array of your approved public HTTPS receiver origins. Keep `TLS_DOMAIN=` blank for tunnel-only access, or set a domain you own after its DNS A record points to this server. Keep `.env` owned by root with mode 600. Treat shell access and Docker access as server-administrator privileges.
-
-The provisioning script allows inbound TCP 22, 80 and 443. The currently created server has a stricter SSH-only firewall because no HTTPS domain has been supplied; add 80/443 rules when enabling public HTTPS. Port 8080 binds only to host loopback; PostgreSQL, Kafka and the Dropwizard admin port have no host-published ports. SSH uses key authentication. GitHub-hosted runners have changing addresses; for stronger SSH restrictions use a private runner/VPN or maintained runner allowlist.
-
-## Connect the private GitHub repository
-
-In `Sahil2237/notification-fanout`, configure these Actions settings (repository settings → Secrets and variables → Actions):
-
-| Kind | Name | Value |
-|---|---|---|
-| Variable | `DROPLET_HOST` | Verified public IPv4 address or hostname |
-| Secret | `DROPLET_SSH_KEY` | The dedicated deployment private key |
-| Secret | `DROPLET_KNOWN_HOSTS` | The verified SSH host-key line |
-
-From the container, after verifying the server identity, these commands upload the key files without printing them:
+Generate an independent CI SSH key and Ed25519 release signing key inside ignored `.deploy/`, and retain them securely:
 
 ```bash
-gh secret set DROPLET_SSH_KEY --repo Sahil2237/notification-fanout < .deploy/droplet-deploy
-gh secret set DROPLET_KNOWN_HOSTS --repo Sahil2237/notification-fanout < .deploy/known_hosts
-gh variable set DROPLET_HOST --repo Sahil2237/notification-fanout --body YOUR_VERIFIED_IP
+ssh-keygen -t ed25519 -N '' -f .deploy/ci-deploy
+openssl genpkey -algorithm ED25519 -out .deploy/release-signing.pem
+chmod 600 .deploy/release-signing.pem
+openssl pkey -in .deploy/release-signing.pem -pubout -out .deploy/release-signing.pub
 ```
 
-Setting `DROPLET_HOST` enables deployments on subsequent successful default-branch push workflows. The current default branch is `codex/notification-fanout`; the workflow follows the repository default if it changes. Only pushes from this repository and the default branch qualify. Pull requests do not deploy. `Java 25 verification` must pass both the application suite and the real Droplet Compose smoke job before deployment starts. The managed App Platform workflow remains disabled without its separate app ID; leave it unset.
+Using the verified operator connection, copy **only** the CI public key, release public key, reviewed `promote.py` and `setup-deployer.sh` to `/root/` on the server. Run `bash /root/setup-deployer.sh /root/ci-deploy.pub /root/release-signing.pub /root/promote.py`. It creates the restricted `notification-deploy` user and root-owned gateway, installs the public signature trust key, permits sudo only for that gateway, and ensures a separate ADMIN_TOKEN exists in `.env`. The upload user has no Docker group membership and cannot read root's environment file. Its authorized key uses OpenSSH `restrict` to disable interactive forwarding/PTY features. Keep the operator key for controlled administration.
 
-Push a reviewed commit after configuration. Deployment builds a Linux amd64 image from the tested commit, pins the SSH server identity, transfers an immutable release, waits for database/broker readiness, creates the topic, applies migrations, grants runtime DML privileges, then replaces the app. The server serializes releases with a lock. Application secrets stay on the server. The CI deployment key gives administrator access to this Droplet; protect repository write access, workflow changes and secrets, and rotate this dedicated key if exposed.
+## Repository connection
 
-## Access and verification
+|Setting|Value|
+|---|---|
+|Variable `DROPLET_HOST`|64.227.168.29|
+|Secret `DROPLET_SSH_KEY`|Dedicated `.deploy/ci-deploy` private key, **not** the operator key|
+|Secret `DROPLET_KNOWN_HOSTS`|Independently verified host-key line|
+|Secret `RELEASE_SIGNING_KEY`|Ed25519 `.deploy/release-signing.pem` contents|
 
-Without a domain, keep API traffic inside SSH:
+Upload secrets with `gh secret set NAME --repo Sahil2237/notification-fanout < FILE` without printing them. The current default branch is `codex/notification-fanout`; workflows follow the repository default if it changes. Pull requests are verified but never signed/deployed as releases. Protect repository write access and workflow changes: trusted CI can sign new application code.
+
+CI runs the Java and gateway-security tests, builds one Linux-amd64 image, scans for fixable HIGH/CRITICAL findings, validates Caddy, executes real Compose startup and runtime DB permission checks, then tests a failed-startup rollback and backup restore. It packages this **same** image with its image ID, Git revision, configuration and checksums. Only a trusted default-branch push receives the signing secret. The deploy workflow downloads the artifact from that successful run and transfers it over pinned SSH; it does not rebuild or clone source on the server.
+
+The root-owned promotion gateway accepts only signed bundles with the expected filenames, regular files, bounded size, checksum/revision/image identity and immutable revision directory. It rejects symlink/traversal/tampering. The SSH key alone cannot sign a new privileged release; possession of a valid old signed release can permit redeployment, so protect upload access and rotate keys after compromise. Retained signed artifacts are also the rollback source.
+
+## Environment, API access and HTTPS
+
+The root-only `/opt/notification-fanout/.env` contains independent DB owner/runtime, tenant API, administrator and webhook-signing secrets. Do not commit it or put its values in chat. `WEBHOOK_ORIGINS` seeds previously unknown origins on startup; runtime admin API changes are authoritative and revoked entries are not resurrected by that seed.
+
+Set `TLS_DOMAIN` to a domain pointing at the server, or to its public IP when using the included explicit Let's Encrypt `shortlived` ACME issuer. Public-IP certificates are short-lived and require reliable automatic renewal; Caddy's certificate storage is persistent. Open TCP 80/443 in the cloud firewall before enabling HTTPS. Port 80 handles validation/redirects; requests with API tokens belong on HTTPS only. The release checks the real certificate and HTTPS readiness before success. Public Caddy routes return 404 for `/v1/admin/*`; those remain private over SSH. Direct API port 8080 is bound to host loopback; admin, PostgreSQL and Kafka ports are not publicly published.
+
+Without public HTTPS, or for private administrator calls, open a tunnel from the container:
 
 ```bash
-ssh -i .deploy/droplet-deploy -o UserKnownHostsFile=.deploy/known_hosts \
-  -o StrictHostKeyChecking=yes -L 127.0.0.1:18080:127.0.0.1:8080 root@YOUR_IP
+cd /workspaces/notification-fanout
+ssh -N -i .deploy/droplet-deploy -o UserKnownHostsFile=.deploy/known_hosts \
+  -o StrictHostKeyChecking=yes -L 127.0.0.1:18080:127.0.0.1:8080 root@64.227.168.29
 ```
 
-Use `http://127.0.0.1:18080/health/ready` through that tunnel from a second terminal on the same machine. When SSH runs inside the Rancher container, run the check in another container terminal; forward port 18080 through IntelliJ if accessing it from the Mac browser. Use the server's API bearer token for `/v1` requests. For public HTTPS, configure your domain/DNS and `TLS_DOMAIN` before the next release; Caddy obtains and renews a certificate. Verify `https://YOUR_DOMAIN/health/ready` and a real signed webhook round trip. HTTPS certificate issuance and external receiver delivery require live cloud verification.
-
-Internal database and broker traffic is plaintext on the single-host Docker bridge. `config/droplet.yml` explicitly enables this trust model, permits only `db:5432` and `kafka:9092`, retains non-demo credentials and public HTTPS webhook restrictions, and uses a database runtime role that cannot change the schema. The managed production configuration still requires TLS. Do not reuse single-host mode across servers or expose the Docker network publicly. A server administrator can read application data and secrets.
+Use `http://127.0.0.1:18080` from another container terminal; forward port 18080 through IntelliJ to access it in the Mac browser. Tenant APIs use API_TOKEN, operator origin APIs use ADMIN_TOKEN. Use a secure operator channel to provision derived signing keys to real receivers. The free Webhook.site receiver is a temporary synthetic-data demonstration, not a production subscriber.
 
 ## Operations and recovery
 
-- Current release: `/opt/notification-fanout/current`; environment/secrets: `/opt/notification-fanout/.env`.
-- On the server, set `APP_IMAGE=notification-fanout:COMMIT_SHA` and use `docker compose --project-name notifications --env-file /opt/notification-fanout/.env -f /opt/notification-fanout/current/compose.yaml ...` for `ps`, `logs --tail 100`, and `restart app`. Container logs rotate. Check disk usage, memory, pending deliveries, old outbox records and failed attempts. Host monitoring is installed, but notification alerts still need account-specific configuration.
-- Run `bash /opt/notification-fanout/current/backup.sh` for a consistent PostgreSQL custom-format dump. Copy it and the root-only `.env` to encrypted **off-host** storage. Automate and test restores before real production use. A local dump is not disaster recovery. Retention of application/audit rows is not yet automated; monitor disk growth.
-- To restore, stop app delivery, restore the dump into a fresh migrated-compatible PostgreSQL database with `pg_restore`, restore the runtime role password and grants, recreate the Kafka topic, and start the publisher/consumer. PostgreSQL contains events and delivery/outbox state; undispatched events are republished. Unknown webhook outcomes can duplicate delivery. Validate counts and a real receiver before resuming traffic. RPO is the latest verified off-host backup; no live RTO is claimed yet.
-- A failed readiness check attempts to restart the previous application release. Migrations are **not** reversed: use only backward-compatible schema changes. For manual rollback, rerun `release.sh PREVIOUS_SHA` from its retained release directory after restoring its image archive or exporting the retained local image. Never use `docker compose down --volumes` on this server. Old image/release cleanup is manual; retain at least the current and previous images.
-- Rotating PostgreSQL passwords requires `ALTER ROLE` as well as updating `.env`; changing the file alone does not update an existing database volume.
-- To stop billing, explicitly destroy the Droplet when finished; powering it off does not stop billing. Review snapshots/backups/other resources separately before deletion. Never destroy a server without confirming backup and data-retention needs.
+Current release is `/opt/notification-fanout/current`. Use APP_IMAGE from its release SHA and `docker compose --project-name notifications --env-file /opt/notification-fanout/.env -f /opt/notification-fanout/current/compose.yaml ...` for bounded logs, status and controlled restart. Every release saves a pre-migration PostgreSQL backup, applies forward migrations/grants, gates readiness/TLS and attempts application rollback on failure. CI tests that rollback. Schema changes must stay backward-compatible; database migrations are never automatically reversed.
 
-## Verification status
+`backup.sh` writes a root-protected, consistent dump. A same-server restore is tested, but encrypted off-host backups and secrets escrow require an approved storage destination. A disk/Droplet failure can destroy both data and local backups. Event/audit retention is not automated; monitor disk growth and backup age. Never use `down --volumes` on the real server. Retain current/previous images and signed artifacts; do not replace an existing Git revision with different image contents.
 
-See the GitHub Actions runs and `docs/submission-status.md`. The repository's smoke test validates the real Compose stack; it does not prove that your DigitalOcean account has been provisioned, DNS is configured, or backups have been restored. No deployment is complete until a live URL/tunnel, ingestion, Kafka dispatch, signed webhook, audit query and server restart have been checked.
+This deployment deliberately has one host, one broker and one DB. No host failover, zero-downtime release or numerical disaster RPO/RTO is claimed. Internal DB/Kafka traffic is plaintext on the dedicated single-host bridge; migrate to authenticated TLS when crossing machines. Configure external alerting and validate representative fanout capacity before making availability/performance commitments. Full procedures are in docs/operations.md and evidence in docs/submission-status.md.

@@ -42,6 +42,41 @@ public final class Store {
         this.maxQueuedEvents=maxQueuedEvents;
     }
 
+    public void initializeWebhookOrigins(List<String> origins) {
+        db.useTransaction(h -> {
+            for (var value : origins) {
+                var origin=WebhookPolicy.origin(java.net.URI.create(value));
+                var created=h.createUpdate("INSERT INTO approved_webhook_origins(origin) VALUES(:origin) ON CONFLICT DO NOTHING")
+                        .bind("origin",origin).execute();
+                if(created==1) auditOrigin(h,origin,"approved","configuration");
+            }
+        });
+    }
+
+    public boolean isWebhookOriginApproved(String origin) {
+        return db.withHandle(h -> h.createQuery("SELECT active FROM approved_webhook_origins WHERE origin=:origin")
+                .bind("origin",origin).mapTo(Boolean.class).findOne().orElse(false));
+    }
+
+    public List<String> webhookOrigins(int limit,int offset) {
+        return db.withHandle(h -> h.createQuery("SELECT origin FROM approved_webhook_origins WHERE active ORDER BY origin LIMIT :limit OFFSET :offset")
+                .bind("limit",limit).bind("offset",offset).mapTo(String.class).list());
+    }
+
+    public void setWebhookOrigin(String origin,boolean active) {
+        db.useTransaction(h -> {
+            h.createUpdate("INSERT INTO approved_webhook_origins(origin,active) VALUES(:origin,:active) "
+                    +"ON CONFLICT(origin) DO UPDATE SET active=EXCLUDED.active,updated_at=clock_timestamp()")
+                    .bind("origin",origin).bind("active",active).execute();
+            auditOrigin(h,origin,active?"approved":"revoked","administrator");
+        });
+    }
+
+    private void auditOrigin(Handle h,String origin,String action,String actor) {
+        h.createUpdate("INSERT INTO webhook_origin_audit(id,origin,action,actor) VALUES(:id,:origin,:action,:actor)")
+                .bind("id",UUID.randomUUID()).bind("origin",origin).bind("action",action).bind("actor",actor).execute();
+    }
+
     public Subscription createSubscription(String tenant, SubscriptionInput input) {
         return db.inTransaction(
                 h -> {
@@ -170,7 +205,6 @@ public final class Store {
                                 .bind("tenant", tenant)
                                 .bind("event", id)
                                 .bind("subscription", subscription.id())
-                                .bind("ready", !kafkaRequired)
                                 .bind("ready", !kafkaRequired)
                                 .bind("url", subscription.webhookUrl())
                                 .execute();

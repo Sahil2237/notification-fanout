@@ -2,9 +2,10 @@
 # CI only: creates and destroys an isolated Compose project, including its volumes.
 set -euo pipefail
 cd "$(dirname "$0")"
-export APP_IMAGE="notification-fanout:smoke"
+export APP_IMAGE=${APP_IMAGE:-notification-fanout:smoke}
 export PG_OWNER_PASSWORD=smoke-owner-credential-32-characters
 export DB_PASSWORD=smoke-runtime-credential-32-characters
+export ADMIN_TOKEN=smoke-administrator-token-at-least-32-characters
 export API_TOKEN=smoke-api-token-at-least-32-characters
 export WEBHOOK_SIGNING_SECRET=smoke-signing-secret-at-least-32-characters
 export WEBHOOK_ORIGINS='["https://example.com"]'
