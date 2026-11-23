@@ -64,3 +64,12 @@ jobs:
           path: |
             target/surefire-reports/
             target/failsafe-reports/
+
+  droplet-smoke:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target runtime -t notification-fanout:smoke .
+      - run: bash deploy/droplet/smoke.sh

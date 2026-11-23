@@ -1,5 +1,7 @@
 # Event-driven notification fanout
 
+For the current low-cost DigitalOcean deployment, use the [single-Droplet guide](deploy/droplet/README.md). Kafka and PostgreSQL run on the Droplet; GitHub Actions deploys tested images over SSH.
+
 Java 25 + Dropwizard 5 REST service. PostgreSQL commits events, matching delivery jobs and an outbox together. The outbox publishes to Kafka; an idempotent Kafka consumer activates the delivery jobs. Bounded workers send signed webhooks, retry failures and retain delivery history. Small classes and explicit SQL keep the failure behavior inspectable.
 
 **Status:** local implementation; see [executed validation and remaining gaps](docs/validation.md). A managed-cloud deployment and verified hosted CI run are separate from local success. Default credentials and local HTTP are development settings.

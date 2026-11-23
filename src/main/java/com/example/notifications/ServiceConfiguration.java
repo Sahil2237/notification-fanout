@@ -26,7 +26,7 @@ public class ServiceConfiguration extends Configuration {
     private java.nio.file.Path databaseCaFile;
 
     public void prepareDatabaseSecurity() {
-        if(!production) return;
+        if(!production || singleHostDeployment) return;
         var certificate=System.getenv(databaseCaCertificateEnvironment);
         if(certificate==null || certificate.isBlank()) throw new IllegalArgumentException("Production database CA certificate is required");
         try {
@@ -45,6 +45,8 @@ public class ServiceConfiguration extends Configuration {
 
     @Valid @NotNull @JsonProperty public KafkaSettings kafka = new KafkaSettings();
     @JsonProperty public boolean production = false;
+    // Explicit budget deployment: plaintext is confined to one private Docker bridge.
+    @JsonProperty public boolean singleHostDeployment = false;
     @Min(1) @Max(10000000) @JsonProperty public int maxQueuedEvents = 100000;
     @JsonProperty public boolean workerEnabled = true;
 
@@ -83,9 +85,20 @@ public class ServiceConfiguration extends Configuration {
     public int requestsPerMinute = 600;
 
     public void validateSettings() {
-        if (production && (!kafka.enabled || allowLocalWebhooks || !"SASL_SSL".equals(kafka.securityProtocol)
-                || credentials.values().stream().anyMatch(v -> v.startsWith("local-")) || signingSecret.startsWith("local-"))) {
-            throw new IllegalArgumentException("Production requires Kafka, TLS, non-demo secrets and public HTTPS webhooks");
+        if (production && (!kafka.enabled || allowLocalWebhooks
+                || credentials.values().stream().anyMatch(v -> v.startsWith("local-"))
+                || signingSecret.startsWith("local-"))) {
+            throw new IllegalArgumentException("Production requires Kafka, non-demo secrets and public HTTPS webhooks");
+        }
+        if (production && singleHostDeployment) {
+            if (!"kafka:9092".equals(kafka.bootstrapServers)
+                    || !"PLAINTEXT".equals(kafka.securityProtocol)
+                    || !"jdbc:postgresql://db:5432/notifications".equals(database.getUrl())
+                    || !"disable".equals(database.getProperties().get("sslmode"))) {
+                throw new IllegalArgumentException("Single-host mode requires the dedicated db and kafka Docker services");
+            }
+        } else if (production && !"SASL_SSL".equals(kafka.securityProtocol)) {
+            throw new IllegalArgumentException("Managed production Kafka requires SASL_SSL");
         }
         if (leaseSeconds <= requestTimeoutSeconds + 2) {
             throw new IllegalArgumentException(

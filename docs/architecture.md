@@ -24,4 +24,20 @@ An unavailable Kafka broker delays dispatch but accepted events remain in the da
 
 Matching remains in the ingestion transaction, preserving the original active-subscription snapshot. PostgreSQL schedules delayed retries because Kafka does not provide arbitrary per-message scheduled delivery. Event IDs distribute a single event type across partitions; per-source ordering is not currently implemented.
 
-For DigitalOcean, the prepared configuration targets App Platform API/worker components, Managed Kafka, Managed PostgreSQL, VPC networking and Container Registry. Deployment input templates and workflow scaffolding exist under deploy/digitalocean; they have not been applied or verified in a DigitalOcean account. Region, budget, cloud credentials and managed clusters remain to be selected. Never describe this repository as already deployed.
+For the selected low-cost DigitalOcean deployment, use one Bangalore Ubuntu 24.04 Droplet running Docker Compose: the API and delivery workers share one JVM, with a Kafka container and PostgreSQL container on the same private bridge. GitHub Actions deploys the tested revision over pinned SSH. PostgreSQL and Kafka persist in named volumes and have no published host ports. The API binds to host loopback; optional Caddy provides public HTTPS once a domain is configured. This is a single-server assessment deployment, with no host or broker failover. See [the deployment guide](../deploy/droplet/README.md) for setup and operational limits. Live cloud provisioning is still pending account access.
+
+```mermaid
+flowchart LR
+  G[Private GitHub repository] --> T[Unit, integration and Compose smoke tests]
+  T --> B[Build image from tested commit]
+  B -->|Pinned SSH transfer| D
+  subgraph D[Bangalore Ubuntu 24.04 Droplet]
+    C[Caddy optional HTTPS] --> A[Java API and delivery workers]
+    A <--> P[(PostgreSQL volume)]
+    A <--> K[(Kafka volume)]
+  end
+  U[Producer] -->|HTTPS or SSH tunnel| C
+  A -->|Signed HTTPS| H[Approved webhook]
+```
+
+The earlier App Platform/managed-cluster scaffolding is an unused alternative, not the active target. No managed Kafka will be provisioned for the selected deployment.

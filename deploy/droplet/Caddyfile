@@ -1,0 +1,6 @@
+{$TLS_DOMAIN} {
+    request_body {
+        max_size 300KB
+    }
+    reverse_proxy app:8080
+}

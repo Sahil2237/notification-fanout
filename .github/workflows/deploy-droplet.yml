@@ -1,0 +1,53 @@
+name: Deploy verified revision to Droplet
+on:
+  workflow_run:
+    workflows: [Java 25 verification]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: droplet-deployment
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      vars.DROPLET_HOST != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      DROPLET_HOST: ${{ vars.DROPLET_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Build an immutable image from the tested revision
+        run: |
+          docker build --platform linux/amd64 --target runtime -t "notification-fanout:$RELEASE_SHA" .
+          docker save "notification-fanout:$RELEASE_SHA" | gzip > deploy/droplet/image.tar.gz
+      - name: Set up SSH with pinned server identity
+        env:
+          SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          test -s ~/.ssh/id_ed25519
+          test -s ~/.ssh/known_hosts
+      - name: Transfer and deploy over SSH
+        run: |
+          [[ "$DROPLET_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          destination="/opt/notification-fanout/releases/$RELEASE_SHA"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DROPLET_HOST" "umask 077; mkdir -p '$destination'"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,image.tar.gz} "root@$DROPLET_HOST:$destination/"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DROPLET_HOST" "bash '$destination/release.sh' '$RELEASE_SHA'"
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

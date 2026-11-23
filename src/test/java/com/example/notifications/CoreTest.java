@@ -147,4 +147,39 @@ class CoreTest {
         config.credentials=java.util.Map.of("service","local-demo-token-change-me");
         assertThrows(IllegalArgumentException.class,config::validateSettings);
     }
+    private ServiceConfiguration dropletConfig() {
+        var config = new ServiceConfiguration();
+        config.production = true;
+        config.singleHostDeployment = true;
+        config.signingSecret = "random-signing-secret-at-least-32-characters";
+        config.credentials = java.util.Map.of("service", "random-api-token-at-least-32-characters");
+        config.database.setUrl("jdbc:postgresql://db:5432/notifications");
+        config.database.setProperties(java.util.Map.of("sslmode", "disable"));
+        config.kafka.bootstrapServers = "kafka:9092";
+        return config;
+    }
+
+    @Test void singleHostModeKeepsSecretsAndWebhookRestrictions() {
+        var config = dropletConfig();
+        assertDoesNotThrow(config::validateSettings);
+        assertDoesNotThrow(config::prepareDatabaseSecurity);
+        config.allowLocalWebhooks = true;
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+        config.allowLocalWebhooks = false;
+        config.credentials = java.util.Map.of("service", "local-demo-token-change-me");
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+    }
+
+    @Test void plaintextProductionIsRestrictedToSingleHostServiceNames() {
+        var config = dropletConfig();
+        config.kafka.bootstrapServers = "external.example.com:9092";
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+        config = dropletConfig();
+        config.database.setUrl("jdbc:postgresql://external.example.com:5432/notifications");
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+        config = dropletConfig();
+        config.singleHostDeployment = false;
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+    }
+
 }
