@@ -19,7 +19,7 @@ Run development commands from the Rancher Ubuntu container at `/workspaces/notif
 5. Connect with `ssh -i .deploy/droplet-deploy -o UserKnownHostsFile=.deploy/known_hosts -o StrictHostKeyChecking=yes root@IP`. Run `cloud-init status --wait` and `docker compose version`. Bootstrap uses the [official Docker Ubuntu repository](https://docs.docker.com/engine/install/ubuntu/) and disables password-based SSH.
 6. Edit `/opt/notification-fanout/.env` on the server. Independent 256-bit owner, runtime, API and signing secrets were generated locally by bootstrap. Replace `WEBHOOK_ORIGINS` with a JSON array of your approved public HTTPS receiver origins. Keep `TLS_DOMAIN=` blank for tunnel-only access, or set a domain you own after its DNS A record points to this server. Keep `.env` owned by root with mode 600. Treat shell access and Docker access as server-administrator privileges.
 
-The firewall allows inbound TCP 22, 80 and 443. Port 8080 binds only to host loopback; PostgreSQL, Kafka and the Dropwizard admin port have no host-published ports. SSH uses key authentication. GitHub-hosted runners have changing addresses; for stronger SSH restrictions use a private runner/VPN or maintained runner allowlist.
+The provisioning script allows inbound TCP 22, 80 and 443. The currently created server has a stricter SSH-only firewall because no HTTPS domain has been supplied; add 80/443 rules when enabling public HTTPS. Port 8080 binds only to host loopback; PostgreSQL, Kafka and the Dropwizard admin port have no host-published ports. SSH uses key authentication. GitHub-hosted runners have changing addresses; for stronger SSH restrictions use a private runner/VPN or maintained runner allowlist.
 
 ## Connect the private GitHub repository
 
