@@ -49,10 +49,10 @@ Without a domain, keep API traffic inside SSH:
 
 ```bash
 ssh -i .deploy/droplet-deploy -o UserKnownHostsFile=.deploy/known_hosts \
-  -o StrictHostKeyChecking=yes -L 8080:127.0.0.1:8080 root@YOUR_IP
+  -o StrictHostKeyChecking=yes -L 127.0.0.1:18080:127.0.0.1:8080 root@YOUR_IP
 ```
 
-Use `http://127.0.0.1:8080/health/ready` locally through that tunnel, and the server's API bearer token for `/v1` requests. For public HTTPS, configure your domain/DNS and `TLS_DOMAIN` before the next release; Caddy obtains and renews a certificate. Verify `https://YOUR_DOMAIN/health/ready` and a real signed webhook round trip. HTTPS certificate issuance and external receiver delivery require live cloud verification.
+Use `http://127.0.0.1:18080/health/ready` through that tunnel from a second terminal on the same machine. When SSH runs inside the Rancher container, run the check in another container terminal; forward port 18080 through IntelliJ if accessing it from the Mac browser. Use the server's API bearer token for `/v1` requests. For public HTTPS, configure your domain/DNS and `TLS_DOMAIN` before the next release; Caddy obtains and renews a certificate. Verify `https://YOUR_DOMAIN/health/ready` and a real signed webhook round trip. HTTPS certificate issuance and external receiver delivery require live cloud verification.
 
 Internal database and broker traffic is plaintext on the single-host Docker bridge. `config/droplet.yml` explicitly enables this trust model, permits only `db:5432` and `kafka:9092`, retains non-demo credentials and public HTTPS webhook restrictions, and uses a database runtime role that cannot change the schema. The managed production configuration still requires TLS. Do not reuse single-host mode across servers or expose the Docker network publicly. A server administrator can read application data and secrets.
 
