@@ -79,6 +79,7 @@ jobs:
       - name: Scan fixable high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ env.APP_IMAGE }}
           format: json
           output: security-report.json
@@ -96,6 +97,7 @@ jobs:
         run: |
           mkdir -p .release
           cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh} .release/
+          python3 deploy/droplet/pin-images.py .release/compose.yaml
           docker save "$APP_IMAGE" | gzip > .release/image.tar.gz
           docker image inspect "$APP_IMAGE" --format '{{.Id}}' > .release/image-id
           printf '%s\n' "$GITHUB_SHA" > .release/release-sha
