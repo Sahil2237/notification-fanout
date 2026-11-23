@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Root-owned gateway: promote only CI-signed bundles from a restricted upload user."""
 import hashlib, os, pathlib, re, shutil, stat, subprocess, sys, tempfile
-FILES = ("image.tar.gz", "image-id", "release-sha", "compose.yaml", "init-db.sh", "grants.sql", "Caddyfile", "release.sh", "backup.sh")
+FILES = ("image.tar.gz", "image-id", "release-sha", "compose.yaml", "init-db.sh", "grants.sql", "Caddyfile", "release.sh", "backup.sh", "verify-image.py")
 
 def stage_bundle(root, incoming, sha, public_key):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):

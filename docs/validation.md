@@ -1,6 +1,6 @@
 # Verification matrix
 
-The current runtime suite contains 15 unit and 31 integration tests; release-gateway tests add 7 Python security tests. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
+The current runtime suite contains 15 unit and 31 integration tests; release-gateway tests add 12 Python security tests. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
 
 |Requirement / material risk|Automated evidence|
 |---|---|
@@ -26,3 +26,6 @@ Unproven boundaries include full host loss, independent replica failover, encryp
 
 
 The first hosted security gate rejected older transitive versions. The fixes pin Jackson BOM 2.21.7, Jetty BOM 12.1.10, Guava 33.7.2-jre, HTTP Core/H2 5.4.3 and lz4-java 1.11.4. All are same-series fixes verified from Maven Central. Vulnerability findings are not suppressed; the next hosted scan must pass before promotion. Public IP certificate preflight succeeded with normal system trust validation; `default_sni` selects the IP certificate for clients that omit SNI.
+
+
+Cloud promotion revealed that the OCI-backed Docker engine reports a manifest ID where the CI engine reports a config ID. The portable identity verifier checks the signed archive's original config SHA-256, every root filesystem layer digest, architecture/OS and normalized runtime configuration; it never accepts a mismatched image merely because its tag matches. Five dedicated tests cover cross-engine identity and rejection of changed layers, entrypoint, user and archive digest. Release CI also starts with root-only bind-mounted init/config files to exercise the explicit container-read permissions needed on a fresh server.

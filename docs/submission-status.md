@@ -2,7 +2,7 @@
 
 ## Hardening candidate (cloud rollout pending verification)
 
-The current changes add durable runtime origin approvals/revocations with separate administrator credentials and audit, 46 Java tests plus 7 signed-bundle security tests, a 10,000-record single-type partition test, real slow-receiver and storage-failure tests, pinned CI actions, a fixable HIGH/CRITICAL vulnerability gate, build-once signed image promotion, restricted CI SSH, and CI startup/rollback/restore checks. Local Java and gateway tests passed. The restricted upload account/public signature trust key are installed on the existing Droplet; secrets are not committed.
+The current changes add durable runtime origin approvals/revocations with separate administrator credentials and audit, 46 Java tests plus 12 signed-bundle/image security tests, a 10,000-record single-type partition test, real slow-receiver and storage-failure tests, pinned CI actions, a fixable HIGH/CRITICAL vulnerability gate, build-once signed image promotion, restricted CI SSH, and CI startup/rollback/restore checks. Local Java and gateway tests passed. The restricted upload account/public signature trust key are installed on the existing Droplet; secrets are not committed.
 
 The next hosted run must prove the image scan, complete container/release test suite and signed-artifact deployment. Public-IP HTTPS, runtime admin operations and representative post-release cloud event/load checks are pending until that run succeeds. This candidate's production limits remain one host/broker/DB, no automated off-host backup, no external paging, no automated data retention, and no measured fanout SLO. Prior evidence below is historical and must not be mistaken for evidence of this candidate.
 

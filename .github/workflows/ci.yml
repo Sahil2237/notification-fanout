@@ -96,13 +96,13 @@ jobs:
       - name: Package the exact tested image
         run: |
           mkdir -p .release
-          cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh} .release/
+          cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,verify-image.py} .release/
           python3 deploy/droplet/pin-images.py .release/compose.yaml
           docker save "$APP_IMAGE" | gzip > .release/image.tar.gz
           docker image inspect "$APP_IMAGE" --format '{{.Id}}' > .release/image-id
           printf '%s\n' "$GITHUB_SHA" > .release/release-sha
           cd .release
-          sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh > SHA256SUMS
+          sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh verify-image.py > SHA256SUMS
       - name: Sign a trusted default-branch release
         if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && vars.DROPLET_HOST != ''
         env:

@@ -24,13 +24,17 @@ if [[ -n "$public_domain" ]]; then
   compose+=(--profile public)
 fi
 previous=$(readlink -f "$root/current" || true)
+previous_proxy_running=$(docker inspect notifications-proxy-1 --format '{{.State.Running}}' 2>/dev/null || true)
 rollback() {
   if [[ -n "$previous" && "$previous" != "$release_dir" && -f "$previous/compose.yaml" ]]; then
     export APP_IMAGE="notification-fanout:$(basename "$previous")"
     old=(docker compose --project-name notifications --env-file "$root/.env" -f "$previous/compose.yaml")
     [[ -z "$public_domain" ]] || old+=(--profile public)
     "${old[@]}" up -d --no-deps app || true
-    [[ -z "$public_domain" ]] || "${old[@]}" up -d --no-deps proxy || true
+    if [[ -n "$public_domain" ]]; then
+      if [[ "$previous_proxy_running" == true ]]; then "${old[@]}" up -d --no-deps proxy || true
+      else docker stop notifications-proxy-1 >/dev/null 2>&1 || true; fi
+    fi
     echo 'Attempted application rollback. Database migrations are not reversed.' >&2
   fi
 }
@@ -38,7 +42,9 @@ trap rollback ERR
 test "$(cat "$release_dir/release-sha")" = "$release_sha"
 (cd "$release_dir" && sha256sum --check --status SHA256SUMS)
 docker load -i "$release_dir/image.tar.gz"
-test "$(docker image inspect "$APP_IMAGE" --format '{{.Id}}')" = "$(cat "$release_dir/image-id")"
+python3 "$release_dir/verify-image.py" "$release_dir/image.tar.gz" "$(cat "$release_dir/image-id")" "$APP_IMAGE" > "$release_dir/verified-image.json"
+# Bind-mounted initialization/configuration files must be readable by unprivileged container users.
+chmod 0644 "$release_dir"/{init-db.sh,grants.sql,Caddyfile}
 if [[ -n "$previous" && -f "$previous/backup.sh" ]]; then bash "$previous/backup.sh"; fi
 "${compose[@]}" up -d --wait --wait-timeout 300 db kafka
 "${compose[@]}" run --rm --no-deps kafka-init
