@@ -5,6 +5,7 @@ database:
   url: ${DB_URL}
   user: ${DB_USER}
   password: ${DB_PASSWORD}
+  initialSize: 1
   minSize: 1
   maxSize: 8
   validationQuery: SELECT 1
