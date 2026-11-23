@@ -1,0 +1,53 @@
+production: true
+database:
+  driverClass: org.postgresql.Driver
+  url: ${DB_URL}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  minSize: 2
+  maxSize: 16
+  validationQuery: SELECT 1
+  properties:
+    sslmode: verify-full
+    connectTimeout: 3
+    socketTimeout: 10
+    options: -c statement_timeout=5000 -c lock_timeout=3000
+credentials:
+  service: ${API_TOKEN}
+allowedWebhookOrigins: ${WEBHOOK_ORIGINS}
+allowLocalWebhooks: false
+signingSecret: ${WEBHOOK_SIGNING_SECRET}
+workerEnabled: ${WORKER_ENABLED:-false}
+workerThreads: ${WORKER_THREADS:-8}
+maxAttempts: 5
+leaseSeconds: 30
+requestTimeoutSeconds: 5
+retryBaseMillis: 1000
+retryCapMillis: 60000
+requestsPerMinute: ${REQUESTS_PER_MINUTE:-6000}
+kafka:
+  enabled: true
+  publisherEnabled: ${KAFKA_PUBLISHER_ENABLED:-false}
+  consumerEnabled: ${KAFKA_CONSUMER_ENABLED:-false}
+  bootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
+  topic: notification-events-v1
+  groupId: notification-dispatch-v1
+  securityProtocol: SASL_SSL
+  username: ${KAFKA_USERNAME}
+  password: ${KAFKA_PASSWORD}
+server:
+  applicationConnectors:
+    - type: http
+      port: 8080
+  adminConnectors:
+    - type: http
+      bindHost: 127.0.0.1
+      port: 8081
+logging:
+  level: INFO
+  loggers:
+    org.apache.kafka: WARN
+  appenders:
+    - type: console
+      layout:
+        type: json

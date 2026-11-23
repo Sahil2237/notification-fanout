@@ -1,0 +1,14 @@
+{
+  "app_name": "notification-fanout",
+  "app_region": "REQUIRED_APP_REGION",
+  "vpc_id": "REQUIRED_VPC_UUID",
+  "postgres_cluster_name": "REQUIRED_EXISTING_MANAGED_POSTGRES_CLUSTER",
+  "kafka_cluster_name": "REQUIRED_EXISTING_MANAGED_KAFKA_CLUSTER",
+  "database_name": "notifications",
+  "registry_name": "REQUIRED_DOCR_REGISTRY",
+  "image_tag": "REQUIRED_TESTED_COMMIT_SHA",
+  "instance_size_slug": "REQUIRED_VERIFIED_INSTANCE_SIZE",
+  "api_instances": 2,
+  "worker_instances": 2,
+  "approved_webhook_origins": ["https://REQUIRED_RECEIVER_HOSTNAME"]
+}

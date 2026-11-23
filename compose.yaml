@@ -1,0 +1,100 @@
+services:
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: notification-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  kafka-init:
+    image: apache/kafka:4.3.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/opt/kafka/bin/kafka-topics.sh"]
+    command: ["--bootstrap-server", "kafka:9092", "--create", "--if-not-exists", "--topic", "notification-events-v1", "--partitions", "6", "--replication-factor", "1"]
+  db:
+    image: public.ecr.aws/docker/library/postgres:17@sha256:223efeb196329b55b3b9a13db144956411dbc18e727e59f681c3e0aede6475cf
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notifications
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-local-only-change-me}
+    volumes:
+      - database:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/001-test.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifications -d notifications"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    build:
+      context: .
+      target: runtime
+    environment: &application_environment
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TEST_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      DB_URL: jdbc:postgresql://db:5432/notifications
+      TEST_DB_URL: jdbc:postgresql://db:5432/notifications_test
+      DB_USER: notifications
+      DB_PASSWORD: ${DB_PASSWORD:-local-only-change-me}
+      API_TOKEN: ${API_TOKEN:-local-demo-token-change-me}
+      OTHER_API_TOKEN: ${OTHER_API_TOKEN:-local-other-token-change-me}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-local-signing-secret-change-me}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: runtime
+    environment: *application_environment
+    command: ["db", "migrate", "/opt/app/config.yml"]
+    depends_on:
+      db:
+        condition: service_healthy
+  development:
+    profiles: ["dev"]
+    build:
+      context: .
+      target: development
+    environment: *application_environment
+    volumes:
+      - .:/workspaces/notification-fanout
+      - maven:/root/.m2
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+volumes:
+  kafka-data:
+  database:
+  maven:

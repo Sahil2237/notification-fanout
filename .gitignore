@@ -1,0 +1,15 @@
+target/
+.env
+*.log
+.idea/
+.vscode/
+*.pid
+reports/
+
+.run/*
+!.run/*.run.xml
+load-result.json
+restart-result.json
+fanout-load-result.json
+
+.deploy/

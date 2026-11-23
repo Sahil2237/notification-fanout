@@ -1,0 +1,150 @@
+package com.example.notifications;
+
+import static com.example.notifications.Models.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+
+class CoreTest {
+    private final ObjectMapper json = new ObjectMapper();
+
+    private EventInput event(String payload) throws Exception {
+        return new EventInput("order.created", "checkout", json.readTree(payload));
+    }
+
+    private Rules rule(String path, String value) throws Exception {
+        return new Rules(null, null, List.of(new Condition(path, "eq", json.readTree(value))));
+    }
+
+    @Test
+    void filtersCombineTypeSourceAndNestedConditions() throws Exception {
+        var rules =
+                new Rules(
+                        "order.created",
+                        "checkout",
+                        List.of(new Condition("/customer/tier", "eq", json.readTree("\"gold\""))));
+        assertTrue(Filters.matches(rules, event("{\"customer\":{\"tier\":\"gold\"}}")));
+        assertFalse(Filters.matches(rules, event("{\"customer\":{\"tier\":\"silver\"}}")));
+        assertFalse(
+                Filters.matches(rules, new EventInput("other", "checkout", json.readTree("{}"))));
+        assertFalse(
+                Filters.matches(
+                        rules, new EventInput("order.created", "other", json.readTree("{}"))));
+    }
+
+    @Test
+    void missingNullAndBooleanRemainDistinct() throws Exception {
+        assertTrue(Filters.matches(rule("/value", "null"), event("{\"value\":null}")));
+        assertFalse(Filters.matches(rule("/value", "null"), event("{}")));
+        assertFalse(Filters.matches(rule("/value", "true"), event("{\"value\":1}")));
+        assertTrue(Filters.matches(rule("/value", "1.0"), event("{\"value\":1}")));
+        assertTrue(Filters.matches(Rules.all(), event("null")));
+    }
+
+    @Test
+    void pointersSupportArraysAndEscapes() throws Exception {
+        assertTrue(Filters.matches(rule("/a~1b/~0key/0", "3"), event("{\"a/b\":{\"~key\":[3]}}")));
+        assertTrue(Filters.matches(rule("", "[1,2]"), event("[1,2]")));
+        assertThrows(IllegalArgumentException.class, () -> Filters.validate(rule("bad", "1")));
+        assertThrows(IllegalArgumentException.class, () -> Filters.validate(rule("/bad~2", "1")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        Filters.validate(
+                                new Rules(
+                                        null,
+                                        null,
+                                        List.of(new Condition("", "gt", NullNode.instance)))));
+    }
+
+    @Test
+    void retriesAreBoundedAndClassified() {
+        var policy = new RetryPolicy(5, 1000, 5000, () -> 0);
+        assertTrue(policy.retryable(null));
+        assertTrue(policy.retryable(408));
+        assertTrue(policy.retryable(429));
+        assertTrue(policy.retryable(503));
+        assertFalse(policy.retryable(400));
+        assertFalse(policy.retryable(302));
+        assertEquals(500, policy.delayMillis(1));
+        assertEquals(2500, policy.delayMillis(20));
+        var upper = new RetryPolicy(5, 1000, 5000, () -> 0.999999);
+        assertTrue(upper.delayMillis(20) <= 5000);
+        assertTrue(upper.delayMillis(1) >= 500);
+    }
+
+    @Test
+    void destinationPolicyRequiresApprovedOrigins() {
+        var config = new ServiceConfiguration();
+        config.allowedWebhookOrigins = List.of("http://127.0.0.1:9090", "https://8.8.8.8");
+        var policy = new WebhookPolicy(config);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> policy.validate("http://127.0.0.1:9090/test"));
+        assertThrows(
+                IllegalArgumentException.class, () -> policy.validate("https://example.com/test"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> policy.validate("https://8.8.8.8@127.0.0.1/test"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> policy.validate("https://8.8.8.8/test#fragment"));
+        assertThrows(IllegalArgumentException.class, () -> policy.validate("https://8.8.4.4/test"));
+        assertNotNull(policy.validate("https://8.8.8.8/test"));
+        config.allowLocalWebhooks = true;
+        assertNotNull(new WebhookPolicy(config).validate("http://127.0.0.1:9090/test"));
+    }
+
+    @Test
+    void rateLimitUsesConfiguredTenantWindow() {
+        var config = new ServiceConfiguration();
+        config.requestsPerMinute = 2;
+        var security = new ApiSecurity(config, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+        assertTrue(security.allow("one"));
+        assertTrue(security.allow("one"));
+        assertFalse(security.allow("one"));
+        assertTrue(security.allow("two"));
+    }
+
+    @Test
+    void invalidRuntimeSettingsFailEarly() {
+        var config = new ServiceConfiguration();
+        config.credentials = java.util.Map.of("a", "long-enough-credential");
+        config.leaseSeconds = 10;
+        config.requestTimeoutSeconds = 10;
+        assertThrows(IllegalArgumentException.class, config::validateSettings);
+    }
+
+    @Test void kafkaAuthenticationEscapesCredentialsAndKeepsHostnameVerification() {
+        var config=new KafkaSettings();config.securityProtocol="SASL_SSL";
+        config.username="user\"name";config.password="pass\\word";config.caCertificate="test-ca";
+        var properties=config.properties("test");
+        var values=new java.util.HashMap<String,Object>();properties.forEach((k,v)->values.put(k.toString(),v));
+        values.put("sasl.jaas.config",new org.apache.kafka.common.config.types.Password(properties.getProperty("sasl.jaas.config")));
+        var context=org.apache.kafka.common.security.JaasContext.loadClientContext(values);
+        var options=context.configurationEntries().getFirst().getOptions();
+        assertEquals(config.username,options.get("username"));assertEquals(config.password,options.get("password"));
+        assertEquals("https",properties.get("ssl.endpoint.identification.algorithm"));
+        assertEquals("PEM",properties.get("ssl.truststore.type"));
+    }
+    @Test void webhookAddressPolicyBlocksPrivateMetadataAndReservedAddresses() throws Exception {
+        for(var address:java.util.List.of("127.0.0.1","10.0.0.1","169.254.169.254","100.100.100.200","192.0.2.1","198.51.100.1","203.0.113.1","::1","fc00::1","2001:db8::1"))
+            assertFalse(WebhookPolicy.publicAddress(java.net.InetAddress.getByName(address)),address);
+        assertTrue(WebhookPolicy.publicAddress(java.net.InetAddress.getByName("8.8.8.8")));
+        assertTrue(WebhookPolicy.publicAddress(java.net.InetAddress.getByName("2606:4700:4700::1111")));
+    }
+    @Test void productionCannotUseDemoOrUnencryptedConfiguration() {
+        var config=new ServiceConfiguration();config.production=true;config.signingSecret="local-signing-secret-change-me";
+        config.credentials=java.util.Map.of("service","local-demo-token-change-me");
+        assertThrows(IllegalArgumentException.class,config::validateSettings);
+    }
+}

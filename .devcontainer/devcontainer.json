@@ -1,0 +1,14 @@
+{
+  "name": "Notification fanout — Java 25 / Ubuntu 24.04",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "development",
+  "runServices": ["db", "kafka", "kafka-init", "development"],
+  "workspaceFolder": "/workspaces/notification-fanout",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": ["vscjava.vscode-java-pack", "redhat.vscode-yaml"],
+      "settings": {"java.jdt.ls.java.home": "/opt/java/openjdk"}
+    }
+  }
+}
