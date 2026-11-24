@@ -4,9 +4,18 @@ This feature emits aggregate metrics only. It creates no alerts, alarms, inciden
 
 ## Current state
 
-The application exporter and automated tests are implemented locally. Live DigitalOcean ingestion is blocked: the documented Bangalore OTLP endpoint returned HTTP404 with a DigitalOcean maintenance page from all three existing Droplets, including a valid timestamped OTLP protobuf gauge with the required resource attributes. Normal TLS verification was enabled. The three resource metrics signals are already enabled. See [sanitized cloud preflight](evidence/metrics-preflight-64d0d92.json). The existing three Droplets are still running the previous release. Do not interpret a successful local OTLP collector test as proof of Metrics Explorer visibility.
+The metrics-only bridge is **running on all three existing Droplets**, using the metrics JAR from verified release `cf92a03729053857d35756a61762798785294c34`. The complete verification and exact-image publication passed:
 
-On 24 November 2026 the DigitalOcean console for `Blitz_team13_Hyd` exposed the `insights:custom_ingest` permission, but initially listed no personal access tokens. After explicit authorization, a 90-day metrics token was created; the provider automatically includes insights:read with insights:custom_ingest. Its value is kept outside Git in protected files. DigitalOcean additionally documents custom telemetry as private preview; scope availability alone does not prove the team can ingest it.
+- https://github.com/Sahil2237/notification-fanout/actions/runs/45370272386
+- https://github.com/Sahil2237/notification-fanout/actions/runs/45372414195
+
+**Metrics Explorer visibility is blocked by the provider endpoint.** Actual Java OpenTelemetry SDK exports from every Droplet receive HTTP404 with a DigitalOcean maintenance HTML page at the documented Bangalore OTLP URL. All three resource metrics signals are already enabled, each bridge remains running with zero restarts, and each local application readiness and metrics source endpoint returns200. The Metrics Explorer search for `notification.` in BLR1 has no results. See [current cloud runtime evidence](evidence/metrics-cloud-cf92a03.json). The earlier [manual preflight](evidence/metrics-preflight-64d0d92.json) is retained as historical evidence before activation, not as the current activation state.
+
+A DigitalOcean administrator/provider must enable the team's custom telemetry preview or confirm a functioning supported BLR1 ingestion endpoint. Do not infer preview entitlement from token scope availability. The active bridges continue bounded one-minute export attempts and can recover once the endpoint accepts telemetry. No alerts, tickets or extra paid resources were created.
+
+After explicit authorization, a 90-day metrics token was created; DigitalOcean automatically includes `insights:read` with `insights:custom_ingest`. Protected root-owned copies reside at `/opt/notification-fanout/ha/metrics/metrics.env` on the three approved hosts. The temporary workstation/container token staging files were removed. The token expires on22February2027 and needs operator rotation. Its value is never committed or printed.
+
+The event application itself remains the preceding `bd082b6` release. Redis and the new application controls require their own coordinated rollout; the independent metrics process does not activate them. Automatic application deployment is held with `HA_DEPLOY_READY=false` until that prerequisite is ready.
 
 ## What is emitted
 
@@ -75,4 +84,23 @@ DigitalOcean bills custom telemetry against the team's shared Insights ingestion
 
 `com.example.notifications.MetricsBridge` reads only `http://127.0.0.1:8081/metrics`, with redirects disabled, two/three-second connect/read timeouts and a 1MiB response limit. It has no application bearer token, database credential, Kafka identity or Redis credential. It exports the same fixed instrument allowlist. The first scrape baselines pre-existing counters so installing it does not report historical traffic as a new burst; subsequent scrapes count increases, including after a source process restart. A source outage emits `notification.metrics.scrape.success=0` and suppresses stale gauges. A bridge restart can lose counter increments around the restart, consistent with best-effort telemetry.
 
-`deploy/ha/metrics-compose.yaml` runs this bridge on each existing host with the exact verified application image but a separate Java entry point. It has a read-only filesystem, non-root UID, no Linux capabilities, no new privileges, a 256MiB memory cap, a 0.25 CPU cap and a 64-process limit. No service port is exposed. This allows metrics to be deployed independently of the Redis/application controls cutover. **Use one exporter per node: stop the independent bridge before enabling in-process `telemetry.enabled`, to avoid duplicate series.**
+`deploy/ha/metrics-compose.yaml` defines the canonical full-image bridge deployment with a separate Java entry point. It has a read-only filesystem, non-root UID, no Linux capabilities, no new privileges, a 256MiB memory cap, a 0.25 CPU cap and a 64-process limit. No service port is exposed. This allows metrics to be deployed independently of the Redis/application controls cutover. **Use one exporter per node: stop the independent bridge before enabling in-process `telemetry.enabled`, to avoid duplicate series.**
+
+### Current bandwidth-conscious cloud installation
+
+The signed CI application bundle was downloaded and its Ed25519 signature and every SHA256 entry verified inside the Rancher workspace. Only the 57MiB application JAR was extracted from that exact image and transferred over pinned-host-key SSH, then checked against SHA256 `5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c` on each host. The Java25 runtime definition is identical between the running application and verified metrics release. Each metrics container therefore reuses the existing verified runtime image, with the new JAR mounted read-only at `/opt/metrics/runtime.jar`. This avoids retransferring the larger runtime layers. It does not claim that the event application was upgraded.
+
+Effective configuration is under `/opt/notification-fanout/ha/metrics/`: `compose.yaml`, `image.env`, protected `metrics.env`, and `runtime.jar`. The bridge has a 256MiB memory cap,0.25CPU cap,64-process cap, read-only root filesystem, non-root UID10001, all Linux capabilities dropped, and no public listener. The in-process exporter remains disabled to prevent duplicate export.
+
+To inspect or stop **only** the metrics bridge, use the following on a Droplet as an authorized operator:
+
+```sh
+docker compose --env-file /opt/notification-fanout/ha/metrics/image.env -f /opt/notification-fanout/ha/metrics/compose.yaml ps
+docker compose --env-file /opt/notification-fanout/ha/metrics/image.env -f /opt/notification-fanout/ha/metrics/compose.yaml stop exporter
+```
+
+For future JAR updates, stage to a new filename, verify the signed source artifact and JAR digest, atomically select the verified file, then recreate only the metrics container. Do not overwrite a JAR currently mounted by a running process. The full-image deployment template is preferable when transfer bandwidth permits.
+
+The SDK can log a long provider error page; checking only a short log tail can omit the line containing the HTTP status. Runtime verification searched the complete bounded recent log window, confirmed the actual SDK404 response on every node, and separately checked the UI. Absence of a warning in a short tail is not proof of successful ingestion.
+
+When bridging the older application release, counters for newer controls can remain zero and unsupported gauges are omitted. Those values do not establish that Redis limits, replica-only API reads or the delivery DLQ have been activated. Refer to the deployed application revision and the separate controls rollout status.

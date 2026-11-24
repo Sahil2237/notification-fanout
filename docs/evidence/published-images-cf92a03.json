@@ -1,0 +1,37 @@
+{
+  "notification-fanout": {
+    "tag": "ghcr.io/sahil2237/notification-fanout:cf92a03729053857d35756a61762798785294c34",
+    "tested_config_digest": "sha256:59bf235e46d1fe3ff1d466aa02bbbe98a847cb1a81e0f188f11eae3680b0c301",
+    "registry_digests": [
+      "ghcr.io/sahil2237/notification-fanout@sha256:5cf88bb7b3a9ac1ca7239bebc6aa462f54d7e4ed7cdb8295e7ea465f5b965143"
+    ]
+  },
+  "notification-ha-tools": {
+    "tag": "ghcr.io/sahil2237/notification-ha-tools:cf92a03729053857d35756a61762798785294c34",
+    "tested_config_digest": "sha256:6e7f00c582c64c91281e0cce6c37b20472fe439c534157d25b72597b0ee6193a",
+    "registry_digests": [
+      "ghcr.io/sahil2237/notification-ha-tools@sha256:54969afcdc18bc954c601eac2fe58995db9873da39e49f42ab6c1d88a69d771b"
+    ]
+  },
+  "notification-ha-proxy": {
+    "tag": "ghcr.io/sahil2237/notification-ha-proxy:cf92a03729053857d35756a61762798785294c34",
+    "tested_config_digest": "sha256:0c5149a4211adf4b7797ad318b9a5a5bfb4b625a8c0fea93fa56acfa84895457",
+    "registry_digests": [
+      "ghcr.io/sahil2237/notification-ha-proxy@sha256:ea1ba1be7660496828fcace92132bd4b0e9fb363c7e86635155a9886730568e4"
+    ]
+  },
+  "notification-etcd": {
+    "tag": "ghcr.io/sahil2237/notification-etcd:cf92a03729053857d35756a61762798785294c34",
+    "tested_config_digest": "sha256:f4ffa6a96403c4245617d1ce46b6530a2359e79fbbff85face0ae305f9a811dd",
+    "registry_digests": [
+      "ghcr.io/sahil2237/notification-etcd@sha256:0548a5162cd6b85c5614ab13c0f6975328a3e4691b3c47e09aef5f8400c7687f"
+    ]
+  },
+  "notification-kafka": {
+    "tag": "ghcr.io/sahil2237/notification-kafka:cf92a03729053857d35756a61762798785294c34",
+    "tested_config_digest": "sha256:d6a21b5f2df78f2f448d3fe5ca3a3cbd383a2507a6ce9a26cb71b094e8216b9f",
+    "registry_digests": [
+      "ghcr.io/sahil2237/notification-kafka@sha256:55228ba6bf3b82a2a1dfee61414bbc0e739a53b04f826666eb466a546a19c336"
+    ]
+  }
+}

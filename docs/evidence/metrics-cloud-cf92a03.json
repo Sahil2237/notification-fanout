@@ -1,0 +1,79 @@
+{
+  "checked_at": "2026-11-24T10:27:51.831240+00:00",
+  "metrics_jar_source_sha": "cf92a03729053857d35756a61762798785294c34",
+  "verification_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45370272386",
+  "image_publication_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45372414195",
+  "deployment_mode": "Read-only metrics JAR extracted from the verified signed CI image, checksum checked on each node, running on the existing verified Java25 runtime. Event API release remains bd082b6.",
+  "exporter_activated": true,
+  "metrics_explorer_notification_series_visible": false,
+  "new_paid_resources": 0,
+  "alarms_or_tickets_created": false,
+  "nodes": [
+    {
+      "running": true,
+      "restart_count": 0,
+      "uptime_seconds": 300,
+      "sdk_export_http_statuses": [
+        "404"
+      ],
+      "sdk_export_failure_present": true,
+      "sdk_response_maintenance_page": true,
+      "application_ready_http": 200,
+      "metrics_source_http": 200,
+      "runtime_image_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518",
+      "memory_limit_mib": 256,
+      "cpu_limit": 0.25,
+      "read_only": true,
+      "capabilities_dropped": [
+        "ALL"
+      ],
+      "token_file_mode": "0o600",
+      "jar_sha256": "5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c",
+      "droplet_id": 622664599
+    },
+    {
+      "running": true,
+      "restart_count": 0,
+      "uptime_seconds": 241,
+      "sdk_export_http_statuses": [
+        "404"
+      ],
+      "sdk_export_failure_present": true,
+      "sdk_response_maintenance_page": true,
+      "application_ready_http": 200,
+      "metrics_source_http": 200,
+      "runtime_image_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518",
+      "memory_limit_mib": 256,
+      "cpu_limit": 0.25,
+      "read_only": true,
+      "capabilities_dropped": [
+        "ALL"
+      ],
+      "token_file_mode": "0o600",
+      "jar_sha256": "5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c",
+      "droplet_id": 622797519
+    },
+    {
+      "running": true,
+      "restart_count": 0,
+      "uptime_seconds": 197,
+      "sdk_export_http_statuses": [
+        "404"
+      ],
+      "sdk_export_failure_present": true,
+      "sdk_response_maintenance_page": true,
+      "application_ready_http": 200,
+      "metrics_source_http": 200,
+      "runtime_image_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518",
+      "memory_limit_mib": 256,
+      "cpu_limit": 0.25,
+      "read_only": true,
+      "capabilities_dropped": [
+        "ALL"
+      ],
+      "token_file_mode": "0o600",
+      "jar_sha256": "5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c",
+      "droplet_id": 622797520
+    }
+  ]
+}
