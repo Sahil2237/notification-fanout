@@ -43,6 +43,10 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 [[ "$ready" == true ]]
+# Persist the successful image for later operator Compose commands as well as restarts.
+printf 'APP_IMAGE=notification-fanout:%s\n' "$sha" >"$ha/node.env.next"
+chmod 0600 "$ha/node.env.next"
+mv -f "$ha/node.env.next" "$ha/node.env"
 printf '%s\n' "$sha" >"$ha/app-sha"
 ln -sfn "$release" "$root/current"
 rm -f "$ha/health/drain"

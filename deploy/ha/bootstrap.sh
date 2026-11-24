@@ -34,6 +34,33 @@ printf 'options softdog soft_noboot=0\n' >/etc/modprobe.d/notification-watchdog.
 printf 'KERNEL=="watchdog*", OWNER="999", GROUP="999", MODE="0660"\n' >/etc/udev/rules.d/99-notification-watchdog.rules
 chown 999:999 /dev/watchdog /dev/watchdog0
 chmod 0660 /dev/watchdog /dev/watchdog0
+# BEGIN persistent watchdog boot dependency
+# Ubuntu cloud images may deny-list softdog in the generic modules loader.
+# Explicit modprobe is intentional; Docker must wait for fencing on every boot.
+cat >/etc/systemd/system/notification-watchdog.service <<'WATCHDOG'
+[Unit]
+Description=Required notification cluster watchdog
+After=systemd-udev-trigger.service
+Before=docker.service
+[Service]
+Type=oneshot
+ExecStart=/sbin/modprobe softdog soft_noboot=0
+ExecStartPost=/usr/bin/udevadm settle
+ExecStartPost=/bin/chown 999:999 /dev/watchdog /dev/watchdog0
+ExecStartPost=/bin/chmod 0660 /dev/watchdog /dev/watchdog0
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+WATCHDOG
+install -d -m 0755 /etc/systemd/system/docker.service.d
+cat >/etc/systemd/system/docker.service.d/notification-watchdog.conf <<'WATCHDOG'
+[Unit]
+Requires=notification-watchdog.service
+After=notification-watchdog.service
+WATCHDOG
+systemctl daemon-reload
+systemctl enable --now notification-watchdog.service
+# END persistent watchdog boot dependency
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
