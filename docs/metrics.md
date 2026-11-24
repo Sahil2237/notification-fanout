@@ -4,7 +4,7 @@ This feature emits aggregate metrics only. It creates no alerts, alarms, inciden
 
 ## Current state
 
-The application exporter and automated tests are implemented locally. Live DigitalOcean ingestion is not yet verified. The existing three Droplets are still running the previous release. Do not interpret a successful local OTLP collector test as proof of Metrics Explorer visibility.
+The application exporter and automated tests are implemented locally. Live DigitalOcean ingestion is blocked: the documented Bangalore OTLP endpoint returned HTTP404 with a DigitalOcean maintenance page from all three existing Droplets, including a valid timestamped OTLP protobuf gauge with the required resource attributes. Normal TLS verification was enabled. The three resource metrics signals are already enabled. See [sanitized cloud preflight](evidence/metrics-preflight-64d0d92.json). The existing three Droplets are still running the previous release. Do not interpret a successful local OTLP collector test as proof of Metrics Explorer visibility.
 
 On 24 November 2026 the DigitalOcean console for `Blitz_team13_Hyd` exposed the `insights:custom_ingest` permission, but initially listed no personal access tokens. After explicit authorization, a 90-day metrics token was created; the provider automatically includes insights:read with insights:custom_ingest. Its value is kept outside Git in protected files. DigitalOcean additionally documents custom telemetry as private preview; scope availability alone does not prove the team can ingest it.
 
@@ -63,7 +63,9 @@ Gauge collection omits a failed dependency sample while retaining other metrics.
 
 ## Validation
 
-`MetricsExporterTest` verifies delta values across consecutive collections, required resource attribution, one bounded service label, exclusion of unapproved instruments, omission of a failed gauge, a real authenticated OTLP/HTTP protobuf request to a local collector, and rejection of untrusted or region-mismatched endpoints. Cloud visibility is a separate release acceptance check.
+Local full verification: **71 Java tests** (26 unit, 45 integration), **34 Python tests** (12 deployment, 22 HA/backup/configuration), all passing. The metrics-specific six tests include the actual bounded production HTTP transport, one-attempt failure behavior, counter baselining and source restart handling.
+
+`MetricsExporterTest` verifies delta values across consecutive collections, required resource attribution, one bounded service label, exclusion of unapproved instruments, omission of a failed gauge, a real authenticated OTLP/HTTP protobuf request to a local collector, export failure without transport retries, and rejection of untrusted or region-mismatched endpoints. Cloud visibility is a separate release acceptance check.
 
 Official provider contract: https://docs.digitalocean.com/products/insights/how-to/send-custom-telemetry/
 

@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ArrayBlockingQueue;
-import io.opentelemetry.sdk.common.export.RetryPolicy;
 
 /** Fixed allowlist keeps metric cardinality bounded and prevents exporting request data. */
 public final class MetricsExporter implements Managed {
@@ -60,19 +59,23 @@ public final class MetricsExporter implements Managed {
     private record Transport(MetricExporter exporter, ExecutorService executor) { }
 
     public MetricsExporter(MetricRegistry registry, MetricsSettings settings) {
-        this(registry, settings, transport(settings));
+        this(registry, settings, transport(settings, settings.token()));
     }
 
-    private static Transport transport(MetricsSettings settings) {
+    MetricsExporter(MetricRegistry registry, MetricsSettings settings, String testToken) {
+        this(registry, settings, transport(settings, testToken));
+    }
+
+    private static Transport transport(MetricsSettings settings, String token) {
         var executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(1, true), task -> new Thread(task, "metrics-http"),
             new ThreadPoolExecutor.AbortPolicy());
         try {
             var exporter = OtlpHttpMetricExporter.builder().setEndpoint(settings.endpoint)
-                .addHeader("Authorization", "Bearer " + settings.token())
+                .addHeader("Authorization", "Bearer " + token)
                 .setExecutorService(executor).setConnectTimeout(Duration.ofSeconds(2))
                 .setTimeout(Duration.ofSeconds(3)).setMaxRequestBodySize(65536)
-                .setRetryPolicy(RetryPolicy.builder().setMaxAttempts(1).build())
+                .setRetryPolicy(null)
                 .setAggregationTemporalitySelector(AggregationTemporalitySelector.deltaPreferred()).build();
             return new Transport(exporter, executor);
         } catch (RuntimeException failure) { executor.shutdownNow(); throw failure; }

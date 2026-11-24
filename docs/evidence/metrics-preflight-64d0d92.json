@@ -1,0 +1,68 @@
+{
+  "checked_at": "2026-11-24T09:50:48.132840+00:00",
+  "candidate_source_sha": "64d0d92ec21dae6e9676cf6ad9923b962c9bdf3c",
+  "metrics_only": true,
+  "alarms_or_tickets_created": false,
+  "token_scopes": [
+    "insights:custom_ingest",
+    "insights:read"
+  ],
+  "token_expires": "2027-02-22",
+  "endpoint": "https://otlp-insights-blr1.digitalocean.com/v1/metrics",
+  "metrics_explorer_notification_series_visible": false,
+  "exporter_activated": false,
+  "blocker": "Documented provider OTLP endpoint returns HTTP404 DigitalOcean maintenance page from all three Droplets. Provider preview enablement or a working supported endpoint is required.",
+  "nodes": [
+    {
+      "ready_http": 200,
+      "metrics_source_http": 200,
+      "source_event_counter_present": false,
+      "source_pending_gauge_present": true,
+      "credential_file_mode": "0o600",
+      "credential_owner_root": true,
+      "application_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "droplet_id": 622664599,
+      "region": "blr1",
+      "metrics_signal_enabled": true,
+      "otlp_http_status": 404,
+      "otlp_returns_maintenance_page": true,
+      "valid_metric_http_status": 404,
+      "protobuf_bytes": 344,
+      "maintenance_page": true
+    },
+    {
+      "ready_http": 200,
+      "metrics_source_http": 200,
+      "source_event_counter_present": false,
+      "source_pending_gauge_present": true,
+      "credential_file_mode": "0o600",
+      "credential_owner_root": true,
+      "application_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "droplet_id": 622797519,
+      "region": "blr1",
+      "metrics_signal_enabled": true,
+      "otlp_http_status": 404,
+      "otlp_returns_maintenance_page": true,
+      "valid_metric_http_status": 404,
+      "protobuf_bytes": 344,
+      "maintenance_page": true
+    },
+    {
+      "ready_http": 200,
+      "metrics_source_http": 200,
+      "source_event_counter_present": true,
+      "source_pending_gauge_present": true,
+      "credential_file_mode": "0o600",
+      "credential_owner_root": true,
+      "application_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "droplet_id": 622797520,
+      "region": "blr1",
+      "metrics_signal_enabled": true,
+      "otlp_http_status": 404,
+      "otlp_returns_maintenance_page": true,
+      "valid_metric_http_status": 404,
+      "protobuf_bytes": 344,
+      "maintenance_page": true
+    }
+  ]
+}

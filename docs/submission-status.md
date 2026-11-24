@@ -1,6 +1,6 @@
 # Verified HA deployment
 
-**Metrics / controls update in progress (24 November):** metrics-only OTLP exporter and independent read-only bridge are implemented; local verification passes 70 Java tests and 34 Python tests. The approved Insights ingest/read token is protected outside Git. Metrics Explorer visibility is not yet verified. Alarms/ticketing are excluded. HA automatic application deployment is held (`HA_DEPLOY_READY=false`) pending the separate Redis and application controls cutover.
+**Metrics / controls update in progress (24 November):** metrics-only OTLP exporter and independent read-only bridge are implemented; local verification passes 71 Java tests and 34 Python tests. The approved Insights ingest/read token is protected outside Git. The documented provider OTLP endpoint returns HTTP404/maintenance from all three nodes; a valid metric preflight also fails. Metrics Explorer has no notification series. The independent exporter is staged as source/configuration, not activated against that unavailable endpoint. [Cloud preflight](evidence/metrics-preflight-64d0d92.json). Alarms/ticketing are excluded. HA automatic application deployment is held (`HA_DEPLOY_READY=false`) pending the separate Redis and application controls cutover.
 
 **Controls update in progress:** shared fixed-window limits, generated identity keys, subscriber bulkheads, a delivery DLQ and replica-only API reads are implemented in the new source. Cloud production remains bd082b6 until a verified coordinated cutover. See [the new contract](reliability-controls.md).
 

@@ -63,10 +63,9 @@ class MetricsExporterTest {
             exchange.sendResponseHeaders(200, -1); exchange.close();
         });
         server.start();
-        var transport = OtlpHttpMetricExporter.builder().setEndpoint("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/metrics")
-            .addHeader("Authorization", "Bearer test-only-ingest-token").setTimeout(Duration.ofSeconds(1))
-            .setAggregationTemporalitySelector(type -> AggregationTemporality.DELTA).build();
-        var bridge = new MetricsExporter(new MetricRegistry(), settings(), transport);
+        var config = settings();
+        config.endpoint = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1/metrics";
+        var bridge = new MetricsExporter(new MetricRegistry(), config, "test-only-ingest-token");
         try {
             bridge.flush();
             var request = received.poll(3, TimeUnit.SECONDS);
@@ -75,6 +74,25 @@ class MetricsExporterTest {
             assertTrue(request.contains("notification.events.accepted"));
             assertTrue(request.contains("service.name"));
             assertFalse(request.substring(request.indexOf("application/x-protobuf|")).contains("test-only-ingest-token"));
+        } finally { bridge.stop(); server.stop(0); }
+    }
+
+    @Test void failedExportHasOneAttemptAndDoesNotBlockApplicationCounters() throws Exception {
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/metrics", exchange -> {
+            attempts.incrementAndGet(); exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(503, -1); exchange.close();
+        });
+        server.start();
+        var config = settings(); config.endpoint = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1/metrics";
+        var registry = new MetricRegistry();
+        var bridge = new MetricsExporter(registry, config, "test-only-ingest-token");
+        try {
+            bridge.flush();
+            assertEquals(1, attempts.get());
+            registry.counter("events.accepted").inc();
+            assertEquals(1, registry.counter("events.accepted").getCount());
         } finally { bridge.stop(); server.stop(0); }
     }
 
