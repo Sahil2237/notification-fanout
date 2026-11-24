@@ -79,7 +79,10 @@ def main(extra_validation=None):
             jar=os.environ.get('HA_APPLICATION_JAR')
             if not jar:return None
             java_image=os.environ.get('HA_JAVA_IMAGE','public.ecr.aws/docker/library/eclipse-temurin:25-jdk-noble@sha256:4ddc1a8bdaf283421df5487411aff10b797ccf1e06a339041005114c8f489b5c')
-            command=['docker','run','--rm','--network','notification-ha-ci','--memory','384m','--read-only','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
+            # Share an existing test node's persistent network namespace. Its exact peer address
+            # is already in pg_hba; a random Docker client address must remain unauthorized.
+            probe_network='container:'+output(projects[controller-1]+['ps','-q','net'])
+            command=['docker','run','--rm','--network',probe_network,'--memory','384m','--read-only','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
                 '-e','PGPROBE_HOSTS='+','.join(n['private_ip'] for n in inv['nodes']),'-e','PGPROBE_PASSWORD='+secrets['pg_owner_password'],
                 '-e','PGPROBE_EXPECT_UNAVAILABLE='+str(unavailable).lower(),
                 '-v',host_path(pathlib.Path(jar).resolve())+':/app/application.jar:ro',
