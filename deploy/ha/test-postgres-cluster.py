@@ -5,7 +5,7 @@ ROOT=pathlib.Path(__file__).resolve().parent
 
 def run(args,**kwargs):return subprocess.run(args,check=True,**kwargs)
 def output(args):return subprocess.check_output(args,text=True).strip()
-def main():
+def main(extra_validation=None):
     local=os.environ.get('NOTIFICATION_HA_LOCAL_TEST')=='true'
     if local:
         if output(['docker','info','--format','{{.Name}}'])!='lima-rancher-desktop':raise SystemExit('Local mode is restricted to Rancher Desktop')
@@ -17,10 +17,17 @@ def main():
     work=pathlib.Path(tempfile.mkdtemp(prefix='ha-ci-',dir=base));projects=[]
     host_root=output(['docker','volume','inspect','notification-workspaces','--format','{{.Mountpoint}}']) if local else None
     def host_path(path):return host_root+str(path)[len('/workspaces'):] if local else str(path)
-    inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'notification-ci:unused','tools_image':tools,'caddy_image':'caddy:2.11.9-alpine','etcd_image':etcd,'kafka_image':'apache/kafka:4.3.1'}
-    secrets={key:'ci-only-credential-abcdefghijklmnopqrstuvwxyz' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://example.com']}
+    inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':os.environ.get('HA_APP_IMAGE','notification-ci:unused'),'tools_image':tools,'caddy_image':os.environ.get('HA_PROXY_IMAGE','caddy:2.11.9-alpine'),'etcd_image':etcd,'kafka_image':'apache/kafka:4.3.1'}
+    secrets={key:'ci-'+key+'-abcdefghijklmnopqrstuvwxyz0123456789' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://example.com']}
+    import base64,uuid
+    secrets['kafka_cluster_id']=base64.urlsafe_b64encode(uuid.uuid4().bytes).decode().rstrip('=')
+    if os.environ.get('HA_TEST_WEBHOOK_URL'):
+        from urllib.parse import urlsplit
+        receiver=urlsplit(os.environ['HA_TEST_WEBHOOK_URL']);assert receiver.scheme=='https'
+        secrets['webhook_origins']=[receiver.scheme+'://'+receiver.netloc]
+    (work/'kafka-password').write_text(secrets['kafka_tls_password'])
     (work/'inventory.json').write_text(json.dumps(inv));(work/'secrets.json').write_text(json.dumps(secrets))
-    run(['python3',str(ROOT/'create-pki.py'),str(work/'inventory.json'),str(work/'pki')])
+    run(['python3',str(ROOT/'create-pki.py'),str(work/'inventory.json'),str(work/'pki')]+(['--kafka-password-file',str(work/'kafka-password')] if extra_validation else []))
     run(['docker','network','create','--subnet','172.29.0.0/24','notification-ha-ci'])
     try:
         for node in inv['nodes']:
@@ -73,6 +80,8 @@ def main():
         actual=sql('SELECT id FROM ha_acknowledged_events ORDER BY id');assert expected==actual and len(actual)==100
         sql('INSERT INTO ha_acknowledged_events VALUES (100)');assert sql('SELECT count(*) FROM ha_acknowledged_events')[0][0]==101
         run(projects[victim-1]+['up','-d','postgres'])
+        if extra_validation:
+            extra_validation({'work':work,'projects':projects,'inventory':inv,'secrets':secrets,'render':module.render,'host_path':host_path,'cluster':cluster,'client':client,'sql':sql})
         print(json.dumps({'initial_primary':leader,'promoted_primary':promoted,'acknowledged_rows_preserved':100,'new_primary_writable':True,'watchdog_scope':'CI override only; production renderer requires hardware/software watchdog'}))
     finally:
         for command in projects:

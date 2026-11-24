@@ -70,9 +70,8 @@ def fetch(client,bucket,manifest_key,destination,identity):
 
 def backup(client,bucket,connection,now,recipient):
     # Export one repeatable-read snapshot for both pg_dump and verification counts.
-    connection.autocommit=False
+    connection.set_session(isolation_level="REPEATABLE READ",readonly=True,autocommit=False)
     with connection.cursor() as cursor:
-        cursor.execute('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
         cursor.execute('SELECT pg_export_snapshot()');snapshot_id=cursor.fetchone()[0]
         counts={}
         for table in TABLES:

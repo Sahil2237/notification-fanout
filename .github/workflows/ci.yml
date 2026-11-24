@@ -178,6 +178,28 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      - name: Scan Kafka broker image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.KAFKA_IMAGE }}
+          format: json
+          output: ha-kafka-security.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan etcd quorum image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.ETCD_IMAGE }}
+          format: json
+          output: ha-etcd-security.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
       - name: Package pinned HA runtime
         run: bash deploy/ha/package-runtime.sh
       - name: Sign trusted HA infrastructure artifact
