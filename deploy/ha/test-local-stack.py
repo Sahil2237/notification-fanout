@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Rancher-only full-stack failure drill. Uses disposable data and at most four synthetic webhook calls."""
-import http.client,base64,hashlib,importlib.util,json,os,pathlib,shutil,ssl,subprocess,time,urllib.error,urllib.request,uuid
+import datetime,http.client,base64,hashlib,importlib.util,json,os,pathlib,shutil,ssl,subprocess,time,urllib.error,urllib.request,uuid
 ROOT=pathlib.Path(__file__).resolve().parent
 
 def load(name,file):
@@ -20,7 +20,7 @@ def wait(check,message,seconds=180):
 def validate(context):
     work=context['work'];projects=context['projects'];inventory=context['inventory'];secret=context['secrets'];host=context['host_path'];client=context['client']
     nodes=inventory['nodes'];addresses=','.join(n['private_ip'] for n in nodes);primary_dsn='host='+addresses+' port=5432 user=notification_owner password='+secret['pg_owner_password']+' dbname=notifications sslmode=verify-full sslrootcert=/tls/postgres-ca.crt target_session_attrs=read-write connect_timeout=3'
-    report={'scope':'three simulated nodes on one Rancher VM; independent host fencing requires cloud verification','checks':{},'acknowledged_event_ids':[]}
+    report={'tested_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'three simulated nodes on one Rancher VM; independent host fencing requires cloud verification','checks':{},'acknowledged_event_ids':[]}
     checks=report['checks'];vip='172.29.0.100';frontend='notification-ha-ci-frontend'
     pk=load('local_pki','create-pki.py');pk.issue(work/'pki/offline-ca/postgres',work/'ingress','server','local-ha-ingress',vip)
     context['sql']('SELECT 1')
@@ -128,4 +128,5 @@ def validate(context):
 
 if __name__=='__main__':
     if os.environ.get('NOTIFICATION_HA_LOCAL_TEST')!='true':raise SystemExit('Explicit local Rancher mode required')
+    (ROOT.parent.parent/'.deploy/local-ha-result.json').unlink(missing_ok=True)
     database=load('database_drill','test-postgres-cluster.py');database.main(extra_validation=validate)
