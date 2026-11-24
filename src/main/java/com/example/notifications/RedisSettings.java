@@ -21,12 +21,14 @@ public class RedisSettings {
     @Min(1) @Max(2000) @JsonProperty public int replicationWaitMillis = 500;
 
     public void validate(boolean production, boolean singleHost) {
-        if (sentinels == null || sentinels.size() > 3) throw new IllegalArgumentException("At most three Sentinel endpoints are allowed");
+        if (sentinels == null || sentinels.size() > 3 || sentinels.stream().distinct().count() != sentinels.size()) throw new IllegalArgumentException("At most three distinct Sentinel endpoints are allowed");
         for (var endpoint : sentinels)
-            if (!endpoint.matches("[a-zA-Z0-9.-]+:[0-9]{1,5}")) throw new IllegalArgumentException("Invalid Sentinel endpoint");
+            if (!endpoint.matches("[a-zA-Z0-9.-]+:[0-9]{1,5}")
+                    || Integer.parseInt(endpoint.substring(endpoint.lastIndexOf(':')+1)) < 1
+                    || Integer.parseInt(endpoint.substring(endpoint.lastIndexOf(':')+1)) > 65535) throw new IllegalArgumentException("Invalid Sentinel endpoint");
         if (production && (password == null || password.length() < 32))
             throw new IllegalArgumentException("Redis needs an independent strong credential");
-        if (production && !singleHost && (!tls || sentinels.size() != 3 || requiredReplicas < 1 || sentinelPassword.length() < 32))
+        if (production && !singleHost && (!tls || sentinels.size() != 3 || requiredReplicas < 1 || (sentinelPassword == null || sentinelPassword.length() < 32)))
             throw new IllegalArgumentException("HA Redis requires verified TLS, three Sentinels, replication acknowledgement and separate Sentinel credentials");
     }
 }

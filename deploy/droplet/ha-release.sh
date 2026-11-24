@@ -28,7 +28,7 @@ rollback() {
     export APP_IMAGE=notification-fanout:$previous
     "${compose[@]}" up -d --no-deps app || true
     for attempt in $(seq 1 90); do
-      if curl -fsS --max-time 2 http://127.0.0.1:8080/health/ready >/dev/null; then rm -f "$ha/health/drain"; break; fi
+      if curl -fsS --max-time 2 http://127.0.0.1:8080/health/ready >/dev/null; then [[ -f "$ha/coordinated-cutover" ]] || rm -f "$ha/health/drain"; break; fi
       sleep 1
     done
   fi
@@ -49,7 +49,8 @@ chmod 0600 "$ha/node.env.next"
 mv -f "$ha/node.env.next" "$ha/node.env"
 printf '%s\n' "$sha" >"$ha/app-sha"
 ln -sfn "$release" "$root/current"
-rm -f "$ha/health/drain"
+# Initial cross-version cutovers retain the drain until the operator verifies every replica.
+[[ -f "$ha/coordinated-cutover" ]] || rm -f "$ha/health/drain"
 trap - ERR
 sleep 15
 rm -f "$release/image.tar.gz"

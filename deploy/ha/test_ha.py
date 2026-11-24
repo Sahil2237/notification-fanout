@@ -69,6 +69,18 @@ class MetricsConfigurationTest(unittest.TestCase):
         value=inventory();value['telemetry']={'enabled':True,'team_id':'not-a-team-uuid'}
         with self.assertRaises(ValueError):render.render(value,secrets(),1)
 
+class RedisApplicationConfigurationTest(unittest.TestCase):
+    def test_app_receives_only_limiter_and_discovery_credentials(self):
+        value=inventory();value['redis']={'enabled':True};secret=secrets()
+        secret.update(redis_limiter='l'*64,redis_discovery='d'*64)
+        compose,_=render.render(value,secret,1);env=compose['services']['app']['environment']
+        self.assertEqual('l'*64,env['REDIS_PASSWORD']);self.assertEqual('d'*64,env['REDIS_SENTINEL_PASSWORD'])
+        self.assertEqual(3,len(json.loads(env['REDIS_SENTINELS'])))
+        self.assertFalse(any('ADMIN' in key and 'REDIS' in key for key in env))
+    def test_missing_redis_credentials_block_rendering(self):
+        value=inventory();value['redis']={'enabled':True}
+        with self.assertRaises(ValueError):render.render(value,secrets(),1)
+
 class IdentityMigrationTest(unittest.TestCase):
     def test_preserves_api_signing_and_database_identity(self):
         old={key:key.replace('_','')+'a'*64 for key in ('PG_OWNER_PASSWORD','DB_PASSWORD','ADMIN_TOKEN','API_TOKEN','WEBHOOK_SIGNING_SECRET')};old['WEBHOOK_ORIGINS']='["https://example.com"]'

@@ -1,0 +1,6 @@
+# Purpose-scoped Redis/Sentinel, patched before the CI security scan.
+ARG REDIS_BASE_IMAGE=public.ecr.aws/docker/library/redis:8.10.3@sha256:04d1eefe18169c3349884dc2a552f6c429d9a9d8eda4caab13d2b826dc6dfc4c
+FROM ${REDIS_BASE_IMAGE}
+USER root
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+USER 999:999

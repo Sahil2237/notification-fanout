@@ -20,6 +20,10 @@ def wait(check,message,seconds=180):
 def validate(context):
     work=context['work'];projects=context['projects'];inventory=context['inventory'];secret=context['secrets'];host=context['host_path'];client=context['client']
     nodes=inventory['nodes'];addresses=','.join(n['private_ip'] for n in nodes);primary_dsn='host='+addresses+' port=5432 user=notification_owner password='+secret['pg_owner_password']+' dbname=notifications sslmode=verify-full sslrootcert=/tls/postgres-ca.crt target_session_attrs=read-write connect_timeout=3'
+    rate=load('local_rate','redis-cluster.py');rate_secrets=rate.credentials()
+    inventory['redis']={'enabled':True};secret.update(redis_limiter=rate_secrets['limiter'],redis_discovery=rate_secrets['discovery'])
+    rate.create_pki(inventory,work/'redis-pki')
+    redis_image=os.environ.get('REDIS_IMAGE','public.ecr.aws/docker/library/redis:8.10.3@sha256:04d1eefe18169c3349884dc2a552f6c429d9a9d8eda4caab13d2b826dc6dfc4c')
     report={'tested_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'three simulated nodes on one Rancher VM; independent host fencing requires cloud verification','checks':{},'acknowledged_event_ids':[]}
     checks=report['checks'];vip='172.29.0.100';frontend='notification-ha-ci-frontend'
     pk=load('local_pki','create-pki.py');pk.issue(work/'pki/offline-ca/postgres',work/'ingress','server','local-ha-ingress',vip)
@@ -28,6 +32,17 @@ def validate(context):
     run(['docker','exec','-e','PG_ADMIN_DSN='+primary_dsn.replace('dbname=notifications','dbname=postgres'),client,'python3','/opt/ha/initialize-databases.py'])
     for node,command in zip(nodes,projects):
         directory=work/('node'+str(node['id']));config=json.loads((directory/'compose.yaml').read_text());full,_=context['render'](inventory,secret,node['id'])
+        rate_root=directory/'rate';rate.bootstrap(inventory,rate_secrets,node['id'],redis_image,rate_root)
+        rate_config,_=rate.render(inventory,rate_secrets,node['id'],redis_image)
+        shutil.copytree(work/'redis-pki'/('node'+str(node['id'])),rate_root/'tls')
+        os.chown(rate_root/'tls',999,999)
+        for cert in (rate_root/'tls').iterdir():os.chown(cert,999,999)
+        (directory/'tls/app/redis-ca.crt').write_bytes((work/'redis-pki/offline-ca/redis.crt').read_bytes())
+        for role,service in rate_config['services'].items():
+            service['network_mode']='service:net';service['depends_on']=['net'];service['pull_policy']='never'
+            service['volumes']=[host(rate_root/v[2:].split(':',1)[0])+':'+v.split(':',1)[1] if v.startswith('./') else v for v in service['volumes']]
+            config['services'][role]=service
+        config['volumes'].update(rate_config['volumes'])
         for purpose,owner in [('app',10001),('kafka',1000)]:
             path=directory/'tls'/purpose;path.chmod(0o755)
             for file in path.iterdir():os.chown(file,owner,owner);file.chmod(0o400 if file.suffix in ('.key','.p12') else 0o444)
@@ -45,7 +60,7 @@ def validate(context):
                 service['environment']['TLS_DOMAIN']=vip;service['volumes'].append(host(work/'ingress')+':/ingress:ro')
             config['services'][name]=service
         (directory/'compose.yaml').write_text(json.dumps(config))
-        run(command+['up','-d','kafka'])
+        run(command+['up','-d','kafka','redis','sentinel'])
     kafka=out(projects[0]+['ps','-q','kafka'])
     def kafka_cli(tool,*args):
         return out(['docker','exec','-e','KAFKA_HEAP_OPTS=-Xms32m -Xmx128m',kafka,'/opt/kafka/bin/'+tool,'--bootstrap-server',','.join(n['private_ip']+':9092' for n in nodes),'--command-config','/tls/admin.properties',*args])

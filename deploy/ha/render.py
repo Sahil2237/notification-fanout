@@ -40,6 +40,11 @@ def render(inventory,secrets,node_id):
     db_url='jdbc:postgresql://'+','.join(n['private_ip']+':5432' for n in nodes)+'/notifications'
     env={'DB_URL':db_url,'DB_USER':'notification_runtime','DB_PASSWORD':secrets['db_password'],'API_TOKEN':secrets['api_token'],'ADMIN_TOKEN':secrets['admin_token'],'WEBHOOK_SIGNING_SECRET':secrets['signing_secret'],'WEBHOOK_ORIGINS':json.dumps(secrets['webhook_origins']),
        'KAFKA_BOOTSTRAP_SERVERS':','.join(n['private_ip']+':9092' for n in nodes),'JAVA_TOOL_OPTIONS':'-Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError'}
+    rate=inventory.get('redis',{})
+    if rate.get('enabled',False):
+        for field in ('limiter','discovery'):
+            if not re.fullmatch(r'[A-Za-z0-9_-]{32,128}',secrets.get('redis_'+field,'')):raise ValueError('Missing Redis application credential')
+        env.update(REDIS_SENTINELS=json.dumps([n['private_ip']+':26379' for n in nodes]),REDIS_PASSWORD=secrets['redis_limiter'],REDIS_SENTINEL_PASSWORD=secrets['redis_discovery'])
     settings=inventory.get('application',{})
     for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000)]:
         value=settings.get(setting_name,default)

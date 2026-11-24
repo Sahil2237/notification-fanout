@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p .ha-runtime
-cp deploy/ha/{metrics-compose.yaml,render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh,prepare-secrets.py,initialize-databases.py} .ha-runtime/
+cp deploy/ha/{redis-cluster.py,metrics-compose.yaml,render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh,prepare-secrets.py,initialize-databases.py} .ha-runtime/
 cp deploy/droplet/verify-image.py .ha-runtime/
 # Package the exact images already loaded and scanned; never refresh mutable tags here.
-docker image inspect "$ETCD_IMAGE" "$KAFKA_IMAGE" "$HA_TOOLS_IMAGE" "$HA_PROXY_IMAGE" >/dev/null
+docker image inspect "$ETCD_IMAGE" "$KAFKA_IMAGE" "$HA_TOOLS_IMAGE" "$HA_PROXY_IMAGE" "$REDIS_IMAGE" >/dev/null
 python3 - <<'PYCODE'
 import json,os,pathlib,subprocess
 root=pathlib.Path('.ha-runtime');images={}
-for name,var in [('tools','HA_TOOLS_IMAGE'),('proxy','HA_PROXY_IMAGE'),('etcd','ETCD_IMAGE'),('kafka','KAFKA_IMAGE')]:
+for name,var in [('tools','HA_TOOLS_IMAGE'),('proxy','HA_PROXY_IMAGE'),('etcd','ETCD_IMAGE'),('kafka','KAFKA_IMAGE'),('redis','REDIS_IMAGE')]:
     reference=os.environ[var]
     info=json.loads(subprocess.check_output(['docker','image','inspect',reference],text=True))[0]
     images[name]={'reference':reference,'config_digest':info['Id'],'repo_digests':info.get('RepoDigests',[])}

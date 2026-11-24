@@ -261,4 +261,13 @@ class CoreTest {
         } finally {blocker.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(2,java.util.concurrent.TimeUnit.SECONDS));}
     }
 
+    @Test void sentinelConfigurationRequiresDistinctValidEndpoints() {
+        var settings = new RedisSettings();
+        settings.sentinels = List.of("node1:26379", "node1:26379", "node1:26379");
+        assertThrows(IllegalArgumentException.class, () -> settings.validate(false, false));
+        for (var port : List.of("0", "65536")) {
+            settings.sentinels = List.of("node1:" + port);
+            assertThrows(IllegalArgumentException.class, () -> settings.validate(false, false));
+        }
+    }
 }

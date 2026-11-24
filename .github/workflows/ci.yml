@@ -164,6 +164,7 @@ jobs:
       HA_PROXY_IMAGE: notification-ha-proxy:${{ github.sha }}
       ETCD_IMAGE: gcr.io/etcd-development/etcd:v3.7.4
       KAFKA_IMAGE: notification-kafka:${{ github.sha }}
+      REDIS_IMAGE: notification-redis:${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -174,6 +175,21 @@ jobs:
         run: docker build --platform linux/amd64 -t "$HA_TOOLS_IMAGE" -f deploy/ha/Dockerfile deploy/ha
       - name: Verify real three-node synchronous PostgreSQL failover
         run: sudo --preserve-env=GITHUB_ACTIONS,HA_TOOLS_IMAGE,ETCD_IMAGE env HA_APPLICATION_JAR="$PWD/target/notification-fanout.jar" python3 deploy/ha/test-postgres-cluster.py
+      - name: Build patched Redis and Sentinel
+        run: docker build --platform linux/amd64 -t "$REDIS_IMAGE" -f deploy/ha/Dockerfile.redis deploy/ha
+      - name: Verify Redis TLS, shared quota and automatic Sentinel failover
+        run: sudo --preserve-env=GITHUB_ACTIONS,REDIS_IMAGE env HA_APPLICATION_JAR="$PWD/target/notification-fanout.jar" python3 deploy/ha/test-redis-cluster.py
+      - name: Scan Redis and Sentinel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.REDIS_IMAGE }}
+          format: json
+          output: ha-redis-security.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
       - name: Build distributed HTTPS proxy
         run: docker build --platform linux/amd64 -t "$HA_PROXY_IMAGE" -f deploy/ha/Dockerfile.caddy deploy/ha
       - name: Validate HA HTTPS and draining routes
