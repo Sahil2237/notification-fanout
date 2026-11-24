@@ -14,6 +14,7 @@ import java.util.Map;
 public class ServiceConfiguration extends Configuration {
     @Valid @NotNull @JsonProperty public DataSourceFactory database = new DataSourceFactory();
     @Valid @JsonProperty public DataSourceFactory readDatabase;
+    @JsonProperty public boolean requireReplicaReads = false;
     @JsonProperty public Map<String,String> userIds = Map.of();
     @JsonProperty public Map<String,String> compartmentIds = Map.of();
     @Min(1) @Max(128) @JsonProperty public int subscriberConcurrency = 1;
@@ -98,6 +99,8 @@ public class ServiceConfiguration extends Configuration {
     public int requestsPerMinute = 600;
 
     public void validateSettings() {
+        if (requireReplicaReads && readDatabase == null)
+            throw new IllegalArgumentException("Replica-only reads require a separate standby pool");
         for (var tenant : credentials.keySet()) {
             var identity = identity(tenant);
             if (identity.userId().isBlank() || identity.userId().length() > 128

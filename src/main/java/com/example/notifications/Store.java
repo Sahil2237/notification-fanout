@@ -533,7 +533,8 @@ public final class Store {
 
     public boolean healthy() {
         try {
-            return db.withHandle(h -> h.createQuery("SELECT 1").mapTo(Integer.class).one()) == 1;
+            if (db.withHandle(h -> h.createQuery("SELECT 1").mapTo(Integer.class).one()) != 1) return false;
+            return reads == db || read(h -> h.createQuery("SELECT 1").mapTo(Integer.class).one()) == 1;
         } catch (RuntimeException e) {
             return false;
         }

@@ -240,7 +240,9 @@ class CoreTest {
     }
 
     @Test void replicaPoolCannotSilentlyTargetPrimary() {
-        var config=new ServiceConfiguration();config.readDatabase=new io.dropwizard.db.DataSourceFactory();
+        var config=new ServiceConfiguration();config.requireReplicaReads=true;
+        assertThrows(IllegalArgumentException.class,config::validateSettings);
+        config.readDatabase=new io.dropwizard.db.DataSourceFactory();
         config.readDatabase.setValidationQuery("SELECT 1");
         config.readDatabase.setProperties(java.util.Map.of("targetServerType","primary"));
         assertThrows(IllegalArgumentException.class,config::validateSettings);

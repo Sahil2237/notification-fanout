@@ -265,7 +265,12 @@ class ServiceIT {
                 tasks.add(
                         executor.submit(
                                 () -> {
-                                    var claim = STORE.claim(30, 5);
+                                    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                                    Claim claim = null;
+                                    while (claim == null && System.nanoTime() < deadline) {
+                                        claim = STORE.claim(30, 5);
+                                        if (claim == null) java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
+                                    }
                                     assertNotNull(claim);
                                     assertTrue(ids.add(claim.id()));
                                 }));
@@ -682,6 +687,19 @@ class ServiceIT {
         assertEquals(a.id(),STORE.claim(30,6).subscriptionId());
     }
 
+    @Test void concurrentInstancesCannotExceedSubscriberReservationLimit() throws Exception {
+        subscribe("demo",Rules.all());
+        for(var n=0;n<20;n++) STORE.ingest("demo",input("{}"),"parallel-"+n);
+        var other=new Store(DB,JSON);var claims=new java.util.ArrayList<java.util.concurrent.Future<Claim>>();
+        try(var pool=Executors.newFixedThreadPool(16)) {
+            for(var n=0;n<16;n++) {var instance=n%2==0?STORE:other;claims.add(pool.submit(()->instance.claim(30,6)));}
+            var claimed=0;
+            for(var future:claims) if(future.get(15,TimeUnit.SECONDS)!=null)claimed++;
+            assertEquals(1,claimed);
+        }
+        assertEquals(1,DB.withHandle(h->h.createQuery("SELECT count(*) FROM deliveries WHERE lease_expires_at>clock_timestamp()").mapTo(Integer.class).one()).intValue());
+    }
+
     @Test void sixAttemptsCreateExactlyOneTransactionalDeliveryDeadLetter() throws Exception {
         subscribe("demo",Rules.all());var event=STORE.ingest("demo",input("{}"),null).event();
         Claim finalClaim=null;
@@ -714,6 +732,7 @@ class ServiceIT {
         var event=routed.ingest("demo",input("{}"),null).event();
         assertEquals(503,assertThrows(WebApplicationException.class,()->routed.event("demo",event.id())).getResponse().getStatus());
         assertEquals(event.id(),STORE.event("demo",event.id()).id());
+        assertFalse(routed.healthy());assertTrue(STORE.healthy());
     }
 
     @Test void restGeneratedIdempotencyReturnsOriginalIdAndCorrelationHeader() throws Exception {

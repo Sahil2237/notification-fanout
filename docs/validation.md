@@ -1,6 +1,6 @@
 # Verification matrix
 
-The current source suite contains 19 unit and 40 integration tests; release-gateway tests add 12 Python security tests, and HA configuration/backup tests add 19 more Python tests. Deployed release evidence is version-specific in submission-status.md. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
+The current source suite contains 19 unit and 41 integration tests; release-gateway tests add 12 Python security tests, and HA configuration/backup tests add 19 more Python tests. Deployed release evidence is version-specific in submission-status.md. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
 
 |Requirement / material risk|Automated evidence|
 |---|---|

@@ -1,6 +1,7 @@
 production: true
 adminToken: ${ADMIN_TOKEN}
 singleHostDeployment: false
+requireReplicaReads: true
 database:
   driverClass: org.postgresql.Driver
   url: ${DB_URL}
@@ -32,7 +33,7 @@ readDatabase:
   maxSize: ${DB_READ_POOL_MAX:-4}
   validationQuery: SELECT 1 / (pg_is_in_recovery()::int)
   checkConnectionOnBorrow: true
-  validationInterval: 0 seconds
+  validationInterval: 50 milliseconds
   validationQueryTimeout: 2 seconds
   maxWaitForConnection: 3 seconds
   maxConnectionAge: 60 seconds
