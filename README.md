@@ -4,7 +4,7 @@ Java 25 / Dropwizard 5 event ingestion and webhook fanout service for DigitalOce
 
 The HA release uses three 4-GB Ubuntu 24.04 Droplets, three Kafka brokers/controllers, strict synchronous PostgreSQL with Patroni/etcd, and three application replicas behind a two-node DigitalOcean load balancer. Encrypted daily backups go to a private Spaces bucket with 24-hour retention. [HA configuration and limits](deploy/ha/README.md) describe the failure boundary; [deployment evidence](docs/submission-status.md) distinguishes completed cloud verification from a rollout in progress. The approximate base cost is $101/month, without managed Kafka or a paid registry.
 
-**Current deployment decision:** the user chose to keep the existing service unchanged. The HA candidate is tested and published, and its infrastructure images are staged, but production data/credentials have not been replicated and no HA cutover or cloud HA claim is made. The running service remains revision `57b3fbf`; see [current status](docs/submission-status.md).
+**Live HA endpoint:** `https://174.138.121.225`. The authorized cutover preserved all 10,011 existing events and verified all nine imported tables by count and content fingerprint. The cloud host-offline test promoted another PostgreSQL primary and delivered a webhook with two Kafka brokers; an actual encrypted Spaces backup restored successfully. See [current evidence and limits](docs/submission-status.md).
 
 ## Setup and development
 
@@ -24,7 +24,7 @@ For a packaged local run: `docker compose up -d db kafka kafka-init`, `docker co
 
 ## REST usage
 
-Tenant `/v1` endpoints require a tenant bearer token; the separate administrator endpoints require the administrator token. The current cloud tenant is `service`; authentication tokens and signing master stay in the server's root-only `.env`. The deployed REST base is `https://64.227.168.29`, fronted by Caddy with a publicly trusted certificate; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
+Tenant `/v1` endpoints require a tenant bearer token; the separate administrator endpoints require the administrator token. The current cloud tenant is `service`; authentication tokens and signing master stay in each node's root-only `/opt/notification-fanout/ha/secrets.json`. The deployed REST base is `https://174.138.121.225`, fronted by Caddy with a publicly trusted certificate; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
 
 Create a subscription **before** publishing its events:
 

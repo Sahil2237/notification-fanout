@@ -1,6 +1,6 @@
 # Three-node HA deployment
 
-Implementation candidate: the original single-host application remains live until the HA cluster, import and failover checks complete. Do not interpret provisioned nodes as a verified HA service. Record final evidence in docs/submission-status.md after migration.
+Activated on 24 November 2026 after explicit authorization to replicate the existing credentials and data. Live HTTPS endpoint: https://174.138.121.225. Cloud host-offline failover, two-broker delivery and actual Spaces restoration passed; see docs/submission-status.md for measured evidence and limits.
 
 Three Bangalore Ubuntu 24.04 Droplets each host an application replica, Kafka broker/controller, PostgreSQL/Patroni member and etcd voter. A DigitalOcean regional load balancer fronts three TLS proxies. Kafka uses RF=3, min ISR=2, acks=all, idempotent producers, distinct UUID keys and no unclean election. PostgreSQL uses Patroni strict synchronous mode, one synchronous standby, remote_apply commits, timeline checks and required watchdog fencing. If safe quorum/durable replication is unavailable, writes fail or block instead of acknowledging an unsafe commit. Do not force promotion of an asynchronous replica.
 

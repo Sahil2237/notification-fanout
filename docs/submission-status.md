@@ -1,85 +1,59 @@
-# Verified submission and deployment
+# Verified HA deployment
 
-## Latest decision: retain the existing live service
+Verified on **24 November 2026 IST** after explicit authorization to replicate existing service credentials/data and activate HA. The earlier instruction to retain the single-host service was superseded by that authorization. No additional paid resources were created during activation.
 
-On **24 November 2026 IST**, the user selected **“Keep the current service unchanged”** when explicit authorization was required to replicate existing production credentials/data to the two additional Droplets. No production credentials or database contents were replicated, no HA services were started, and no HA cutover was performed. Automatic promotion remains held (`HA_ENABLED=true`, `HA_DEPLOY_READY=false`). The existing HTTPS service remains the original `57b3fbf` release; the historical verification below describes that release.
-
-## Verified HA candidate — not activated in the cloud
-
-Candidate **`507f9896e914d8da00353626da2f8aa503bd31b1`** passed [all CI/release gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45335125767) and [exact-image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45336595057).
-
-- Local Java: **48 passed** (17 unit, 31 real PostgreSQL/Kafka/HTTP integration).
-- Python: **28 passed** (12 deployment security, 16 HA/backup).
-- Local full HA drill: **8 checks passed**, **106 acknowledged events preserved**, **28.82-second single-node recovery**; four synthetic webhooks received HTTP 204, including one while a whole simulated node was down.
-- Real PostgreSQL snapshot/age encryption/authenticated manifest/decryption/pg_restore preserved all nine tracked table counts. This local test used a filesystem S3 adapter; it is **not** an actual Spaces restore test.
-- Quorum loss refused unsafe acknowledgement; recovery preserved acknowledged events; proxy logs passed the database-credential redaction regression.
-- Exact CI images for app, PostgreSQL/backup tools, Caddy, Kafka 4.3.2 and etcd passed the fixable HIGH/CRITICAL vulnerability gate. Reports do not claim zero unknown/unfixed vulnerabilities or a fully patched workstation.
-- Five full-revision tags were published under `ghcr.io/sahil2237/`: `notification-fanout`, `notification-ha-tools`, `notification-ha-proxy`, `notification-kafka`, `notification-etcd`. The application package was visually confirmed **Private**. Signature/checksum/image-content verification succeeded when installing infrastructure images on all three Droplets.
-
-[Local HA evidence](evidence/local-ha-507f989.json) and [published image identities](evidence/published-images-507f989.json) contain synthetic/public metadata only.
-
-## Provisioned resources and remaining work
-
-Three 4-GB/2-vCPU Bangalore Droplets exist: `64.227.168.29`, `139.59.13.207`, `159.65.153.56`. A two-node regional load balancer (`174.138.121.225`) has three prepared backends. The original service still uses `https://64.227.168.29`; **the new load balancer is not an active HA API endpoint**. Cloud and host firewall rules restrict cluster traffic to private peers. The two idle nodes were patched/rebooted onto Ubuntu kernel `6.8.0-151`; the existing host remains on `6.8.0-149` pending an authorized rollout. Production Docker is `29.10.0`; the older Rancher development engine was not upgraded.
-
-A private Standard Spaces bucket, `notification-fanout-backups-sahil2237`, exists in Singapore because new Bangalore Spaces creation was unavailable. Bucket-scoped backup credentials, node-specific TLS and a protected recovery identity are prepared; offline CA signing keys remain off the Droplets. **The daily backup timers are not activated, and a real Spaces backup/restore and independent cloud host-failure/fencing test have not been performed.** The limited Spaces key cannot install a storage-native lifecycle rule; application-side expiry is configured in the candidate code, not asserted as an active cloud policy.
-
-These provisioned resources incur approximately **$101/month base** ($72 Droplets + $24 load balancer + $5 Spaces), even though HA is not activated. They have not been deleted or silently resized. This is about $77/month above the original $24 Droplet, before taxes/overages; remove unused resources only through an explicitly authorized cleanup.
-
-Further HA deployment requires an authorized credential/database replication plan, safe import of the existing data, cloud failover/fencing tests, daily Spaces backup activation and a real restore drill. Zero-loss scope is acknowledged commits through a tested single-node failure with safe quorum; daily backup disaster RPO is up to roughly 24 hours. Regional loss, continuous WAL/PITR, automatic internal-certificate renewal, shared tenant quotas and external paging remain separate work.
-
-## Existing single-host release — historical evidence
-
-The current deployed source revision is `57b3fbfb81743081b4b76382392e9ed2eed8fc27`. Verification completed on **24 November 2026 IST** (23 November UTC). The final evidence/documentation commit does not change the running application.
-
-- Private personal repository: [Sahil2237/notification-fanout](https://github.com/Sahil2237/notification-fanout).
-- [Successful CI and release gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45257513323).
-- [Successful signed-artifact deployment](https://github.com/Sahil2237/notification-fanout/actions/runs/45258726373).
-- Public REST base: `https://64.227.168.29`; [readiness](https://64.227.168.29/health/ready). Normal certificate validation succeeds; no insecure TLS override is required.
-- [Machine-readable synthetic verification evidence](evidence/release-57b3fbf.json), [architecture diagrams](architecture.md), [API contract](api.md), [test matrix](validation.md), [operations](operations.md).
+- Live REST base: **https://174.138.121.225**; [readiness](https://174.138.121.225/health/ready). Normal public certificate validation passed.
+- Private repository: [Sahil2237/notification-fanout](https://github.com/Sahil2237/notification-fanout), default branch codex/notification-fanout.
+- Deployed application: **bd082b64bc51664595264901d6f79137248bad7b** on all three nodes. [Verification](https://github.com/Sahil2237/notification-fanout/actions/runs/45341972631), [exact-image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45343398780), and [signed rolling deployment](https://github.com/Sahil2237/notification-fanout/actions/runs/45343513088) all passed.
+- Infrastructure remains the separately verified/signed **507f9896e914d8da00353626da2f8aa503bd31b1** runtime. [Its verification](https://github.com/Sahil2237/notification-fanout/actions/runs/45335125767) and [publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45336595057) passed. Application promotion does not silently replace infrastructure.
+- [Sanitized cloud evidence](evidence/cloud-ha-bd082b6.json), [published image identities](evidence/published-images-bd082b6.json), [architecture diagrams](architecture.md), [operations](operations.md), [API](api.md), [requirements-to-tests](validation.md).
 
 ## Functional expectations
 
-|Requirement|Implementation and verified evidence|
-|---|---|
-|Durable structured event ingestion|REST accepts type, source and arbitrary JSON. PostgreSQL commits event, matching delivery jobs and Kafka outbox atomically before 202. Transaction/storage-failure and duplicate-request tests passed; 10,000 cloud events persisted and survived a host reboot.|
-|Dynamic subscriptions and filters|Create/list/delete without restart; type/source and JSON Pointer payload equality. Lifecycle, tenant isolation and filter tests passed. Live origin approval/revocation and subscription registration/deletion required no app restart.|
-|Fanout, retries and queryable state|UUID-keyed Kafka dispatch activates unique delivery jobs. Signed HTTPS webhooks use persisted jittered backoff, leases and bounded attempts. Three demo events each received 204 on attempt one. A deliberate 503 receiver produced five recorded attempts and terminal failed.|
-|Delivery audit|Event/subscription/delivery queries return status, attempt timestamps, outcomes and nullable HTTP response codes. Live successful and failed histories survived app restart and a full Droplet reboot.|
+| Requirement | Implementation and verification |
+| --- | --- |
+| Durable structured events | REST accepts type, source and arbitrary JSON. A PostgreSQL transaction saves event, matching jobs and Kafka outbox before 202; synchronous remote_apply commits require a standby. All 10,011 original events remained byte-structure equivalent by content fingerprint after the cloud failure/reboot tests. All 124 acknowledged synthetic events remained queryable. |
+| Dynamic subscriptions | Create/list/delete without restart; event type, source and JSON Pointer equality conditions. Tenant isolation, lifecycle, invalid filters and origin policy have tests. Cloud validation registered a matching subscription through public HTTPS. |
+| Kafka fanout and delivery | Kafka UUID keys distribute single-type workloads across six partitions. RF3/min ISR 2, idempotent acks=all producers, no unclean election. Workers persist retry/backoff state and lease fencing. A webhook delivered while one entire Droplet was powered off and all Kafka partitions had only two in-sync replicas. |
+| Delivery audit | Event/subscription/delivery endpoints expose pending/delivered/failed status and attempt timestamps, HTTP codes and outcomes. Four new cloud events delivered with HTTP 204; receiver bodies and HMAC signatures were verified. Existing successful and terminal-failed audit history was imported with matching fingerprints. |
 
-## Engineering expectations
+Finite retries do not promise eventual receipt. Processing and HTTP effects can repeat after uncertain outcomes; subscribers must deduplicate stable deliveryId. A producer with an uncertain response must reuse its idempotency key. Exactly-once subscriber side effects are not claimed.
 
-The repository includes the full ingest/matching/outbox/Kafka/fanout/retry/audit flow and request sequence diagrams, precise delivery guarantees and failure conditions, setup/filter documentation, operational runbooks, and the simplicity-versus-next-hardening decisions.
+## Engineering verification
 
-All **46 Java tests** passed: **15 unit and 31 real PostgreSQL/HTTP/Kafka integration tests**. All **12 Python deployment security tests** passed. CI also passed image scanning with **zero fixable HIGH/CRITICAL findings**, Caddy configuration validation, real Compose startup, runtime database privilege checks, intentionally failed-startup rollback and database restore. The scan uses a dated vulnerability database and is not a claim that no vulnerabilities can exist.
+- **48 Java tests passed**: 17 unit and 31 real PostgreSQL/Kafka/HTTP integration tests. **28 Python tests passed**: 12 deployment-security and 16 HA/backup tests.
+- CI passed real service startup, runtime database permissions, deliberate failed-startup rollback and database restore, a real three-node synchronous PostgreSQL failover, proxy/HTTPS/drain behavior, signed packaging and image identity checks.
+- App, PostgreSQL/backup tools, proxy, Kafka and etcd scans passed with **zero fixable HIGH/CRITICAL findings**. The gate excludes unfixed findings; this does not establish freedom from unknown vulnerabilities.
+- Local Rancher HA drill passed eight checks, preserved 106 acknowledged events, measured 28.82-second simulated-node recovery, refused unsafe writes without quorum, restored all nine snapshot tables and delivered four synthetic webhooks. [Local evidence](evidence/local-ha-507f989.json) is separate from independent cloud testing.
+- GitHub Actions tests on push; a successful trusted default-branch verification supplies signed artifacts to the restricted rolling-deployment gateway. The successful APP_IMAGE is persisted for later Compose operations and host reboots.
+- README contains setup, REST/filter syntax, guarantees and simplicity-versus-next-hardening trade-offs. Mermaid architecture/request flows, capacity assumptions, security, API/model and operations are versioned in the repository. Documentation/evidence follow-up commits do not rebuild the already verified running image.
 
-CI builds the application image once. Deployment promotes that signed, checksummed artifact from the exact successful workflow run without rebuilding. A restricted upload user has no Docker membership or access to application secrets; a root-owned gateway verifies signatures, safe paths, release identity and portable image content before promotion. Infra images are pinned to the tested digests in the release bundle. Cloud verification confirmed the running image's layers and runtime configuration against the signed archive's original config digest.
+## Cloud migration and failure tests
 
-## Live failure and recovery checks
+The legacy API was stopped for a controlled import. The custom dump remained on the original Droplet, and the destination was required to be empty. All nine imported tables matched the source by count and sorted row-content fingerprints: events 10,011, outbox 10,011, subscriptions 4, deliveries 9, attempts 13, schema history 4, origin approvals 2, origin audit 3, dead letters 0. Existing tenant/admin/signing identities were preserved only within the three explicitly authorized Droplets over verified encrypted connections.
 
-- Unauthenticated tenant requests return 401; tenant credentials cannot administer origins, administrator credentials cannot ingest tenant events, and public ingress rejects administrator routes.
-- Approved a temporary public HTTPS origin, registered/deleted a matching subscription, revoked the origin, and confirmed registration was denied without restarting the app. Revocation persisted across restart/reboot.
-- Three matching synthetic events traversed public HTTPS, PostgreSQL, Kafka and the external receiver. Captured body/IDs and HMAC signatures were verified. An additional event accepted while Kafka was stopped remained pending with zero HTTP attempts and delivered after broker recovery.
-- A separate temporary receiver intentionally returned 503. All five attempt timestamps/codes and terminal failure were audited; the temporary subscription was deleted afterward. A nonmatching event created no jobs.
-- A new backup restored into a temporary database on the **same Droplet**, preserving three demo events/deliveries, revocation and its audit. The temporary database was removed. No database backup was exported to the workstation.
-- After a **full Droplet reboot**, normal HTTPS readiness recovered, the deployed revision was unchanged, all 10,000 probe events remained persisted/dispatched, and successful/failed delivery audit plus revoked origin state remained intact.
+Pausing the active Patroni/PostgreSQL container triggered the required watchdog and a real host reboot. The same node regained leadership; this probe proves fencing/restart recovery, not promotion to another node. The first later successful request began about 53.56 seconds after the pause, with completed response occurring afterward; the probe is not a precise response-time SLO. Some requests timed out or received 503 during recovery, rather than unsafe durability being promised.
 
-The temporary free receiver is for synthetic data only. Its capability URL is kept out of Git in operator state; it has a seven-day lifetime and a 50-request allowance. It captures requests but does not enforce signatures or deduplicate business effects itself.
+A separate DigitalOcean control-panel power-off held the primary Droplet offline. PostgreSQL automatically promoted node1 from the surviving pair, with a synchronous standby on node3. All Kafka partitions had ISR 2, and a new event was accepted and delivered with 204 while the old primary stayed offline. All acknowledged probe IDs were retrieved afterward. Powering the node back on restored streaming replication and ISR 3. A planned safe database switchover preceded maintenance of the original host.
 
-## Measured capacity and partitioning
+Final state: all three load-balancer backends Active/Healthy; all application replicas ready with the exact signed image; PostgreSQL node3 primary, node2 synchronous standby, node1 replica, both reported lag 0; six Kafka partitions all ISR 3. The database contains **10,135 events**, including all original 10,011 and 124 synthetic events. All hosts run Ubuntu kernel **6.8.0-151-generic** and Docker **29.10.0**, have no pending apt upgrades or reboot requirement, and passed required-watchdog boot checks. The older Rancher development engine was not upgraded.
 
-On the existing 2-vCPU/4-GB Droplet, a bounded probe submitted **10,000 events of one type at 50 events/s** in **200.04 seconds**. All received 202; all 10,000 were persisted and Kafka-dispatched, with zero errors and zero matching delivery jobs. Local HTTP acceptance latency was p50 **13.63 ms**, p95 **73.81 ms**, p99 **191.01 ms**.
+Old single-host app/broker/proxy/database containers are stopped, with volumes retained. Their database is stale and is not a rollback authority after HA accepts writes. The original direct-IP service URL is superseded by the load-balancer API address above.
 
-This measures same-host HTTP ingestion, database durability and Kafka dispatch for small synthetic payloads. It excludes public-network latency, matching fanout and receiver throughput; it is **not** evidence of 10,000 events/s or an end-to-end fanout SLO. Reproduce with `python3 /opt/notification-fanout/validate-cloud.py --events 10000 --rate 50` as the Droplet operator; the script refuses subscriptions that might match its generated test type.
+## Actual Spaces backup and restore
 
-The dedicated integration test sends 10,000 same-type, distinct-UUID-keyed Kafka records across six partitions and verifies distribution. After the cloud probe, cumulative partition end offsets were **1613, 1617, 1655, 1738, 1694, 1694** (10,011 records including 11 earlier records). One event type therefore did not concentrate this workload in one partition. UUID keys do not promise per-source ordering.
+All three backup timers are active. The first job uploaded an age-encrypted archive and authenticated completion manifest to private bucket **notification-fanout-backups-sahil2237**, Singapore/sgp1. Backup timestamp: **2026-11-24T06:51:26.609559Z**. Singapore was used because new Bangalore Spaces creation was unavailable. CDN/public listing/versioning are off; the key is scoped to this bucket.
 
-## Deployment boundary and remaining work
+The restore downloaded those actual Spaces objects, verified their authentication and checksums, decrypted them, restored a fresh network-isolated PostgreSQL 17 database, and compared all nine table counts, including 10,011 events. The disposable restore/plaintext files were removed. No production dump was downloaded to the development workstation. A second same-day job returned not_due, confirming it did not create another scheduled snapshot.
 
-The selected existing resource is `notification-fanout`, Droplet ID `622664599`, in team `Blitz_team13_Hyd`, **Bangalore/blr1**, Ubuntu 24.04, 2 vCPU / 4 GB RAM / 80 GB disk. The approved base is approximately **$24/month**; no managed Kafka, managed database, App Platform app, registry or additional paid resource was added. Kafka and PostgreSQL are self-hosted with persistent volumes.
+Retention is **24 hours**, enforced every five minutes plus jitter while the cluster is healthy. Automated tests cover expiry boundaries and safe prefix filtering; a full elapsed cloud expiry cycle has not yet been observed. The scoped key cannot configure native bucket lifecycle, so no provider-native expiry is claimed. A complete cluster outage delays pruning; expiring an old backup before a failed next backup can leave no backup. Recovery keys and deployment secrets need durable operator escrow outside cluster and bucket; the development workspace is not a long-term secret manager.
 
-The cloud firewall permits 22/80/443. Public API traffic uses Caddy HTTPS; 8080 is loopback-only, administrator operations use an SSH tunnel, and database/broker/metrics ports are not published. Public-IP certificates use the short-lived ACME profile and persistent Caddy state. Renewal is configured automatically; an elapsed renewal cycle has not yet been observed.
+## Cost and remaining limits
 
-This is a hardened **single-host assessment deployment**, with tested durability/recovery within that boundary. It does not provide host/zone failover or survive loss of its sole disk. Before taking production availability or data-loss commitments, implement encrypted off-host backups with independent restore drills, replicas/failover as required, external dashboards/alerts/paging, agreed retention automation, credential lifecycle management and representative fanout/soak tests. No independent RPO/RTO or fanout SLO has been established. Internal database/Kafka traffic is plaintext on one private Docker bridge under this explicit single-host trust model.
+This deployment uses exactly three 4-GB/2-vCPU Bangalore Droplets ($72/month), two managed regional load-balancer nodes ($24/month) and Standard Spaces ($5/month): approximately **$101/month base**, excluding taxes/overages and unrelated team resources. No managed Kafka/database, paid registry or fourth compute node was added. This is the cost-conscious selected three-node design; it is not a claim that every alternative was exhaustively priced.
 
-Per-source ordering and replay remain optional extensions. [README trade-offs](../README.md#what-we-sacrifice-for-simplicity-vs-what-we-would-harden-next) explains when to revisit each simplicity choice. Source and diagrams are pushed; interviewer access to the private repository must be granted by its owner. Personal-account sign-out remains a workstation handoff step, not evidence of application deployment.
+The tested zero-loss scope is acknowledged event commits through a single-node failure with a surviving safe quorum and intact synchronous replication. This is same-region HA; independent availability-zone/physical-host placement is not guaranteed. Total cluster/region destruction can lose up to roughly24 hours with daily dumps; continuous WAL/PITR and regional failover are not implemented. There is no measured full-disaster RTO.
+
+External paging/dashboards, automatic internal-certificate renewal before 90 days, durable recovery-secret escrow, shared tenant rate limits and business-data retention remain operator/future work. Public certificate auto-renewal is configured, but an elapsed renewal cycle has not been observed. Representative slow-receiver/fanout soak tests and a production SLO are still required before a real workload commitment. Per-source ordering and replay remain optional extensions.
+
+The earlier single-host 10,000-event test measured 50 events/s for small no-match payloads, not 10,000 events/s or fanout capacity. Its historical evidence is [release 57b3fbf](evidence/release-57b3fbf.json). Do not transfer those latency numbers directly to synchronous three-node HA.

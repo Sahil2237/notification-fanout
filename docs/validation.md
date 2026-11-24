@@ -41,3 +41,22 @@ Revision `57b3fbf` passed the [hosted release gates](https://github.com/Sahil223
 ## HA release gates
 
 Revision `507f9896e914d8da00353626da2f8aa503bd31b1` passed [all verification and image gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45335125767) and [exact-image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45336595057). The local suite passed 48 Java and 28 Python tests. Kafka is 4.3.2 with updated base packages; the proxy uses Go 1.27.4 and a fixed networking module. The scan scope is known, fixable HIGH/CRITICAL findings at scan time, not a guarantee that every tool or future vulnerability is absent. The existing Rancher host engine is older development infrastructure and is not the production Docker engine.
+
+
+## Activated cloud HA verification — 24 November 2026
+
+Application bd082b6 passed the complete [CI gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45341972631), [image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45343398780) and [signed three-node rollout](https://github.com/Sahil2237/notification-fanout/actions/runs/45343513088). The cloud checks are recorded in [sanitized evidence](evidence/cloud-ha-bd082b6.json).
+
+| Material risk | Executed cloud verification |
+| --- | --- |
+| Import omission/corruption | Nine table counts/content fingerprints matched at import; all 10,011 immutable original events matched again after failures/reboots |
+| Unsafe primary process | Paused primary triggered watchdog host reboot; required watchdog unit/device checks passed after real boots |
+| Host failure | Powered primary Droplet off through DigitalOcean; another PostgreSQL member automatically became primary; accepted and delivered a new event while only two hosts were running |
+| Kafka single-broker loss | All six partitions had ISR 2 during the whole-host outage, with successful new webhook delivery; all returned to ISR 3 after rejoin |
+| Lost acknowledged work | All 124 acknowledged synthetic event IDs were retrievable after failure/maintenance; total event count 10,135 |
+| Receiver/audit mismatch | Four new deliveries returned 204; external capture IDs, body and HMAC verified against audit |
+| Unusable off-host backup | Downloaded/authenticated/decrypted actual encrypted Spaces archive; isolated PostgreSQL restore matched all nine snapshot counts; same-day backup repeat returned not_due |
+| Reboot/image drift | All three running application images match the signed artifact, APP_IMAGE persists, all hosts run kernel 6.8.0-151/Docker 29.10.0 with zero pending apt upgrades and no reboot requirement |
+| Ingress security | Normal HTTPS certificate validation, unauthenticated tenant 401, public administrator endpoint 404 |
+
+The host-offline probe proves another-primary promotion; the earlier watchdog reboot probe did not, because its original leader returned. Requests can time out or receive 503 during failover. Exact response-time SLOs, an elapsed 24-hour Spaces expiry/public-certificate renewal cycle, full-region restore, independent-zone placement, slow-receiver fanout capacity and external paging remain unverified/unimplemented as detailed in the current status.

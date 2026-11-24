@@ -1,6 +1,8 @@
 # Signed GitHub deployment to the Bangalore Droplet
 
-The active deployment uses one Ubuntu 24.04 Droplet in `blr1`, regular Basic `s-2vcpu-4gb`, displayed base price $24/month. Kafka/PostgreSQL are self-hosted. No managed Kafka, managed DB, App Platform or registry is required. The current server is `notification-fanout`, IP `64.227.168.29`, in the authorized team `Blitz_team13_Hyd`. No additional paid resources are introduced by this release path. Powering off a Droplet does not stop its billing.
+**Historical single-host deployment procedure:** the live service now uses the [three-node HA deployment](../ha/README.md) at https://174.138.121.225. Do not run the legacy notifications Compose stack against the active HA deployment. The root operator SSH tunnel example remains valid for private administrator access, but use the HA Compose project and secrets described in the [current operations runbook](../../docs/operations.md).
+
+The former deployment used one Ubuntu 24.04 Droplet in `blr1`, regular Basic `s-2vcpu-4gb`, displayed base price $24/month. Kafka/PostgreSQL are self-hosted. No managed Kafka, managed DB, App Platform or registry is required. The current server is `notification-fanout`, IP `64.227.168.29`, in the authorized team `Blitz_team13_Hyd`. No additional paid resources are introduced by this release path. Powering off a Droplet does not stop its billing.
 
 ## First setup
 

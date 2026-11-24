@@ -1,0 +1,494 @@
+{
+  "checked_at_utc": "2026-11-24T07:12:23.371261+00:00",
+  "api_base": "https://174.138.121.225",
+  "app_revision": "bd082b64bc51664595264901d6f79137248bad7b",
+  "infrastructure_revision": "507f9896e914d8da00353626da2f8aa503bd31b1",
+  "ci_run": 45341972631,
+  "image_publication_run": 45343398780,
+  "deployment_run": 45343513088,
+  "migration": {
+    "verified_all_nine_table_counts_and_content_fingerprints": true,
+    "row_counts": {
+      "events": 10011,
+      "deliveries": 9,
+      "event_outbox": 10011,
+      "subscriptions": 4,
+      "databasechangelog": 4,
+      "delivery_attempts": 13,
+      "kafka_dead_letters": 0,
+      "webhook_origin_audit": 3,
+      "approved_webhook_origins": 2
+    }
+  },
+  "original_event_verification_after_failures": {
+    "all_original_events_preserved": true,
+    "original_event_count": 10011,
+    "original_event_content_fingerprint_matches": true,
+    "total_events_after_cloud_tests": 10135
+  },
+  "node_verification": [
+    {
+      "kernel": "6.8.0-151-generic",
+      "docker": "Docker version 29.10.0, build fdd4b8e",
+      "release_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "persisted_app_image": true,
+      "running_image_matches_verified_tag": true,
+      "image_identity": {
+        "verified_config_digest": "sha256:b027bfa34114785c5b7d313bc7dfee38a63f5b708025cf651278d703a89a2ff3",
+        "portable_identity": "0b7a85491fbd93943bf82c8aa0f36350bcea850a9e8be76f9145fae3ae84e04c",
+        "loaded_engine_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518"
+      },
+      "pending_apt_upgrades": 0,
+      "reboot_required": false,
+      "watchdog_service": "active",
+      "backup_timer": "active",
+      "direct_readiness": true,
+      "boot_id": "1e55a0c7-3729-4f6c-b5f2-ab98c0ad380e"
+    },
+    {
+      "kernel": "6.8.0-151-generic",
+      "docker": "Docker version 29.10.0, build fdd4b8e",
+      "release_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "persisted_app_image": true,
+      "running_image_matches_verified_tag": true,
+      "image_identity": {
+        "verified_config_digest": "sha256:b027bfa34114785c5b7d313bc7dfee38a63f5b708025cf651278d703a89a2ff3",
+        "portable_identity": "0b7a85491fbd93943bf82c8aa0f36350bcea850a9e8be76f9145fae3ae84e04c",
+        "loaded_engine_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518"
+      },
+      "pending_apt_upgrades": 0,
+      "reboot_required": false,
+      "watchdog_service": "active",
+      "backup_timer": "active",
+      "direct_readiness": true,
+      "boot_id": "4daf3dcc-2b58-423b-bfbb-d44566634fb7"
+    },
+    {
+      "kernel": "6.8.0-151-generic",
+      "docker": "Docker version 29.10.0, build fdd4b8e",
+      "release_sha": "bd082b64bc51664595264901d6f79137248bad7b",
+      "persisted_app_image": true,
+      "running_image_matches_verified_tag": true,
+      "image_identity": {
+        "verified_config_digest": "sha256:b027bfa34114785c5b7d313bc7dfee38a63f5b708025cf651278d703a89a2ff3",
+        "portable_identity": "0b7a85491fbd93943bf82c8aa0f36350bcea850a9e8be76f9145fae3ae84e04c",
+        "loaded_engine_id": "sha256:694d32d54ff7caeaab1ed1405b1400de84a436dad4797324413ce8dc51f9c518"
+      },
+      "pending_apt_upgrades": 0,
+      "reboot_required": false,
+      "watchdog_service": "active",
+      "backup_timer": "active",
+      "direct_readiness": true,
+      "boot_id": "bc89ce32-66fd-4324-bc2f-0cabf4dce597"
+    }
+  ],
+  "watchdog_fencing": {
+    "active_before_pause": true,
+    "host_reboot_verified": true,
+    "leader_after_reboot": "node2",
+    "different_primary_promotion_claimed_for_this_probe": false,
+    "first_successful_request_start_after_pause_seconds": 53.56,
+    "timing_caveat": "Request start recorded before HTTPS round-trip; not a precise completed-response RTO or SLO"
+  },
+  "independent_host_offline_test": {
+    "powered_off_droplet": 622797519,
+    "old_primary": "node2",
+    "automatic_new_primary": "node1",
+    "remaining_members": 2,
+    "kafka_isr_per_partition": 2,
+    "new_event_accepted_and_webhook_204_while_host_offline": true,
+    "cluster_during_outage": {
+      "members": [
+        {
+          "name": "node1",
+          "role": "leader",
+          "state": "running",
+          "api_url": "https://10.122.0.2:8008/patroni",
+          "host": "10.122.0.2",
+          "port": 5432,
+          "timeline": 3
+        },
+        {
+          "name": "node3",
+          "role": "sync_standby",
+          "state": "streaming",
+          "api_url": "https://10.122.0.5:8008/patroni",
+          "host": "10.122.0.5",
+          "port": 5432,
+          "timeline": 3,
+          "receive_lag": 0,
+          "receive_lsn": "0/7156E18",
+          "replay_lag": 0,
+          "replay_lsn": "0/7156E18",
+          "lag": 0,
+          "lsn": "0/7156E18"
+        }
+      ],
+      "scope": "notification-ha-v1"
+    }
+  },
+  "final_cluster": {
+    "members": [
+      {
+        "name": "node1",
+        "role": "replica",
+        "state": "streaming",
+        "api_url": "https://10.122.0.2:8008/patroni",
+        "host": "10.122.0.2",
+        "port": 5432,
+        "timeline": 4,
+        "receive_lag": 0,
+        "receive_lsn": "0/71AE700",
+        "replay_lag": 0,
+        "replay_lsn": "0/71AE700",
+        "lag": 0,
+        "lsn": "0/71AE700"
+      },
+      {
+        "name": "node2",
+        "role": "sync_standby",
+        "state": "streaming",
+        "api_url": "https://10.122.0.6:8008/patroni",
+        "host": "10.122.0.6",
+        "port": 5432,
+        "timeline": 4,
+        "receive_lag": 0,
+        "receive_lsn": "0/71AE700",
+        "replay_lag": 0,
+        "replay_lsn": "0/71AE700",
+        "lag": 0,
+        "lsn": "0/71AE700"
+      },
+      {
+        "name": "node3",
+        "role": "leader",
+        "state": "running",
+        "api_url": "https://10.122.0.5:8008/patroni",
+        "host": "10.122.0.5",
+        "port": 5432,
+        "timeline": 4
+      }
+    ],
+    "scope": "notification-ha-v1"
+  },
+  "final_kafka": {
+    "partitions": 6,
+    "replication_factor": 3,
+    "min_isr": 2,
+    "all_partition_isr": 3,
+    "unclean_election": false
+  },
+  "synthetic_validation": {
+    "acknowledged_events": 124,
+    "all_retrievable_after_failures": true,
+    "successful_webhooks": 4,
+    "external_captures_and_hmac_verified": true,
+    "matching_events": [
+      {
+        "id": "0326a1ab-379a-4f24-8775-7e81f95f1ea2",
+        "label": "before-failover",
+        "matched": true,
+        "accepted_at": 1795503437.0369105,
+        "idempotency_verified": true,
+        "delivery_id": "ae980f79-f79a-4d48-ae9d-6a2f64ea5a29",
+        "http_status": 204,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "startedAt": "2026-11-24T06:57:17.376778Z",
+            "finishedAt": "2026-11-24T06:57:17.980183Z",
+            "httpStatus": 204,
+            "outcome": "delivered",
+            "error": null
+          }
+        ],
+        "receiver_request_id": "ca5b761c-73c1-4903-8efb-e511d84ec662",
+        "external_body_and_hmac_verified": true
+      },
+      {
+        "id": "b58cd02b-0b53-4bbf-bce7-25d2a26f89bd",
+        "label": "cluster-ready",
+        "matched": true,
+        "accepted_at": 1795503502.466131,
+        "idempotency_verified": true,
+        "delivery_id": "b450c42d-e6ee-475b-9cc1-0e76e22a86fd",
+        "http_status": 204,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "startedAt": "2026-11-24T06:58:22.665481Z",
+            "finishedAt": "2026-11-24T06:58:23.156724Z",
+            "httpStatus": 204,
+            "outcome": "delivered",
+            "error": null
+          }
+        ],
+        "receiver_request_id": "5bcc8725-308a-48d8-aaf1-1a7aebb8c9b8",
+        "external_body_and_hmac_verified": true
+      },
+      {
+        "id": "c6c671ce-4575-4149-b17c-e553daae2bb1",
+        "label": "primary-droplet-offline",
+        "matched": true,
+        "accepted_at": 1795503765.6466732,
+        "idempotency_verified": true,
+        "delivery_id": "db46ef5d-ced3-4399-b0bf-03e320a2a7e5",
+        "http_status": 204,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "startedAt": "2026-11-24T07:02:45.794573Z",
+            "finishedAt": "2026-11-24T07:02:46.311150Z",
+            "httpStatus": 204,
+            "outcome": "delivered",
+            "error": null
+          }
+        ],
+        "receiver_request_id": "4425f2f5-866e-4c60-955c-b248dc0c9e0e",
+        "external_body_and_hmac_verified": true
+      },
+      {
+        "id": "29441d42-4016-4d36-aca7-3f85e9a66936",
+        "label": "after-patching",
+        "matched": true,
+        "accepted_at": 1795504220.884916,
+        "idempotency_verified": true,
+        "delivery_id": "4cd3bd68-24bc-4ca2-9a98-b1ab2093a9ed",
+        "http_status": 204,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "startedAt": "2026-11-24T07:10:21.483554Z",
+            "finishedAt": "2026-11-24T07:10:22.136042Z",
+            "httpStatus": 204,
+            "outcome": "delivered",
+            "error": null
+          }
+        ],
+        "receiver_request_id": "47521eff-39e6-4ff4-817e-6386383f7a88",
+        "external_body_and_hmac_verified": true
+      }
+    ],
+    "traffic_probe": {
+      "started_at": 1795503524.152978,
+      "last_at": 1795503704.061069,
+      "acknowledged_count": 120,
+      "failures": [
+        {
+          "at": 1795503541.0822706,
+          "status": 0
+        },
+        {
+          "at": 1795503550.1130402,
+          "status": 503
+        },
+        {
+          "at": 1795503551.2078025,
+          "status": 503
+        },
+        {
+          "at": 1795503552.3076096,
+          "status": 503
+        },
+        {
+          "at": 1795503559.3526766,
+          "status": 503
+        },
+        {
+          "at": 1795503560.4129186,
+          "status": 0
+        },
+        {
+          "at": 1795503561.416851,
+          "status": 0
+        },
+        {
+          "at": 1795503562.4201677,
+          "status": 0
+        },
+        {
+          "at": 1795503563.4240603,
+          "status": 0
+        },
+        {
+          "at": 1795503564.427628,
+          "status": 0
+        },
+        {
+          "at": 1795503565.43133,
+          "status": 0
+        },
+        {
+          "at": 1795503566.434796,
+          "status": 0
+        },
+        {
+          "at": 1795503567.4378874,
+          "status": 0
+        },
+        {
+          "at": 1795503568.442237,
+          "status": 0
+        },
+        {
+          "at": 1795503569.4456286,
+          "status": 0
+        },
+        {
+          "at": 1795503570.4493785,
+          "status": 0
+        },
+        {
+          "at": 1795503571.455217,
+          "status": 0
+        },
+        {
+          "at": 1795503572.4594305,
+          "status": 0
+        },
+        {
+          "at": 1795503573.4621975,
+          "status": 0
+        },
+        {
+          "at": 1795503574.4674664,
+          "status": 0
+        },
+        {
+          "at": 1795503575.4706645,
+          "status": 0
+        },
+        {
+          "at": 1795503576.4750326,
+          "status": 0
+        },
+        {
+          "at": 1795503577.4781406,
+          "status": 0
+        },
+        {
+          "at": 1795503578.483198,
+          "status": 0
+        },
+        {
+          "at": 1795503579.4868364,
+          "status": 0
+        },
+        {
+          "at": 1795503580.4906337,
+          "status": 0
+        },
+        {
+          "at": 1795503581.4941638,
+          "status": 0
+        },
+        {
+          "at": 1795503582.4982352,
+          "status": 0
+        },
+        {
+          "at": 1795503583.5039785,
+          "status": 0
+        },
+        {
+          "at": 1795503584.5115025,
+          "status": 0
+        },
+        {
+          "at": 1795503585.516842,
+          "status": 0
+        },
+        {
+          "at": 1795503586.5209334,
+          "status": 0
+        },
+        {
+          "at": 1795503587.5242474,
+          "status": 0
+        },
+        {
+          "at": 1795503588.5301583,
+          "status": 0
+        },
+        {
+          "at": 1795503589.5364597,
+          "status": 0
+        },
+        {
+          "at": 1795503590.5402312,
+          "status": 0
+        },
+        {
+          "at": 1795503591.544958,
+          "status": 0
+        },
+        {
+          "at": 1795503592.5486386,
+          "status": 0
+        },
+        {
+          "at": 1795503593.553069,
+          "status": 0
+        }
+      ]
+    }
+  },
+  "spaces": {
+    "private_bucket": "notification-fanout-backups-sahil2237",
+    "region": "sgp1",
+    "manifest_key": "postgres/daily/v1/20261124T065126Z-fa6825939835493d849c08e28c53417c.json",
+    "encrypted_upload_completed": true,
+    "restore": {
+      "restored_and_verified": true,
+      "snapshot_created_at": "2026-11-24T06:51:26.609559+00:00",
+      "row_counts": {
+        "approved_webhook_origins": 2,
+        "databasechangelog": 4,
+        "deliveries": 9,
+        "delivery_attempts": 13,
+        "event_outbox": 10011,
+        "events": 10011,
+        "kafka_dead_letters": 0,
+        "subscriptions": 4,
+        "webhook_origin_audit": 3
+      },
+      "network_isolated_restore": true
+    },
+    "all_three_timers_active": true,
+    "repeat_same_day_run": "not_due",
+    "retention_hours": 24,
+    "retention_cleanup_delay": "up to five minutes plus jitter while cluster healthy",
+    "provider_native_lifecycle_installed": false,
+    "elapsed_daily_expiry_observed": false
+  },
+  "security_scan_gate": {
+    "security-report.json": {
+      "fixable_high_critical": 0
+    },
+    "ha-proxy-security.json": {
+      "fixable_high_critical": 0
+    },
+    "ha-etcd-security.json": {
+      "fixable_high_critical": 0
+    },
+    "ha-kafka-security.json": {
+      "fixable_high_critical": 0
+    },
+    "ha-tools-security.json": {
+      "fixable_high_critical": 0
+    }
+  },
+  "base_cost_usd_per_month": 101,
+  "new_paid_resources_created_during_activation": 0,
+  "limits": [
+    "same-region HA, no guaranteed independent availability zones",
+    "daily dump disaster RPO up to approximately 24 hours; no WAL/PITR",
+    "one-day expiry can leave no backup if next backup fails",
+    "external paging, long-term secret escrow and automatic internal certificate renewal remain operator work",
+    "Rancher development engine was not upgraded; scans exclude unfixed/unknown vulnerabilities"
+  ]
+}
