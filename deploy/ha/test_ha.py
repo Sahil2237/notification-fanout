@@ -6,7 +6,7 @@ def load(name,file):
     spec=importlib.util.spec_from_file_location(name,ROOT/file);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 render=load('ha_render','render.py');backup=load('spaces_backup','spaces-backup.py');identity=load('ha_identity','prepare-secrets.py');UTC=datetime.timezone.utc
 
-def inventory():return {'nodes':[{'id':n,'private_ip':'10.122.0.'+str(n)} for n in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'app:tested','tools_image':'tools:tested','caddy_image':'proxy:tested','etcd_image':'etcd:v3.6.8','kafka_image':'apache/kafka:4.3.1'}
+def inventory():return {'nodes':[{'id':n,'private_ip':'10.122.0.'+str(n)} for n in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'app:tested','tools_image':'tools:tested','caddy_image':'proxy:tested','etcd_image':'etcd:v3.6.8','kafka_image':'apache/kafka:4.3.2'}
 def secrets():return {key:'a'*32 for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://webhook.example']}
 class ClusterConfigurationTest(unittest.TestCase):
     def test_requires_exactly_three_distinct_nodes(self):

@@ -17,7 +17,7 @@ def main(extra_validation=None):
     work=pathlib.Path(tempfile.mkdtemp(prefix='ha-ci-',dir=base));projects=[]
     host_root=output(['docker','volume','inspect','notification-workspaces','--format','{{.Mountpoint}}']) if local else None
     def host_path(path):return host_root+str(path)[len('/workspaces'):] if local else str(path)
-    inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':os.environ.get('HA_APP_IMAGE','notification-ci:unused'),'tools_image':tools,'caddy_image':os.environ.get('HA_PROXY_IMAGE','caddy:2.11.9-alpine'),'etcd_image':etcd,'kafka_image':'apache/kafka:4.3.1'}
+    inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':os.environ.get('HA_APP_IMAGE','notification-ci:unused'),'tools_image':tools,'caddy_image':os.environ.get('HA_PROXY_IMAGE','caddy:2.11.9-alpine'),'etcd_image':etcd,'kafka_image':os.environ.get('HA_KAFKA_IMAGE','apache/kafka:4.3.2')}
     secrets={key:'ci-'+key+'-abcdefghijklmnopqrstuvwxyz0123456789' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://example.com']}
     import base64,uuid
     secrets['kafka_cluster_id']=base64.urlsafe_b64encode(uuid.uuid4().bytes).decode().rstrip('=')

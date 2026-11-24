@@ -1,0 +1,67 @@
+name: Publish verified images
+on:
+  workflow_dispatch:
+    inputs:
+      verification_run_id:
+        description: Successful default-branch Java verification run
+        required: true
+permissions:
+  contents: read
+  actions: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+    steps:
+      - name: Validate trusted verification run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          [[ "$VERIFICATION_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$VERIFICATION_RUN_ID" > verified-run.json
+          jq -e --arg repository "$GH_REPO" --arg branch "$DEFAULT_BRANCH" '.conclusion == "success" and .event == "push" and .path == ".github/workflows/ci.yml" and .head_branch == $branch and .head_repository.full_name == $repository' verified-run.json
+          sha=$(jq -r .head_sha verified-run.json)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'RELEASE_SHA=%s\n' "$sha" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: droplet-release
+          path: release
+          run-id: ${{ env.VERIFICATION_RUN_ID }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ha-runtime
+          path: ha-runtime
+          run-id: ${{ env.VERIFICATION_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify signed release bundles
+        run: |
+          test "$(cat release/release-sha)" = "$RELEASE_SHA"
+          for bundle in release ha-runtime; do
+            openssl pkeyutl -verify -pubin -inkey .github/release-signing.pub -rawin -in "$bundle/SHA256SUMS" -sigfile "$bundle/SHA256SUMS.sig"
+            (cd "$bundle" && sha256sum --check --status SHA256SUMS)
+          done
+      - name: Authenticate private GitHub image registry
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+      - name: Publish exact tested image contents
+        env:
+          REGISTRY_OWNER: ${{ github.repository_owner }}
+        run: python3 deploy/ha/publish-images.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: published-image-digests
+          path: published-images.json
+      - name: Remove registry credentials
+        if: always()
+        run: docker logout ghcr.io

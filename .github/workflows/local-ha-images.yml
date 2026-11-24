@@ -13,10 +13,10 @@ jobs:
       - name: Export official arm64 Kafka and etcd images
         run: |
           mkdir local-vendor
-          docker pull --platform linux/arm64 apache/kafka:4.3.1
+          docker pull --platform linux/arm64 apache/kafka:4.3.2
           docker pull --platform linux/arm64 gcr.io/etcd-development/etcd:v3.7.4
-          docker save apache/kafka:4.3.1 gcr.io/etcd-development/etcd:v3.7.4 | gzip > local-vendor/images.tar.gz
-          docker image inspect apache/kafka:4.3.1 gcr.io/etcd-development/etcd:v3.7.4 > local-vendor/images.json
+          docker save apache/kafka:4.3.2 gcr.io/etcd-development/etcd:v3.7.4 | gzip > local-vendor/images.tar.gz
+          docker image inspect apache/kafka:4.3.2 gcr.io/etcd-development/etcd:v3.7.4 > local-vendor/images.json
           (cd local-vendor && sha256sum images.tar.gz images.json > SHA256SUMS)
       - name: Sign vendor transfer
         env:

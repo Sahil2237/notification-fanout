@@ -2,7 +2,7 @@
 
 ## A. Scope and assumptions
 
-Java 25, Dropwizard 5, PostgreSQL 17 and Kafka 4.3.1. Development lives under `/workspaces` in Rancher Ubuntu 24.04/IntelliJ. Deployment is the approved $24/month Bangalore Droplet, self-hosting Kafka/PostgreSQL. Managed Kafka, ordering and replay are excluded. No public production availability or data-loss SLO has been agreed.
+Java 25, Dropwizard 5, PostgreSQL 17 and Kafka 4.3.2. Development lives under `/workspaces` in Rancher Ubuntu 24.04/IntelliJ. Deployment is the approved $24/month Bangalore Droplet, self-hosting Kafka/PostgreSQL. Managed Kafka, ordering and replay are excluded. No public production availability or data-loss SLO has been agreed.
 
 ## B. Functional acceptance
 

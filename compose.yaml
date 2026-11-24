@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka:4.3.1
+    image: apache/kafka:4.3.2
     hostname: notification-kafka
     environment:
       KAFKA_NODE_ID: 1
@@ -24,7 +24,7 @@ services:
       timeout: 5s
       retries: 30
   kafka-init:
-    image: apache/kafka:4.3.1
+    image: apache/kafka:4.3.2
     depends_on:
       kafka:
         condition: service_healthy

@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 15
     services:
       kafka:
-        image: apache/kafka:4.3.1
+        image: apache/kafka:4.3.2
         ports:
           - 9094:9094
         env:
@@ -145,7 +145,7 @@ jobs:
       HA_TOOLS_IMAGE: notification-ha-tools:${{ github.sha }}
       HA_PROXY_IMAGE: notification-ha-proxy:${{ github.sha }}
       ETCD_IMAGE: gcr.io/etcd-development/etcd:v3.7.4
-      KAFKA_IMAGE: apache/kafka:4.3.1
+      KAFKA_IMAGE: notification-kafka:${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build HA database and backup tools
@@ -178,6 +178,8 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      - name: Build patched Kafka broker
+        run: docker build --platform linux/amd64 -t "$KAFKA_IMAGE" -f deploy/ha/Dockerfile.kafka deploy/ha
       - name: Scan Kafka broker image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
@@ -190,6 +192,7 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Scan etcd quorum image
+        if: ${{ !cancelled() }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           version: v0.76.2

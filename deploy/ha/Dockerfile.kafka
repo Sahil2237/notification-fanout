@@ -1,0 +1,6 @@
+# Stay on the Kafka 4.3 maintenance line and apply supported base OS fixes.
+ARG KAFKA_BASE_IMAGE=apache/kafka:4.3.2
+FROM ${KAFKA_BASE_IMAGE}
+USER root
+RUN apk upgrade --no-cache
+USER 1000
