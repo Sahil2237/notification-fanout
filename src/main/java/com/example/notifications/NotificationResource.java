@@ -20,11 +20,13 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public final class NotificationResource {
+    private final ServiceConfiguration config;
     private final Store store;
     private final WebhookPolicy destinations;
     private final MetricRegistry metrics;
 
-    public NotificationResource(Store store, WebhookPolicy destinations, MetricRegistry metrics) {
+    public NotificationResource(Store store, WebhookPolicy destinations, MetricRegistry metrics, ServiceConfiguration config) {
+        this.config = config;
         this.store = store;
         this.destinations = destinations;
         this.metrics = metrics;
@@ -67,11 +69,16 @@ public final class NotificationResource {
     public Response ingest(
             @Context SecurityContext user,
             @HeaderParam("Idempotency-Key") String key,
-            @NotNull @Valid EventInput input) {
-        if (key != null && (key.isBlank() || key.length() > 200))
+            @NotNull @Valid EventInput input, @Context jakarta.servlet.http.HttpServletRequest request) {
+        if (key != null && (key.isBlank() || key.length() > 200 || key.chars().anyMatch(Character::isISOControl)))
             throw new BadRequestException("Idempotency-Key must contain 1..200 characters");
         try (var ignored = metrics.timer("events.acceptance_latency").time()) {
-            var accepted = store.ingest(user.getUserPrincipal().getName(), input, key);
+            var accepted = store.ingest(config.identity(user.getUserPrincipal().getName()), input, key);
+            request.setAttribute("eventId", accepted.event().id());
+            try (var context = new EventLog(accepted.event().id(),user.getUserPrincipal().getName())) {
+                org.slf4j.LoggerFactory.getLogger(NotificationResource.class).info(
+                        "event_id={} producer_event_id={} event_accepted duplicate={}",accepted.event().id(),input.eventId(),accepted.duplicate());
+            }
             metrics.counter(accepted.duplicate() ? "events.duplicates" : "events.accepted").inc();
             return Response.accepted(accepted)
                     .location(URI.create("/v1/events/" + accepted.event().id()))
@@ -81,14 +88,17 @@ public final class NotificationResource {
 
     @GET
     @Path("/events/{id}")
-    public Event event(@Context SecurityContext user, @PathParam("id") UUID id) {
+    public Event event(@Context SecurityContext user, @PathParam("id") UUID id, @Context jakarta.servlet.http.HttpServletRequest request) {
+        request.setAttribute("eventId", id);
         return store.event(user.getUserPrincipal().getName(), id);
     }
 
     @GET
     @Path("/deliveries/{id}")
-    public Delivery delivery(@Context SecurityContext user, @PathParam("id") UUID id) {
-        return store.delivery(user.getUserPrincipal().getName(), id);
+    public Delivery delivery(@Context SecurityContext user, @PathParam("id") UUID id, @Context jakarta.servlet.http.HttpServletRequest request) {
+        var delivery = store.delivery(user.getUserPrincipal().getName(), id);
+        request.setAttribute("eventId", delivery.eventId());
+        return delivery;
     }
 
     @GET
@@ -97,8 +107,9 @@ public final class NotificationResource {
             @Context SecurityContext user,
             @PathParam("id") UUID id,
             @QueryParam("limit") @DefaultValue("20") int limit,
-            @QueryParam("offset") @DefaultValue("0") int offset) {
+            @QueryParam("offset") @DefaultValue("0") int offset, @Context jakarta.servlet.http.HttpServletRequest request) {
         checkPage(limit, offset);
+        request.setAttribute("eventId", id);
         return page(
                 store.deliveries(user.getUserPrincipal().getName(), id, true, limit + 1, offset),
                 limit,
@@ -117,6 +128,15 @@ public final class NotificationResource {
                 store.deliveries(user.getUserPrincipal().getName(), id, false, limit + 1, offset),
                 limit,
                 offset);
+    }
+
+    @GET
+    @Path("/dead-letters")
+    public Page<DeadLetter> deadLetters(@Context SecurityContext user,
+            @QueryParam("limit") @DefaultValue("20") int limit,
+            @QueryParam("offset") @DefaultValue("0") int offset) {
+        checkPage(limit, offset);
+        return page(store.deadLetters(user.getUserPrincipal().getName(), limit + 1, offset), limit, offset);
     }
 
     private static void checkPage(int limit, int offset) {

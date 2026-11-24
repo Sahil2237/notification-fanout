@@ -34,9 +34,9 @@ public final class ApiErrors implements ExceptionMapper<Exception> {
         if (status >= 500)
             LoggerFactory.getLogger(ApiErrors.class)
                     .warn(
-                            "api_failure status={} error_type={}",
+                            "api_failure status={} error_type={} failure_location={}",
                             status,
-                            error.getClass().getSimpleName());
+                            error.getClass().getSimpleName(), error.getStackTrace().length == 0 ? "unknown" : error.getStackTrace()[0]);
         var requestId =
                 request == null
                         ? UUID.randomUUID().toString()

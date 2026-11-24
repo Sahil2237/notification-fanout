@@ -75,15 +75,35 @@ def main(extra_validation=None):
             return json.loads(output(['docker','exec',client,'python3','-c',code]))
         sql('CREATE TABLE ha_acknowledged_events (id integer PRIMARY KEY)')
         for i in range(100):sql('INSERT INTO ha_acknowledged_events VALUES ('+str(i)+')')
+        def replica_probe(unavailable=False):
+            jar=os.environ.get('HA_APPLICATION_JAR')
+            if not jar:return None
+            java_image=os.environ.get('HA_JAVA_IMAGE','public.ecr.aws/docker/library/eclipse-temurin:25-jdk-noble@sha256:4ddc1a8bdaf283421df5487411aff10b797ccf1e06a339041005114c8f489b5c')
+            command=['docker','run','--rm','--network','notification-ha-ci','--memory','384m','--read-only','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
+                '-e','PGPROBE_HOSTS='+','.join(n['private_ip'] for n in inv['nodes']),'-e','PGPROBE_PASSWORD='+secrets['pg_owner_password'],
+                '-e','PGPROBE_EXPECT_UNAVAILABLE='+str(unavailable).lower(),
+                '-v',host_path(pathlib.Path(jar).resolve())+':/app/application.jar:ro',
+                '-v',host_path(ROOT/'ReadReplicaProbe.java')+':/app/ReadReplicaProbe.java:ro',
+                '-v',host_path(work/'pki/node1/tls/app/postgres-ca.crt')+':/tls/postgres-ca.crt:ro',
+                java_image,'java','-Xlog:os+container=off','-Xmx128m','--class-path','/app/application.jar','/app/ReadReplicaProbe.java']
+            return json.loads(output(command))
+        read_before=replica_probe()
         expected=sql('SELECT id FROM ha_acknowledged_events ORDER BY id')
         victim=int(leader[-1]);run(projects[victim-1]+['stop','--timeout','0','postgres'])
         promoted=await_ready(previous=leader)
         actual=sql('SELECT id FROM ha_acknowledged_events ORDER BY id');assert expected==actual and len(actual)==100
         sql('INSERT INTO ha_acknowledged_events VALUES (100)');assert sql('SELECT count(*) FROM ha_acknowledged_events')[0][0]==101
+        read_after=replica_probe()
+        if os.environ.get('HA_APPLICATION_JAR'):
+            replicas=[int(m['name'][-1]) for m in cluster() if m['name']!=promoted]
+            for replica in replicas:run(projects[replica-1]+['stop','--timeout','0','postgres'])
+            assert replica_probe(unavailable=True)['primary_fallback_refused']
+            for replica in replicas:run(projects[replica-1]+['up','-d','postgres'])
+            await_ready()
         run(projects[victim-1]+['up','-d','postgres'])
         if extra_validation:
             extra_validation({'work':work,'projects':projects,'inventory':inv,'secrets':secrets,'render':module.render,'host_path':host_path,'cluster':cluster,'client':client,'sql':sql})
-        print(json.dumps({'initial_primary':leader,'promoted_primary':promoted,'acknowledged_rows_preserved':100,'new_primary_writable':True,'watchdog_scope':'CI override only; production renderer requires hardware/software watchdog'}))
+        print(json.dumps({'initial_primary':leader,'promoted_primary':promoted,'acknowledged_rows_preserved':100,'new_primary_writable':True,'java_replica_read_before_failover':read_before,'java_replica_read_after_failover':read_after,'watchdog_scope':'CI override only; production renderer requires hardware/software watchdog'}))
     finally:
         for command in projects:
             subprocess.run(command+['logs','--tail','30'],check=False)

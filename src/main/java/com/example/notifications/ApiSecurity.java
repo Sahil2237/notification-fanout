@@ -25,14 +25,18 @@ import java.util.UUID;
 public final class ApiSecurity implements ContainerRequestFilter, ContainerResponseFilter {
     private final ServiceConfiguration config;
     private final Clock clock;
+    private final Store store;
     private final Map<String, Window> windows = new HashMap<>();
     private static final int MAX_BODY = 256 * 1024;
 
     private record Window(long minute, int count) {}
 
     public ApiSecurity(ServiceConfiguration config, Clock clock) {
-        this.config = config;
-        this.clock = clock;
+        this(config, clock, null);
+    }
+    public ApiSecurity(ServiceConfiguration config, Clock clock, Store store) {
+        if (config.production && store == null) throw new IllegalArgumentException("Production requires the shared rate limiter");
+        this.config = config; this.clock = clock; this.store = store;
     }
 
     @Override
@@ -103,13 +107,16 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
         }
     }
 
-    synchronized boolean allow(String tenant) {
+    boolean allow(String tenant) {
+        if (store != null) return store.allowRequest(tenant, config.requestsPerMinute);
+        synchronized (windows) {
         var minute = clock.millis() / 60000;
         var previous = windows.get(tenant);
         var count = previous == null || previous.minute() != minute ? 0 : previous.count();
         if (count >= config.requestsPerMinute) return false;
         windows.put(tenant, new Window(minute, count + 1));
         return true;
+        }
     }
 
     private static void reject(
@@ -134,11 +141,20 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
     public void filter(ContainerRequestContext request, ContainerResponseContext response) {
         response.getHeaders().putSingle("X-Request-ID", request.getProperty("requestId"));
         response.getHeaders().putSingle("Cache-Control", "no-store");
+        var eventId = request.getProperty("eventId");
+        if (eventId != null) response.getHeaders().putSingle("X-Event-ID", eventId.toString());
+        if ("GET".equals(request.getMethod()) && request.getUriInfo().getPath().startsWith("v1/") && !request.getUriInfo().getPath().startsWith("v1/admin/")) {
+            response.getHeaders().putSingle("X-Read-Consistency", "eventual");
+            response.getHeaders().putSingle("X-Read-Source", config.readDatabase == null ? "primary" : "replica");
+        }
+        var principal = request.getSecurityContext().getUserPrincipal();
+        try (var context = eventId == null ? null : new EventLog(UUID.fromString(eventId.toString()),principal == null ? "unknown" : principal.getName())) {
         LoggerFactory.getLogger(ApiSecurity.class)
                 .info(
-                        "request_id={} method={} status={}",
-                        request.getProperty("requestId"),
+                        "request_id={} event_id={} method={} status={}",
+                        request.getProperty("requestId"), eventId,
                         request.getMethod(),
                         response.getStatus());
+        }
     }
 }

@@ -70,6 +70,7 @@ public final class DeliveryWorker implements Managed {
                     pause(200);
                     continue;
                 }
+                try (var context = new EventLog(claim.event().id(), claim.tenant())) {
                 var result = sender.send(claim);
                 var saved = store.finish(claim, result, retries);
                 metrics.counter("delivery.attempts").inc();
@@ -87,6 +88,7 @@ public final class DeliveryWorker implements Managed {
                         result.httpStatus(),
                         result.error(),
                         saved);
+                }
             } catch (RuntimeException e) {
                 metrics.counter("delivery.worker_errors").inc();
                 LOG.warn("worker_iteration_failed error_type={}", e.getClass().getSimpleName());

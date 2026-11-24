@@ -104,7 +104,7 @@ class ServiceIT {
         DB.useHandle(
                 h ->
                         h.execute(
-                                "TRUNCATE delivery_attempts,deliveries,events,subscriptions"
+                                "TRUNCATE fixed_window_limits,delivery_attempts,deliveries,events,subscriptions"
                                     + " CASCADE"));
         CALLS.set(0);
         failUntil = 0;
@@ -303,7 +303,7 @@ class ServiceIT {
         assertTrue(STORE.finish(claim, new Result(400, "http_400"), retry(2)));
         assertEquals(
                 "failed", STORE.deliveries("demo", event.id(), true, 10, 0).getFirst().status());
-        var next = STORE.ingest("demo", input("{}"), null).event();
+        var next = STORE.ingest("demo", input("{}"), "separate-event").event();
         for (var i = 0; i < 2; i++)
             assertTrue(STORE.finish(awaitClaim(), new Result(null, "timeout"), retry(2)));
         var failed = STORE.deliveries("demo", next.id(), true, 10, 0).getFirst();
@@ -625,6 +625,104 @@ class ServiceIT {
             DB.useHandle(h->{h.execute("DROP TRIGGER notification_test_disk_full ON events");h.execute("DROP FUNCTION notification_test_disk_full()");});
         }
         assertEquals(202,api("POST","/v1/events",TOKEN,"{\"type\":\"test\",\"source\":\"storage-test\",\"payload\":{}}").statusCode());
+    }
+
+    @Test void generatedIdempotencyIsCanonicalScopedAndConcurrent() throws Exception {
+        subscribe("demo",Rules.all());
+        var identity=new Identity("demo","user-a","compartment-a");
+        var original=input("{\"b\":2,\"a\":1}");
+        var ids=ConcurrentHashMap.<UUID>newKeySet();
+        try(var pool=Executors.newFixedThreadPool(8)) {
+            var tasks=new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for(var n=0;n<16;n++) tasks.add(pool.submit(()->ids.add(STORE.ingest(identity,original,null).event().id())));
+            for(var task:tasks) task.get(15,TimeUnit.SECONDS);
+        }
+        assertEquals(1,ids.size());
+        assertTrue(STORE.ingest(identity,input("{\"a\":1,\"b\":2}"),null).duplicate());
+        assertFalse(STORE.ingest(new Identity("demo","user-b","compartment-a"),original,null).duplicate());
+        assertFalse(STORE.ingest(new Identity("demo","user-a","compartment-b"),original,null).duplicate());
+        var producer=UUID.randomUUID();
+        var identified=new EventInput("type","source",JSON.readTree("{}"),producer);
+        var accepted=STORE.ingest(identity,identified,null);
+        assertEquals(accepted.event().id(),STORE.ingest(identity,identified,null).event().id());
+        assertEquals(409,assertThrows(WebApplicationException.class,()->STORE.ingest(identity,
+                new EventInput("type","source",JSON.readTree("{\"changed\":true}"),producer),null)).getResponse().getStatus());
+    }
+
+    @Test void independentApplicationInstancesShareFixedWindowAndResetIt() throws Exception {
+        var other=new Store(DB,JSON);
+        var tenant="quota-"+UUID.randomUUID();var allowed=new java.util.concurrent.atomic.AtomicInteger();
+        var minuteBefore=DB.withHandle(h->h.createQuery("SELECT floor(extract(epoch FROM clock_timestamp())/60)::bigint").mapTo(Long.class).one());
+        try(var pool=Executors.newFixedThreadPool(12)) {
+            var tasks=new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for(var n=0;n<100;n++) {var instance=n%2==0?STORE:other;tasks.add(pool.submit(()->{if(instance.allowRequest(tenant,20))allowed.incrementAndGet();}));}
+            for(var task:tasks)task.get(15,TimeUnit.SECONDS);
+        }
+        var minuteAfter=DB.withHandle(h->h.createQuery("SELECT floor(extract(epoch FROM clock_timestamp())/60)::bigint").mapTo(Long.class).one());
+        org.junit.jupiter.api.Assumptions.assumeTrue(minuteBefore.equals(minuteAfter),"Window changed during concurrency probe");
+        assertEquals(20,allowed.get());assertFalse(other.allowRequest(tenant,20));assertTrue(other.allowRequest(tenant+"-other",20));
+        DB.useHandle(h->h.createUpdate("UPDATE fixed_window_limits SET window_number=window_number-1 WHERE tenant_id=:tenant").bind("tenant",tenant).execute());
+        assertTrue(STORE.allowRequest(tenant,20));
+        assertEquals(1,DB.withHandle(h->h.createQuery("SELECT request_count FROM fixed_window_limits WHERE tenant_id=:tenant").bind("tenant",tenant).mapTo(Integer.class).one()).intValue());
+    }
+
+    @Test void subscriberBulkheadIsGlobalAndSchedulerIsFair() throws Exception {
+        var a=subscribe("demo",new Rules("a",null,List.of()));
+        var b=subscribe("demo",new Rules("b",null,List.of()));
+        for(var n=0;n<10;n++) STORE.ingest("demo",new EventInput("a","test",JSON.readTree("{}")),"a-"+n);
+        STORE.ingest("demo",new EventInput("b","test",JSON.readTree("{}")),"b");
+        DB.useHandle(h->{h.createUpdate("UPDATE subscriptions SET last_claimed_at=to_timestamp(0) WHERE id=:id").bind("id",a.id()).execute();h.createUpdate("UPDATE subscriptions SET last_claimed_at=to_timestamp(1) WHERE id=:id").bind("id",b.id()).execute();});
+        var first=STORE.claim(30,6);assertEquals(a.id(),first.subscriptionId());
+        var second=new Store(DB,JSON).claim(30,6);assertEquals(b.id(),second.subscriptionId());
+        // A slow first subscriber cannot take another slot while its lease remains active.
+        assertNull(STORE.claim(30,6));
+        assertTrue(STORE.finish(second,new Result(204,null),retry(6)));
+        assertNull(STORE.claim(30,6));
+        assertTrue(STORE.finish(first,new Result(204,null),retry(6)));
+        assertEquals(a.id(),STORE.claim(30,6).subscriptionId());
+    }
+
+    @Test void sixAttemptsCreateExactlyOneTransactionalDeliveryDeadLetter() throws Exception {
+        subscribe("demo",Rules.all());var event=STORE.ingest("demo",input("{}"),null).event();
+        Claim finalClaim=null;
+        for(var attempt=1;attempt<=6;attempt++) {
+            DB.useHandle(h->h.execute("UPDATE deliveries SET next_attempt_at=clock_timestamp()-interval '1 second'"));
+            var claim=STORE.claim(30,6);assertNotNull(claim);assertEquals(attempt,claim.number());
+            assertTrue(STORE.finish(claim,new Result(503,"http_503"),retry(6)));finalClaim=claim;
+            assertEquals(attempt<6?"pending":"failed",STORE.delivery("demo",claim.id()).status());
+            assertEquals(attempt<6?0:1,STORE.deadLetters("demo",100,0).size());
+        }
+        assertFalse(STORE.finish(finalClaim,new Result(503,"http_503"),retry(6)));
+        var dead=STORE.deadLetters("demo",100,0).getFirst();assertEquals(event.id(),dead.eventId());assertEquals(6,dead.attemptCount());
+        assertEquals("retries_exhausted",dead.reason());assertNull(STORE.claim(30,6));assertTrue(STORE.deadLetters("other",100,0).isEmpty());
+        assertEquals(200,api("GET","/v1/dead-letters",TOKEN,null).statusCode());
+    }
+
+    @Test void failedDlqInsertRollsBackDeliveryAndAttemptCompletion() throws Exception {
+        subscribe("demo",Rules.all());STORE.ingest("demo",input("{}"),null);var claim=STORE.claim(30,6);
+        DB.useHandle(h->{h.execute("CREATE FUNCTION notification_test_dlq_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test DLQ write failure'; END $$");h.execute("CREATE TRIGGER notification_test_dlq_failure BEFORE INSERT ON delivery_dead_letters FOR EACH ROW EXECUTE FUNCTION notification_test_dlq_failure()");});
+        try {assertThrows(RuntimeException.class,()->STORE.finish(claim,new Result(400,"http_400"),retry(6)));}
+        finally {DB.useHandle(h->{h.execute("DROP TRIGGER notification_test_dlq_failure ON delivery_dead_letters");h.execute("DROP FUNCTION notification_test_dlq_failure()");});}
+        var before=STORE.delivery("demo",claim.id());assertEquals("pending",before.status());assertNull(before.attempts().getFirst().finishedAt());
+        assertTrue(STORE.finish(claim,new Result(400,"http_400"),retry(6)));assertEquals(1,STORE.deadLetters("demo",100,0).size());
+    }
+
+    @Test void strictReplicaReadBoundaryRejectsPrimaryButWritesStillWork() throws Exception {
+        var replicaPool=Jdbi.create(System.getenv().getOrDefault("TEST_DB_URL","jdbc:postgresql://notification-db:5432/notifications_test"),
+                System.getenv().getOrDefault("DB_USER","notifications"),System.getenv().getOrDefault("DB_PASSWORD","local-only-change-me"));
+        var routed=new Store(DB,replicaPool,JSON,false,100000,1);
+        var event=routed.ingest("demo",input("{}"),null).event();
+        assertEquals(503,assertThrows(WebApplicationException.class,()->routed.event("demo",event.id())).getResponse().getStatus());
+        assertEquals(event.id(),STORE.event("demo",event.id()).id());
+    }
+
+    @Test void restGeneratedIdempotencyReturnsOriginalIdAndCorrelationHeader() throws Exception {
+        var body="{\"type\":\"correlation\",\"source\":\"test\",\"payload\":{}}";
+        var first=api("POST","/v1/events",TOKEN,body);var second=api("POST","/v1/events",TOKEN,body);
+        assertEquals(202,first.statusCode());assertEquals(202,second.statusCode());
+        var id=JSON.readTree(first.body()).path("event").path("id").asText();
+        assertEquals(id,JSON.readTree(second.body()).path("event").path("id").asText());
+        assertEquals(id,first.headers().firstValue("X-Event-ID").orElseThrow());assertTrue(JSON.readTree(second.body()).path("duplicate").asBoolean());
     }
 
 }

@@ -12,6 +12,7 @@ All /v1 requests require `Authorization: Bearer <token>`. Tenant comes from that
 |GET /v1/deliveries/{id}|—|200 Delivery including attempts|
 |GET /v1/events/{id}/deliveries|limit/offset|200 Page of Delivery|
 |GET /v1/subscriptions/{id}/deliveries|limit/offset|200 Page of Delivery, including deleted subscription history|
+|GET /v1/dead-letters|limit/offset|200 Page of tenant delivery dead letters|
 |GET /health/live|No authentication|200 process alive|
 |GET /health/ready|No authentication|200 ready / 503 DB or worker unavailable|
 
@@ -51,3 +52,6 @@ An independent `ADMIN_TOKEN` authorizes these private endpoints. Tenant tokens r
 |DELETE /v1/admin/webhook-origins?origin=URL_ENCODED_ORIGIN|None|204; unknown origins get a durable revoked row|
 
 Approvals require an origin without path/query/credentials and public HTTPS DNS answers. Connection-time DNS validation still applies to every webhook. Changes persist immediately in PostgreSQL and are audited. Configured seed origins are not reactivated after revocation. Subscription creation and deletion remain ordinary tenant APIs and require no restart.
+
+
+Event requests also accept optional producer `eventId` (UUID). Missing Idempotency-Key now generates a stable, identity-scoped key; see [the full identity contract](reliability-controls.md). The canonical accepted event.id remains the correlation ID returned in X-Event-ID and propagated downstream. User/compartment identity comes from authenticated operator configuration, not untrusted body fields. HA history/list GETs use standby-only reads and may lag; X-Read-Source=replica and X-Read-Consistency=eventual describe this behavior. No replica fallback to primary is performed. New HA transient delivery failures allow six total attempts, then enter the durable delivery DLQ and Kafka notification-deliveries-dlq-v1.

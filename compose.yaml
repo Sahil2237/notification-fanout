@@ -28,8 +28,12 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    entrypoint: ["/opt/kafka/bin/kafka-topics.sh"]
-    command: ["--bootstrap-server", "kafka:9092", "--create", "--if-not-exists", "--topic", "notification-events-v1", "--partitions", "6", "--replication-factor", "1"]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        for topic in notification-events-v1 notification-deliveries-dlq-v1; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 6 --replication-factor 1
+        done
   db:
     image: public.ecr.aws/docker/library/postgres:17@sha256:223efeb196329b55b3b9a13db144956411dbc18e727e59f681c3e0aede6475cf
     environment:

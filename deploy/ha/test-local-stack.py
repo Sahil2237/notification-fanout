@@ -50,8 +50,9 @@ def validate(context):
     def kafka_cli(tool,*args):
         return out(['docker','exec','-e','KAFKA_HEAP_OPTS=-Xms32m -Xmx128m',kafka,'/opt/kafka/bin/'+tool,'--bootstrap-server',','.join(n['private_ip']+':9092' for n in nodes),'--command-config','/tls/admin.properties',*args])
     wait(lambda:kafka_cli('kafka-topics.sh','--list') is not None,'Kafka quorum did not become ready')
-    kafka_cli('kafka-topics.sh','--create','--if-not-exists','--topic','notification-events-v1','--partitions','6','--replication-factor','3','--config','min.insync.replicas=2','--config','unclean.leader.election.enable=false')
-    kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','Read','--operation','Write','--operation','Describe','--topic','notification-events-v1')
+    for topic in ('notification-events-v1','notification-deliveries-dlq-v1'):
+        kafka_cli('kafka-topics.sh','--create','--if-not-exists','--topic',topic,'--partitions','6','--replication-factor','3','--config','min.insync.replicas=2','--config','unclean.leader.election.enable=false')
+        kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','Read','--operation','Write','--operation','Describe','--topic',topic)
     kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','Read','--group','notification-dispatch-v1')
     kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','IdempotentWrite','--cluster')
     description=kafka_cli('kafka-topics.sh','--describe','--topic','notification-events-v1')

@@ -67,7 +67,7 @@ PostgreSQL stores approvals, revocations and their audit. All instances consult 
 
 ## Architecture
 
-See [the complete diagrams](docs/architecture.md). Matching happens in the ingestion transaction; PostgreSQL holds event, jobs and outbox. Kafka uses event UUID keys so one event type is spread over partitions. Consumers commit offsets after their dispatch database transaction. Delivery workers claim due jobs using expiring leases, send signed requests outside the database transaction, and atomically save attempt history and the next state/schedule.
+See [the complete diagrams](docs/architecture.md) and [reliability controls](docs/reliability-controls.md). Matching happens in the ingestion transaction; PostgreSQL holds event, jobs and outbox. Kafka uses event UUID keys so one event type is spread over partitions. Consumers commit offsets after their dispatch database transaction. Delivery workers claim due jobs using expiring leases, send signed requests outside the database transaction, and atomically save attempt history and the next state/schedule.
 
 ## Delivery contract and failure conditions
 
@@ -75,7 +75,7 @@ See [the complete diagrams](docs/architecture.md). Matching happens in the inges
 |---|---|
 |Acceptance|202 only after event + matching jobs + outbox commit; storage errors return a failure|
 |Processing|Durable, duplicate-tolerant processing while PostgreSQL storage survives|
-|Webhook delivery|Up to five total attempts with possible duplicates; permanent failures and exhausted retries become queryable `failed`|
+|Webhook delivery|Up to six total attempts (initial attempt plus five retries) with possible duplicates; permanent failures and exhausted retries become queryable `failed`|
 |At-most-once?|No: uncertain outcomes can cause repeated requests|
 |Exactly-once?|No: a receiver may commit a side effect and lose the response before the sender records success|
 |Unconditional eventual receipt?|No: finite retries, receiver outages, revocation, and loss of all database copies and usable backups can prevent receipt|
@@ -84,7 +84,7 @@ The practical guarantee is **at-least-once-style processing with bounded HTTP de
 
 HTTP 2xx succeeds. Network errors/timeouts, 408, 429 and 5xx retry; redirects and other responses fail permanently. Apache HttpClient automatic retries and redirects are disabled. Each request has a cancellation deadline (default 5 s); claims have a 30 s lease. Backoff is 50–100% jitter on `min(60s, 1s × 2^(attempt-1))`, persisted in PostgreSQL. Unknown/interrupted attempts count toward the total. `Retry-After` is not currently honored. Null HTTP codes mean no response code was durably recorded.
 
-A tenant-scoped idempotency key returns the original event on identical content and 409 on changed content; omitting it allows repeats. Keys last as long as retained events. Payload object property order is canonicalized; numerical representation can affect the content hash. Events with zero matches are retained and traverse Kafka.
+A tenant-scoped explicit idempotency key returns the original event on identical content and 409 on changed content. When omitted, a versioned SHA-256 key is generated from canonical type/source/payload, optional producer eventId, and authenticated tenant/user/compartment identity. Repeated identical content under that identity returns the original event. Send a new producer eventId or explicit key for a genuinely separate occurrence with identical content. A reused producer eventId with changed content returns 409. Keys last as long as retained events. Payload object property order is canonicalized; numerical representation can affect the content hash. Events with zero matches are retained and traverse Kafka.
 
 Outgoing authentication derives `tenant_key = HMAC-SHA256(master, "tenant:" + tenant_id)` and signs `timestamp + "." + raw_body`. Headers include `X-Delivery-ID`, `X-Event-ID`, `X-Webhook-Timestamp`, and `X-Webhook-Signature: v1=<hex>`. Provision only the derived tenant key to its receiver through a secure operator channel. Receivers verify freshness/signature and persist deduplication IDs. The free Webhook.site sink captures test requests; it is not a production receiver implementation.
 
@@ -104,8 +104,8 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 |Runtime administrator origin approvals|Immediate controlled onboarding/revocation|Origin-level permission, not per-path or tenant-specific approval; outbound network enforcement remains useful|
 |Static tenant credentials|Small, explicit authorization model|Operator provisioning/rotation; integrate identity management and tenant-specific quotas for broader service use|
 |Mutual TLS and separate internal authorities|Encrypts/authenticates cluster traffic and separates application/control credentials|Internal certificates last 90 days; renewal and expiry monitoring require operator ownership|
-|Bounded retries, no ordering/replay|Independent, finite delivery work|Terminal failures need an explicit operator redrive policy; ordering/replay remain optional extensions|
-|Per-replica request limit|Simple admission control on each application replica|Three replicas can admit up to three times one replica limit; shared tenant quotas and receiver fairness remain future work|
+|Five retries and transactional delivery DLQ|Terminal failures are queryable and published to a separate Kafka DLQ without losing audit|Permanent failures go directly to DLQ; publication may repeat, so DLQ consumers deduplicate deliveryId; automatic redrive, ordering and replay remain optional|
+|Shared fixed-window request limit|Atomic tenant counters in existing HA PostgreSQL coordinate every application replica without a new Redis failure boundary|A primary write per authenticated request; fixed windows permit a boundary burst and counters share database availability|
 |Daily encrypted Spaces backup and strict 24-hour retention|Independent storage and an authenticated restore procedure|Total cluster loss can lose up to roughly 24 hours; no continuous WAL/PITR, and expiring an old backup before a failed new one can leave none|
 |Explicit retention policy, no automatic deletion|Avoids unapproved data removal|Implement bounded retention after business/audit and idempotency-key expiry requirements are agreed|
 |Logs, metrics and health checks|Inspect requests, backlog and errors|Configure external alerts, dashboards and paging; no unmeasured SLO claim|

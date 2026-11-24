@@ -230,4 +230,20 @@ class CoreTest {
         assertThrows(IllegalArgumentException.class,config::validateSettings);
     }
 
+    @Test void eventLoggingContextRestoresExecutorThreadAfterException() {
+        org.slf4j.MDC.put("event_id","previous");
+        var id=java.util.UUID.randomUUID();
+        assertThrows(IllegalStateException.class,()->{try(var context=new EventLog(id,"tenant")) {
+            assertEquals(id.toString(),org.slf4j.MDC.get("event_id"));throw new IllegalStateException("test");
+        }});
+        assertEquals("previous",org.slf4j.MDC.get("event_id"));org.slf4j.MDC.clear();
+    }
+
+    @Test void replicaPoolCannotSilentlyTargetPrimary() {
+        var config=new ServiceConfiguration();config.readDatabase=new io.dropwizard.db.DataSourceFactory();
+        config.readDatabase.setValidationQuery("SELECT 1");
+        config.readDatabase.setProperties(java.util.Map.of("targetServerType","primary"));
+        assertThrows(IllegalArgumentException.class,config::validateSettings);
+    }
+
 }

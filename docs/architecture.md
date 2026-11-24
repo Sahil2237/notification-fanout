@@ -20,7 +20,11 @@ flowchart LR
  W -->|Attempt audit + delivered / failed / next due time| D
  D -->|Due retry or expired lease| W
  Q[Event/subscription delivery history] --> A
- A -->|Tenant-scoped audit query| D
+ A -->|Tenant-scoped read-only API queries| R[(PostgreSQL standbys)]
+ D -->|Synchronous plus streaming replication| R
+ D -->|Terminal delivery and attempt atomically| DL[(Durable delivery DLQ)]
+ DL --> DP[Leased DLQ publisher]
+ DP -->|deliveryId key and event correlation| DK[Kafka delivery DLQ]
 ```
 
 Subscription matching is synchronous in the ingestion transaction, defining the membership snapshot. HTTP delivery is asynchronous. A broker outage delays dispatch but does not remove accepted DB events. Outbox publication and Kafka consumption may repeat after crashes; database uniqueness prevents duplicate jobs. A successful receiver request whose response/result is lost may be retried: stable delivery identity and receiver deduplication remain essential. Retries are bounded; see README for terminal-failure semantics. Event UUID keys distribute one event type across partitions; per-source ordering is not implemented.
@@ -89,3 +93,6 @@ The load balancer uses two managed nodes and private readiness probes. Caddy sha
 One synthetic local drill verified 106 acknowledged events, actual Kafka/webhook delivery during a simulated node loss, refusal of writes without quorum, recovery, log redaction and encrypted database restoration. Local containers share one Rancher VM, so that does not prove independent host fencing. Separate cloud evidence now records watchdog reboot, promotion to a different primary while its predecessor was powered off, two-broker webhook delivery and a restore from actual Spaces in [submission status](submission-status.md).
 
 Daily Spaces backups provide off-host recovery, not synchronous regional disaster replication. A single-node failure target is zero acknowledged-event loss with a surviving safe quorum; total cluster destruction can lose up to roughly 24 hours. One-day retention cannot recover old corruption, and application-side expiry can be delayed during a whole-cluster outage. Per-source ordering and replay are not implemented.
+
+
+The new control layer uses shared primary-database fixed-window counters and per-subscription reservation rows. HTTP work holds no database transaction. Fair scheduling rotates due subscriptions by last claim; terminal deliveries and durable DLQ records commit together. DLQ publication has a separate retryable outbox and ownership tokens. Public history/list APIs use a bounded, standby-only pool; state transitions, policy and idempotency remain primary operations. See [identity, correlation and consistency details](reliability-controls.md).

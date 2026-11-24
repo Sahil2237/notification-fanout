@@ -35,6 +35,20 @@ class ClusterConfigurationTest(unittest.TestCase):
         self.assertFalse(any('/control' in volume for volume in compose['services']['app']['volumes']))
         self.assertEqual('https',pg['etcd3']['protocol']);self.assertEqual(3,len(pg['etcd3']['hosts'].split(',')))
         command=compose['services']['etcd']['command'];self.assertIn('--client-cert-auth=true',command);self.assertIn('--peer-client-cert-auth=true',command)
+class ApplicationBudgetTest(unittest.TestCase):
+    def test_defaults_and_bounded_pool_overrides_are_rendered(self):
+        compose,_=render.render(inventory(),secrets(),1)
+        env=compose['services']['app']['environment']
+        self.assertEqual('8',env['DB_WRITE_POOL_MAX']);self.assertEqual('4',env['DB_READ_POOL_MAX'])
+        self.assertEqual('1',env['SUBSCRIBER_CONCURRENCY'])
+        custom=inventory();custom['application']={'DB_WRITE_POOL_MAX':12,'DB_READ_POOL_MAX':6,'REQUESTS_PER_MINUTE':60}
+        compose,_=render.render(custom,secrets(),1)
+        self.assertEqual('12',compose['services']['app']['environment']['DB_WRITE_POOL_MAX'])
+    def test_invalid_budget_is_rejected_before_deployment(self):
+        for value in (0,17,True,'8'):
+            custom=inventory();custom['application']={'DB_WRITE_POOL_MAX':value}
+            with self.assertRaises(ValueError):render.render(custom,secrets(),1)
+
 class IdentityMigrationTest(unittest.TestCase):
     def test_preserves_api_signing_and_database_identity(self):
         old={key:key.replace('_','')+'a'*64 for key in ('PG_OWNER_PASSWORD','DB_PASSWORD','ADMIN_TOKEN','API_TOKEN','WEBHOOK_SIGNING_SECRET')};old['WEBHOOK_ORIGINS']='["https://example.com"]'
@@ -48,6 +62,9 @@ class BackupPolicyTest(unittest.TestCase):
     def setUp(self):
         self.now=datetime.datetime(2026,11,24,3,tzinfo=UTC);self.base=backup.PREFIX+'20261124T030000Z-'+'a'*32
     def obj(self,suffix='json',age_hours=0):return {'Key':self.base+'.'+suffix,'LastModified':self.now-datetime.timedelta(hours=age_hours)}
+    def test_durable_delivery_controls_are_in_snapshot_verification(self):
+        self.assertIn('delivery_dead_letters',backup.TABLES);self.assertIn('fixed_window_limits',backup.TABLES)
+        self.assertEqual(11,len(backup.TABLES))
     def test_first_backup_and_incomplete_upload_are_due(self):
         self.assertTrue(backup.due([],self.now));self.assertTrue(backup.due([self.obj('tar.age')],self.now))
     def test_does_not_repeat_a_successful_daily_backup(self):self.assertFalse(backup.due([self.obj()],self.now))

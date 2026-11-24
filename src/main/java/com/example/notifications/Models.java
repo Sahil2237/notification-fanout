@@ -15,7 +15,11 @@ public final class Models {
     public record EventInput(
             @NotBlank @Size(max = 128) String type,
             @NotBlank @Size(max = 128) String source,
-            @NotNull JsonNode payload) {}
+            @NotNull JsonNode payload, UUID eventId) {
+        public EventInput(String type, String source, JsonNode payload) { this(type, source, payload, null); }
+    }
+
+    public record Identity(String tenant, String userId, String compartmentId) {}
 
     public record Condition(
             @NotNull @Size(max = 256) String path,
@@ -77,6 +81,9 @@ public final class Models {
             UUID token,
             int number,
             Event event) {}
+
+    public record DeadLetter(UUID deliveryId, UUID eventId, UUID subscriptionId, int attemptCount,
+            String reason, Instant failedAt, Instant publishedAt) {}
 
     public record Result(Integer httpStatus, String error) {}
 

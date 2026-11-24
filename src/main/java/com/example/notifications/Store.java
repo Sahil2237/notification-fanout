@@ -24,6 +24,8 @@ import java.util.UUID;
 
 public final class Store {
     private final Jdbi db;
+    private final Jdbi reads;
+    private final int subscriberConcurrency;
     private final ObjectMapper json;
     private final boolean kafkaRequired;
     private final int maxQueuedEvents;
@@ -36,7 +38,12 @@ public final class Store {
         this(db,json,kafkaRequired,100000);
     }
     public Store(Jdbi db,ObjectMapper json,boolean kafkaRequired,int maxQueuedEvents) {
+        this(db, db, json, kafkaRequired, maxQueuedEvents, 1);
+    }
+    public Store(Jdbi db, Jdbi reads, ObjectMapper json, boolean kafkaRequired, int maxQueuedEvents, int subscriberConcurrency) {
         this.db = db;
+        this.reads = reads;
+        this.subscriberConcurrency = subscriberConcurrency;
         this.json = json;
         this.kafkaRequired = kafkaRequired;
         this.maxQueuedEvents=maxQueuedEvents;
@@ -107,7 +114,7 @@ public final class Store {
     }
 
     public List<Subscription> subscriptions(String tenant, int limit, int offset) {
-        return db.withHandle(
+        return read(
                 h ->
                         h.createQuery(
                                         "SELECT * FROM subscriptions WHERE tenant_id=:tenant AND"
@@ -121,7 +128,7 @@ public final class Store {
     }
 
     public Subscription subscription(String tenant, UUID id) {
-        return db.withHandle(h -> subscription(h, tenant, id));
+        return read(h -> subscription(h, tenant, id));
     }
 
     private Subscription subscription(Handle h, String tenant, UUID id) {
@@ -149,16 +156,21 @@ public final class Store {
     }
 
     public Accepted ingest(String tenant, EventInput input, String key) {
+        return ingest(new Identity(tenant, tenant, "default"), input, key);
+    }
+    public Accepted ingest(Identity identity, EventInput input, String suppliedKey) {
+        var tenant = identity.tenant();
         var hash = hash(input);
+        var key = suppliedKey == null ? generatedKey(identity, input) : suppliedKey;
         return db.inTransaction(
                 h -> {
                     var id = UUID.randomUUID();
                     var inserted =
                             h.createUpdate(
                                             """
-                                            INSERT INTO events(id,tenant_id,type,source,payload,idempotency_key,content_hash)
-                                            VALUES(:id,:tenant,:type,:source,CAST(:payload AS jsonb),:key,:hash)
-                                            ON CONFLICT (tenant_id,idempotency_key) DO NOTHING
+                                            INSERT INTO events(id,tenant_id,type,source,payload,idempotency_key,content_hash,producer_event_id,user_id,compartment_id)
+                                            VALUES(:id,:tenant,:type,:source,CAST(:payload AS jsonb),:key,:hash,CAST(:producer AS uuid),:user,:compartment)
+                                            ON CONFLICT DO NOTHING
                                             """)
                                     .bind("id", id)
                                     .bind("tenant", tenant)
@@ -166,21 +178,23 @@ public final class Store {
                                     .bind("source", input.source())
                                     .bind("payload", encode(input.payload()))
                                     .bind("key", key)
+                                    .bind("producer", input.eventId())
+                                    .bind("user", identity.userId())
+                                    .bind("compartment", identity.compartmentId())
                                     .bind("hash", hash)
                                     .execute();
                     if (inserted == 0) {
-                        var existing =
-                                h.createQuery(
-                                                "SELECT id,content_hash FROM events WHERE"
-                                                    + " tenant_id=:tenant AND idempotency_key=:key")
-                                        .bind("tenant", tenant)
-                                        .bind("key", key)
-                                        .mapToMap()
-                                        .one();
-                        if (!hash.equals(existing.get("content_hash"))) {
-                            throw new WebApplicationException(
-                                    "Idempotency key already used for different content", 409);
-                        }
+                        var existing = h.createQuery("""
+                                SELECT * FROM events WHERE tenant_id=:tenant AND
+                                (idempotency_key=:key OR (producer_event_id=CAST(:producer AS uuid) AND user_id=:user AND compartment_id=:compartment))
+                                ORDER BY (idempotency_key=:key) DESC LIMIT 1
+                                """)
+                                .bind("tenant",tenant).bind("key",key).bind("producer",input.eventId())
+                                .bind("user",identity.userId()).bind("compartment",identity.compartmentId()).mapToMap().one();
+                        if (!hash.equals(existing.get("content_hash"))
+                                || existing.get("user_id") != null && (!identity.userId().equals(existing.get("user_id"))
+                                || !identity.compartmentId().equals(existing.get("compartment_id"))))
+                            throw new WebApplicationException("Event identity or idempotency key conflicts with original content", 409);
                         return new Accepted(event(h, tenant, (UUID) existing.get("id")), true);
                     }
                     if(kafkaRequired && h.createQuery("SELECT count(*) FROM event_outbox WHERE dispatched_at IS NULL")
@@ -218,7 +232,7 @@ public final class Store {
     }
 
     public Event event(String tenant, UUID id) {
-        return db.withHandle(h -> event(h, tenant, id));
+        return read(h -> event(h, tenant, id));
     }
 
     private Event event(Handle h, String tenant, UUID id) {
@@ -231,7 +245,7 @@ public final class Store {
     }
 
     public Delivery delivery(String tenant, UUID id) {
-        return db.withHandle(h -> delivery(h, tenant, id));
+        return read(h -> delivery(h, tenant, id));
     }
 
     private Delivery delivery(Handle h, String tenant, UUID id) {
@@ -270,7 +284,7 @@ public final class Store {
 
     public List<Delivery> deliveries(
             String tenant, UUID owner, boolean byEvent, int limit, int offset) {
-        return db.withHandle(
+        return read(
                 h -> {
                     if (byEvent) event(h, tenant, owner);
                     else subscription(h, tenant, owner);
@@ -294,17 +308,28 @@ public final class Store {
     public Claim claim(int leaseSeconds, int maxAttempts) {
         return db.inTransaction(
                 h -> {
-                    var id =
-                            h.createQuery(
-                                            """
-                                            SELECT id FROM deliveries WHERE status='pending' AND dispatch_ready AND lease_token IS NULL
-                                            AND next_attempt_at<=clock_timestamp() AND attempts<:max
-                                            ORDER BY next_attempt_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
-                                            """)
-                                    .bind("max", maxAttempts)
-                                    .mapTo(UUID.class)
-                                    .findOne();
+                    // Serialize reservations per subscriber across all replicas, then recheck with a fresh statement.
+                    var subscriber = h.createQuery("""
+                            SELECT s.id FROM subscriptions s WHERE EXISTS (
+                              SELECT 1 FROM deliveries d WHERE d.subscription_id=s.id AND d.status='pending'
+                              AND d.dispatch_ready AND d.lease_token IS NULL AND d.attempts<:max
+                              AND d.next_attempt_at<=clock_timestamp())
+                            AND (SELECT count(*) FROM deliveries active WHERE active.subscription_id=s.id
+                              AND active.status='pending' AND active.lease_expires_at>clock_timestamp()) < :cap
+                            ORDER BY s.last_claimed_at NULLS FIRST,s.id LIMIT 1 FOR UPDATE OF s SKIP LOCKED
+                            """).bind("max",maxAttempts).bind("cap",subscriberConcurrency).mapTo(UUID.class).findOne();
+                    if (subscriber.isEmpty()) return null;
+                    var active = h.createQuery("SELECT count(*) FROM deliveries WHERE subscription_id=:sub AND status='pending' AND lease_expires_at>clock_timestamp()")
+                            .bind("sub",subscriber.get()).mapTo(Integer.class).one();
+                    if (active >= subscriberConcurrency) return null;
+                    var id = h.createQuery("""
+                            SELECT id FROM deliveries WHERE subscription_id=:sub AND status='pending' AND dispatch_ready
+                            AND lease_token IS NULL AND next_attempt_at<=clock_timestamp() AND attempts<:max
+                            ORDER BY next_attempt_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+                            """).bind("sub",subscriber.get()).bind("max",maxAttempts).mapTo(UUID.class).findOne();
                     if (id.isEmpty()) return null;
+                    h.createUpdate("UPDATE subscriptions SET last_claimed_at=clock_timestamp() WHERE id=:id")
+                            .bind("id",subscriber.get()).execute();
                     var token = UUID.randomUUID();
                     var row =
                             h.createQuery(
@@ -379,6 +404,8 @@ public final class Store {
                             .bind("id", claim.id())
                             .bind("number", claim.number())
                             .execute();
+                    if ("failed".equals(status)) deadLetter(h, claim.id(),
+                            claim.number() >= policy.maxAttempts() ? "retries_exhausted" : "permanent_failure");
                     return true;
                 });
     }
@@ -417,6 +444,11 @@ public final class Store {
                                         + " AND lease_token IS NULL AND attempts>=:max")
                             .bind("max", maxAttempts)
                             .execute();
+                    h.createUpdate("""
+                            INSERT INTO delivery_dead_letters(delivery_id,tenant_id,event_id,subscription_id,attempt_count,reason)
+                            SELECT id,tenant_id,event_id,subscription_id,attempts,'lease_expired_or_retry_limit'
+                            FROM deliveries WHERE status='failed' ON CONFLICT DO NOTHING
+                            """).execute();
                     return rows.size();
                 });
     }
@@ -553,9 +585,78 @@ public final class Store {
         }
     }
 
+    private <T> T read(java.util.function.Function<Handle,T> query) {
+        return reads.inTransaction(org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ, h -> {
+            h.execute("SET TRANSACTION READ ONLY");
+            if (reads != db && !h.createQuery("SELECT pg_is_in_recovery()").mapTo(Boolean.class).one())
+                throw new WebApplicationException("Read replica temporarily unavailable",503);
+            var result = query.apply(h);
+            if (reads != db && !h.createQuery("SELECT pg_is_in_recovery()").mapTo(Boolean.class).one())
+                throw new WebApplicationException("Read replica changed role during query",503);
+            return result;
+        });
+    }
+
+    public String generatedKey(Identity identity, EventInput input) {
+        try {
+            // No random server-generated ID enters this hash: retries must produce the same key.
+            return "auto-v1:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(
+                    encode(List.of(identity.tenant(),identity.userId(),identity.compartmentId(),hash(input))).getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
+    public boolean allowRequest(String tenant, int limit) {
+        return db.withHandle(h -> h.createQuery("""
+                INSERT INTO fixed_window_limits(tenant_id,window_number,request_count)
+                VALUES(:tenant,floor(extract(epoch FROM clock_timestamp())/60)::bigint,1)
+                ON CONFLICT(tenant_id) DO UPDATE SET window_number=EXCLUDED.window_number,
+                request_count=CASE WHEN fixed_window_limits.window_number=EXCLUDED.window_number
+                  THEN fixed_window_limits.request_count+1 ELSE 1 END
+                WHERE fixed_window_limits.window_number<>EXCLUDED.window_number OR fixed_window_limits.request_count<:limit
+                RETURNING request_count
+                """).bind("tenant",tenant).bind("limit",limit).mapTo(Integer.class).findOne().isPresent());
+    }
+
+    private void deadLetter(Handle h, UUID delivery, String reason) {
+        h.createUpdate("""
+                INSERT INTO delivery_dead_letters(delivery_id,tenant_id,event_id,subscription_id,attempt_count,reason)
+                SELECT id,tenant_id,event_id,subscription_id,attempts,:reason FROM deliveries WHERE id=:id
+                ON CONFLICT DO NOTHING
+                """).bind("id",delivery).bind("reason",reason).execute();
+    }
+
+    public List<DeadLetter> deadLetters(String tenant,int limit,int offset) {
+        return read(h -> h.createQuery("SELECT * FROM delivery_dead_letters WHERE tenant_id=:tenant ORDER BY failed_at,delivery_id LIMIT :limit OFFSET :offset")
+                .bind("tenant",tenant).bind("limit",limit).bind("offset",offset)
+                .map((r,c) -> new DeadLetter(r.getObject("delivery_id",UUID.class),r.getObject("event_id",UUID.class),
+                        r.getObject("subscription_id",UUID.class),r.getInt("attempt_count"),r.getString("reason"),time(r,"failed_at"),time(r,"published_at"))).list());
+    }
+
+    public record DeadLetterPublish(UUID deliveryId, UUID token, String tenant, Event event, int attempts, String reason) {}
+
+    public DeadLetterPublish claimDeadLetter() {
+        return db.inTransaction(h -> {
+            var row=h.createQuery("SELECT * FROM delivery_dead_letters WHERE published_at IS NULL AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp()) ORDER BY failed_at,delivery_id LIMIT 1 FOR UPDATE SKIP LOCKED")
+                    .mapToMap().findOne();
+            if(row.isEmpty()) return null;
+            var value=row.get();var token=UUID.randomUUID();var id=(UUID)value.get("delivery_id");var tenant=(String)value.get("tenant_id");
+            h.createUpdate("UPDATE delivery_dead_letters SET lease_token=:token,lease_expires_at=clock_timestamp()+interval '30 seconds',publish_attempts=publish_attempts+1 WHERE delivery_id=:id")
+                    .bind("token",token).bind("id",id).execute();
+            return new DeadLetterPublish(id,token,tenant,event(h,tenant,(UUID)value.get("event_id")),(Integer)value.get("attempt_count"),(String)value.get("reason"));
+        });
+    }
+
+    public void finishDeadLetter(DeadLetterPublish claim) {
+        db.useHandle(h -> h.createUpdate("UPDATE delivery_dead_letters SET published_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL WHERE delivery_id=:id AND lease_token=:token AND lease_expires_at>clock_timestamp()")
+                .bind("id",claim.deliveryId()).bind("token",claim.token()).execute());
+    }
+
     private String hash(EventInput input) {
         try {
-            var canonical = canonical(json.valueToTree(input));
+            var content = json.createObjectNode().put("type",input.type()).put("source",input.source());
+            content.set("payload",input.payload());
+            if (input.eventId() != null) content.put("eventId",input.eventId().toString());
+            var canonical = canonical(content);
             return HexFormat.of()
                     .formatHex(
                             MessageDigest.getInstance("SHA-256")

@@ -40,6 +40,13 @@ def render(inventory,secrets,node_id):
     db_url='jdbc:postgresql://'+','.join(n['private_ip']+':5432' for n in nodes)+'/notifications'
     env={'DB_URL':db_url,'DB_USER':'notification_runtime','DB_PASSWORD':secrets['db_password'],'API_TOKEN':secrets['api_token'],'ADMIN_TOKEN':secrets['admin_token'],'WEBHOOK_SIGNING_SECRET':secrets['signing_secret'],'WEBHOOK_ORIGINS':json.dumps(secrets['webhook_origins']),
        'KAFKA_BOOTSTRAP_SERVERS':','.join(n['private_ip']+':9092' for n in nodes),'JAVA_TOOL_OPTIONS':'-Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError'}
+    settings=inventory.get('application',{})
+    for name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000)]:
+        value=settings.get(name,default)
+        if type(value) is not int or value<1 or value>maximum:raise ValueError('Invalid bounded application setting: '+name)
+        env[name]=str(value)
+    env['SERVICE_USER_ID']=secrets.get('service_user_id','service')
+    env['SERVICE_COMPARTMENT_ID']=secrets.get('service_compartment_id','default')
     common={'network_mode':'host','restart':'unless-stopped','logging':{'driver':'json-file','options':{'max-size':'10m','max-file':'3'}}}
     etcd_cmd=['etcd','--name='+name,'--data-dir=/data','--listen-client-urls=https://'+ip+':2379','--advertise-client-urls=https://'+ip+':2379','--listen-peer-urls=https://'+ip+':2380','--initial-advertise-peer-urls=https://'+ip+':2380','--initial-cluster='+','.join('node'+str(n['id'])+'=https://'+n['private_ip']+':2380' for n in nodes),'--initial-cluster-token=notification-ha-v1','--initial-cluster-state=new','--cert-file=/tls/control.crt','--key-file=/tls/control.key','--trusted-ca-file=/tls/control-ca.crt','--client-cert-auth=true','--peer-cert-file=/tls/control.crt','--peer-key-file=/tls/control.key','--peer-trusted-ca-file=/tls/control-ca.crt','--peer-client-cert-auth=true','--auto-compaction-retention=1','--quota-backend-bytes=268435456']
     compose={'name':'notification-ha','services':{

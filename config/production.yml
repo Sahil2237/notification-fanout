@@ -20,7 +20,7 @@ allowLocalWebhooks: false
 signingSecret: ${WEBHOOK_SIGNING_SECRET}
 workerEnabled: ${WORKER_ENABLED:-false}
 workerThreads: ${WORKER_THREADS:-8}
-maxAttempts: 5
+maxAttempts: 6
 leaseSeconds: 30
 requestTimeoutSeconds: 5
 retryBaseMillis: 1000
@@ -52,3 +52,5 @@ logging:
     - type: console
       layout:
         type: json
+        includesMdcKeys: [event_id, tenant_id]
+        flattenMdc: true

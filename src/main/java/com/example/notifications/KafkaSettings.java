@@ -10,6 +10,7 @@ public class KafkaSettings {
     @JsonProperty public boolean consumerEnabled = true;
     @NotBlank @JsonProperty public String bootstrapServers = "notification-kafka:9092";
     @NotBlank @JsonProperty public String topic = "notification-events-v1";
+    @NotBlank @JsonProperty public String deadLetterTopic = "notification-deliveries-dlq-v1";
     @NotBlank @JsonProperty public String groupId = "notification-dispatch-v1";
     @Pattern(regexp="PLAINTEXT|SASL_SSL|SSL") @JsonProperty public String securityProtocol = "PLAINTEXT";
     @JsonProperty public String username = "";

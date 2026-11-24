@@ -4,4 +4,14 @@
   <changeSet id="002-kafka-outbox" author="notification-fanout"><sqlFile path="migrations/002_kafka_outbox.sql"/></changeSet>
   <changeSet id="003-outbox-reconciliation" author="notification-fanout"><sqlFile path="migrations/003_outbox_reconciliation.sql"/></changeSet>
   <changeSet id="004-webhook-origins" author="notification-fanout"><sqlFile path="migrations/004_webhook_origins.sql"/></changeSet>
+  <changeSet id="005-delivery-controls" author="notification-fanout"><sqlFile path="migrations/005_delivery_controls.sql"/></changeSet>
+  <changeSet id="006-control-grants" author="notification-fanout">
+    <sql splitStatements="false"><![CDATA[
+      DO $grant$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='notification_runtime') THEN
+          GRANT SELECT,INSERT,UPDATE,DELETE ON fixed_window_limits,delivery_dead_letters TO notification_runtime;
+        END IF;
+      END $grant$;
+    ]]></sql>
+  </changeSet>
 </databaseChangeLog>

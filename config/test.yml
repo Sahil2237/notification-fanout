@@ -39,6 +39,8 @@ logging:
     - type: console
       layout:
         type: json
+        includesMdcKeys: [event_id, tenant_id]
+        flattenMdc: true
 
 kafka:
   enabled: false

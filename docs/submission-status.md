@@ -1,5 +1,7 @@
 # Verified HA deployment
 
+**Controls update in progress:** shared fixed-window limits, generated identity keys, subscriber bulkheads, a delivery DLQ and replica-only API reads are implemented in the new source. Cloud production remains bd082b6 until a verified coordinated cutover. See [the new contract](reliability-controls.md).
+
 Verified on **24 November 2026 IST** after explicit authorization to replicate existing service credentials/data and activate HA. The earlier instruction to retain the single-host service was superseded by that authorization. No additional paid resources were created during activation.
 
 - Live REST base: **https://174.138.121.225**; [readiness](https://174.138.121.225/health/ready). Normal public certificate validation passed.

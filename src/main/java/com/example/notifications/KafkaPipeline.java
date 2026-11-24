@@ -36,7 +36,7 @@ public final class KafkaPipeline implements Managed {
 
     public KafkaPipeline(Store store,ObjectMapper json,KafkaSettings config,MetricRegistry metrics) {
         this.store=store;this.json=json;this.config=config;this.metrics=metrics;
-        executor=Executors.newFixedThreadPool(config.publisherThreads+1);
+        executor=Executors.newFixedThreadPool(config.publisherThreads+2);
     }
     @Override public void start() {
         if(config.publisherEnabled) {
@@ -66,6 +66,7 @@ public final class KafkaPipeline implements Managed {
         }
         running=true;
         if(producer!=null) for(var i=0;i<config.publisherThreads;i++) executor.submit(this::publishLoop);
+        if(producer!=null) executor.submit(this::deadLetterLoop);
         if(consumer!=null) executor.submit(this::consumeLoop);
     }
     private void publishLoop() {
@@ -74,17 +75,21 @@ public final class KafkaPipeline implements Managed {
             try {
                 outbox=store.claimOutbox();
                 if(outbox==null) {pause(100);continue;}
+                try (var context = new EventLog(outbox.eventId(), outbox.tenant())) {
                 var envelope=json.createObjectNode().put("schemaVersion",1).put("tenantId",outbox.tenant());
                 envelope.set("event",json.valueToTree(outbox.event()));
-                producer.send(new ProducerRecord<>(config.topic,outbox.eventId().toString(),json.writeValueAsString(envelope)))
-                    .get(10,TimeUnit.SECONDS);
+                var record = new ProducerRecord<String,String>(config.topic,outbox.eventId().toString(),json.writeValueAsString(envelope));
+                record.headers().add("X-Event-ID",outbox.eventId().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                producer.send(record).get(10,TimeUnit.SECONDS);
                 store.finishPublish(outbox,true);
                 metrics.counter("kafka.published").inc();
+                LOG.info("event_id={} kafka_published topic={}",outbox.eventId(),config.topic);
+                }
             } catch(InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch(Exception e) {
                 metrics.counter("kafka.publish_errors").inc();
-                LOG.warn("kafka_publish_failed error_type={}",e.getClass().getSimpleName());
+                LOG.warn("event_id={} kafka_publish_failed error_type={}",outbox==null?null:outbox.eventId(),e.getClass().getSimpleName());
                 if(outbox!=null) {
                     try {store.finishPublish(outbox,false);}
                     catch(RuntimeException dbError) {LOG.warn("outbox_release_failed; lease recovery will retry");}
@@ -93,6 +98,33 @@ public final class KafkaPipeline implements Managed {
             }
         }
     }
+    private void deadLetterLoop() {
+        while (running && !Thread.currentThread().isInterrupted()) {
+            Store.DeadLetterPublish claim = null;
+            try {
+                claim = store.claimDeadLetter();
+                if (claim == null) { pause(250); continue; }
+                try (var context = new EventLog(claim.event().id(),claim.tenant())) {
+                    var envelope=json.createObjectNode().put("schemaVersion",1).put("tenantId",claim.tenant())
+                            .put("deliveryId",claim.deliveryId().toString()).put("attemptCount",claim.attempts()).put("reason",claim.reason());
+                    envelope.set("event",json.valueToTree(claim.event()));
+                    var record=new ProducerRecord<String,String>(config.deadLetterTopic,claim.deliveryId().toString(),json.writeValueAsString(envelope));
+                    record.headers().add("X-Event-ID",claim.event().id().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    producer.send(record).get(10,TimeUnit.SECONDS);
+                    store.finishDeadLetter(claim);
+                    metrics.counter("kafka.dead_letters_published").inc();
+                    LOG.info("event_id={} delivery_id={} dead_letter_published topic={}",claim.event().id(),claim.deliveryId(),config.deadLetterTopic);
+                }
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            catch (Exception e) {
+                metrics.counter("kafka.dead_letter_publish_errors").inc();
+                LOG.warn("event_id={} dead_letter_publish_failed error_type={}",claim==null?null:claim.event().id(),e.getClass().getSimpleName());
+                // Durable row stays unpublished; its bounded lease permits another publisher to retry.
+                pause(1000);
+            }
+        }
+    }
+
     private void consumeLoop() {
         try {
             consumer.subscribe(List.of(config.topic),new org.apache.kafka.clients.consumer.ConsumerRebalanceListener() {
@@ -128,15 +160,18 @@ public final class KafkaPipeline implements Managed {
                                     metrics.counter("kafka.quarantined").inc();
                                 }
                                 if(eventId!=null) {
-                                    store.activateDispatch(tenant,eventId);
-                                    metrics.counter("kafka.dispatched").inc();
+                                    try (var context = new EventLog(eventId,tenant)) {
+                                        store.activateDispatch(tenant,eventId);
+                                        metrics.counter("kafka.dispatched").inc();
+                                        LOG.info("event_id={} kafka_dispatched partition={} offset={}",eventId,record.partition(),record.offset());
+                                    }
                                 }
                                 // DB commit precedes the offset commit. Redelivery is harmless.
                                 consumer.commitSync(Map.of(partition,new OffsetAndMetadata(record.offset()+1)));
                             } catch(RuntimeException e) {
                                 if(!running) break;
                                 metrics.counter("kafka.dispatch_errors").inc();
-                                LOG.warn("kafka_dispatch_failed partition={} offset={} error_type={}",record.partition(),record.offset(),e.getClass().getSimpleName());
+                                LOG.warn("event_id={} kafka_dispatch_failed partition={} offset={} error_type={}",record.key(),record.partition(),record.offset(),e.getClass().getSimpleName());
                                 consumer.seek(partition,record.offset());
                                 pause(500);
                                 break;

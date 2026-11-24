@@ -54,7 +54,8 @@ public final class NotificationApplication extends Application<ServiceConfigurat
         config.validateSettings();
         config.prepareDatabaseSecurity();
         var db = new JdbiFactory().build(environment, config.database, "postgresql");
-        var store = new Store(db, environment.getObjectMapper(), config.kafka.enabled,config.maxQueuedEvents);
+        var reads = config.readDatabase == null ? db : new JdbiFactory().build(environment, config.readDatabase, "postgresql-replicas");
+        var store = new Store(db, reads, environment.getObjectMapper(), config.kafka.enabled, config.maxQueuedEvents, config.subscriberConcurrency);
         KafkaPipeline pipeline=null;
         if(config.kafka.enabled) {
             pipeline=new KafkaPipeline(store,environment.getObjectMapper(),config.kafka,environment.metrics());
@@ -71,11 +72,11 @@ public final class NotificationApplication extends Application<ServiceConfigurat
             worker = new DeliveryWorker(store, sender, config, environment.metrics());
             environment.lifecycle().manage(worker);
         }
-        environment.jersey().register(new ApiSecurity(config, Clock.systemUTC()));
+        environment.jersey().register(new ApiSecurity(config, Clock.systemUTC(), store));
         environment.jersey().register(new ApiErrors());
         environment
                 .jersey()
-                .register(new NotificationResource(store, destinations, environment.metrics()));
+                .register(new NotificationResource(store, destinations, environment.metrics(), config));
         environment.jersey().register(new HealthResource(store, worker, pipeline));
         environment
                 .healthChecks()

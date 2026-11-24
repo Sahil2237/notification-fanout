@@ -8,7 +8,7 @@ database:
   password: ${DB_PASSWORD}
   initialSize: 1
   minSize: 1
-  maxSize: 8
+  maxSize: ${DB_WRITE_POOL_MAX:-8}
   validationQuery: SELECT 1 / ((NOT pg_is_in_recovery())::int)
   checkConnectionOnBorrow: true
   validationInterval: 1 second
@@ -22,6 +22,34 @@ database:
     connectTimeout: 3
     socketTimeout: 10
     options: -c statement_timeout=5000 -c lock_timeout=3000
+readDatabase:
+  driverClass: org.postgresql.Driver
+  url: ${DB_URL}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  initialSize: 0
+  minSize: 0
+  maxSize: ${DB_READ_POOL_MAX:-4}
+  validationQuery: SELECT 1 / (pg_is_in_recovery()::int)
+  checkConnectionOnBorrow: true
+  validationInterval: 0 seconds
+  validationQueryTimeout: 2 seconds
+  maxWaitForConnection: 3 seconds
+  maxConnectionAge: 60 seconds
+  properties:
+    sslmode: verify-full
+    targetServerType: secondary
+    loadBalanceHosts: 'true'
+    readOnly: 'true'
+    hostRecheckSeconds: 2
+    connectTimeout: 3
+    socketTimeout: 10
+    options: -c statement_timeout=5000 -c lock_timeout=3000
+subscriberConcurrency: ${SUBSCRIBER_CONCURRENCY:-1}
+userIds:
+  service: ${SERVICE_USER_ID:-service}
+compartmentIds:
+  service: ${SERVICE_COMPARTMENT_ID:-default}
 credentials:
   service: ${API_TOKEN}
 allowedWebhookOrigins: ${WEBHOOK_ORIGINS}
@@ -29,7 +57,7 @@ allowLocalWebhooks: false
 signingSecret: ${WEBHOOK_SIGNING_SECRET}
 workerEnabled: ${WORKER_ENABLED:-true}
 workerThreads: ${WORKER_THREADS:-4}
-maxAttempts: 5
+maxAttempts: 6
 leaseSeconds: 30
 requestTimeoutSeconds: 5
 retryBaseMillis: 1000
@@ -61,3 +89,5 @@ logging:
     - type: console
       layout:
         type: json
+        includesMdcKeys: [event_id, tenant_id]
+        flattenMdc: true

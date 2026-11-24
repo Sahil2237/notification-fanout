@@ -20,7 +20,7 @@ allowLocalWebhooks: true
 signingSecret: ${WEBHOOK_SIGNING_SECRET:-local-signing-secret-change-me}
 workerEnabled: ${WORKER_ENABLED:-true}
 workerThreads: 8
-maxAttempts: 5
+maxAttempts: 6
 leaseSeconds: 30
 requestTimeoutSeconds: 5
 retryBaseMillis: 1000
@@ -39,6 +39,8 @@ logging:
     - type: console
       layout:
         type: json
+        includesMdcKeys: [event_id, tenant_id]
+        flattenMdc: true
 
 kafka:
   enabled: true

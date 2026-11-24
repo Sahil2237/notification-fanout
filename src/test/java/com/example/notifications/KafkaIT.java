@@ -43,15 +43,15 @@ class KafkaIT {
     }
     @AfterAll static void stopApi(){APP.after();}
     @BeforeEach void prepareTopic() throws Exception {
-        DB.useHandle(h->h.execute("TRUNCATE kafka_dead_letters,delivery_attempts,deliveries,events,subscriptions CASCADE"));
+        DB.useHandle(h->h.execute("TRUNCATE fixed_window_limits,kafka_dead_letters,delivery_attempts,deliveries,events,subscriptions CASCADE"));
         settings=new KafkaSettings();
         settings.bootstrapServers=System.getenv().getOrDefault("TEST_KAFKA_BOOTSTRAP_SERVERS","notification-kafka:9092");
-        settings.topic="notification-test-"+UUID.randomUUID();settings.groupId="test-"+UUID.randomUUID();
+        settings.topic="notification-test-"+UUID.randomUUID();settings.deadLetterTopic=settings.topic+"-dlq";settings.groupId="test-"+UUID.randomUUID();
         admin=AdminClient.create(settings.properties("test-admin"));
-        admin.createTopics(List.of(new NewTopic(settings.topic,6,(short)1))).all().get(20,TimeUnit.SECONDS);
+        admin.createTopics(List.of(new NewTopic(settings.topic,6,(short)1),new NewTopic(settings.deadLetterTopic,1,(short)1))).all().get(20,TimeUnit.SECONDS);
     }
     @AfterEach void removeTopic() throws Exception {
-        if(admin!=null){try{admin.deleteTopics(List.of(settings.topic)).all().get(10,TimeUnit.SECONDS);}finally{admin.close(Duration.ofSeconds(3));}}
+        if(admin!=null){try{admin.deleteTopics(List.of(settings.topic,settings.deadLetterTopic)).all().get(10,TimeUnit.SECONDS);}finally{admin.close(Duration.ofSeconds(3));}}
     }
     private Event accept() throws Exception {
         return STORE.ingest("demo",new EventInput("single.type","test",JSON.readTree("{\"hello\":\"world\"}")),UUID.randomUUID().toString()).event();
@@ -178,6 +178,38 @@ class KafkaIT {
         }
         assertEquals(10000,java.util.Arrays.stream(counts).sum());
         for(var count:counts) assertTrue(count>0 && count<5000,java.util.Arrays.toString(counts));
+    }
+
+    @Test void failedDeliveryIsDurablyPublishedToSeparateKafkaDlqWithEventCorrelation() throws Exception {
+        subscription();var event=accept();STORE.activateDispatch("demo",event.id());
+        var claim=STORE.claim(30,6);assertNotNull(claim);
+        assertTrue(STORE.finish(claim,new Result(400,"http_400"),new RetryPolicy(6,1,1,()->0)));
+        var properties=settings.properties("dlq-verifier");
+        properties.put("key.deserializer",org.apache.kafka.common.serialization.StringDeserializer.class.getName());
+        properties.put("value.deserializer",org.apache.kafka.common.serialization.StringDeserializer.class.getName());
+        properties.put("group.id","dlq-test-"+UUID.randomUUID());properties.put("auto.offset.reset","earliest");properties.put("enable.auto.commit","false");
+        try(var verifier=new org.apache.kafka.clients.consumer.KafkaConsumer<String,String>(properties)) {
+            verifier.subscribe(List.of(settings.deadLetterTopic));var pipeline=pipeline(true,false);pipeline.start();
+            try {
+                var observed=new AtomicReference<org.apache.kafka.clients.consumer.ConsumerRecord<String,String>>();
+                await(()->{for(var record:verifier.poll(Duration.ofMillis(200))) if(record.key().equals(claim.id().toString()))observed.set(record);return observed.get()!=null;},20);
+                var record=observed.get();var body=JSON.readTree(record.value());
+                assertEquals(event.id().toString(),body.path("event").path("id").asText());
+                assertEquals(event.id().toString(),new String(record.headers().lastHeader("X-Event-ID").value(),java.nio.charset.StandardCharsets.UTF_8));
+                await(()->STORE.deadLetters("demo",10,0).getFirst().publishedAt()!=null,10);
+                assertEquals(1,STORE.deadLetters("demo",10,0).size());
+            } finally {pipeline.stop();}
+        }
+    }
+
+    @Test void expiredDeadLetterPublisherCannotAcknowledgeReplacementLease() throws Exception {
+        subscription();var event=accept();STORE.activateDispatch("demo",event.id());var delivery=STORE.claim(30,6);
+        STORE.finish(delivery,new Result(400,"http_400"),new RetryPolicy(6,1,1,()->0));
+        var old=STORE.claimDeadLetter();assertNotNull(old);
+        DB.useHandle(h->h.execute("UPDATE delivery_dead_letters SET lease_expires_at=clock_timestamp()-interval '1 second'"));
+        var replacement=STORE.claimDeadLetter();assertNotNull(replacement);assertNotEquals(old.token(),replacement.token());
+        STORE.finishDeadLetter(old);assertNull(STORE.deadLetters("demo",10,0).getFirst().publishedAt());
+        STORE.finishDeadLetter(replacement);assertNotNull(STORE.deadLetters("demo",10,0).getFirst().publishedAt());
     }
 
 }

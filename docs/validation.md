@@ -1,6 +1,6 @@
 # Verification matrix
 
-The current runtime suite contains 17 unit and 31 integration tests; release-gateway tests add 12 Python security tests, and HA configuration/backup tests add 16 more Python tests. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
+The current source suite contains 19 unit and 40 integration tests; release-gateway tests add 12 Python security tests, and HA configuration/backup tests add 19 more Python tests. Deployed release evidence is version-specific in submission-status.md. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
 
 |Requirement / material risk|Automated evidence|
 |---|---|
@@ -60,3 +60,10 @@ Application bd082b6 passed the complete [CI gates](https://github.com/Sahil2237/
 | Ingress security | Normal HTTPS certificate validation, unauthenticated tenant 401, public administrator endpoint 404 |
 
 The host-offline probe proves another-primary promotion; the earlier watchdog reboot probe did not, because its original leader returned. Requests can time out or receive 503 during failover. Exact response-time SLOs, an elapsed 24-hour Spaces expiry/public-certificate renewal cycle, full-region restore, independent-zone placement, slow-receiver fanout capacity and external paging remain unverified/unimplemented as detailed in the current status.
+
+
+## New delivery-control verification
+
+The source suite now covers concurrent canonical generated keys and producer-ID conflicts, identity scoping, a shared fixed-window cap across independent Store instances and window reset, subscriber reservations/fairness across instances, six-attempt exhaustion, rollback when the DLQ insert fails, tenant-scoped dead-letter history, real Kafka DLQ publication with event correlation, stale DLQ publisher fencing, request correlation headers, MDC cleanup and rejection of a primary presented as a strict read pool.
+
+The hosted PostgreSQL HA fixture additionally runs the application JDBC driver against actual standby nodes before and after promotion and verifies connection failure when only the primary remains. Those hosted results must be recorded from the successful run before promotion. New snapshots verify the two additional durable-control tables; restore accepts historical snapshot metadata too.
