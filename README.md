@@ -1,8 +1,10 @@
 # Event Notification Fanout
 
-Java 25 / Dropwizard 5 service running on a DigitalOcean Bangalore Droplet. PostgreSQL durably accepts events and matching delivery jobs in one transaction; an outbox publisher sends them to Kafka, and consumers activate retryable webhook deliveries. [Deployment and current evidence](docs/submission-status.md), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).
+Java 25 / Dropwizard 5 event ingestion and webhook fanout service for DigitalOcean Bangalore. PostgreSQL durably accepts events and matching delivery jobs in one transaction; an outbox publisher sends them to Kafka, and consumers activate retryable webhook deliveries. [Deployment and current evidence](docs/submission-status.md), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).
 
-The selected deployment is one budget Droplet with self-hosted PostgreSQL and Kafka. Persistent volumes and reboot recovery are implemented. Host failover and off-host disaster recovery are outside this single-server availability boundary. Every production claim must be supported by the linked CI/cloud evidence.
+The HA release uses three 4-GB Ubuntu 24.04 Droplets, three Kafka brokers/controllers, strict synchronous PostgreSQL with Patroni/etcd, and three application replicas behind a two-node DigitalOcean load balancer. Encrypted daily backups go to a private Spaces bucket with 24-hour retention. [HA configuration and limits](deploy/ha/README.md) describe the failure boundary; [deployment evidence](docs/submission-status.md) distinguishes completed cloud verification from a rollout in progress. The approximate base cost is $101/month, without managed Kafka or a paid registry.
+
+**Current deployment decision:** the user chose to keep the existing service unchanged. The HA candidate is tested and published, and its infrastructure images are staged, but production data/credentials have not been replicated and no HA cutover or cloud HA claim is made. The running service remains revision `57b3fbf`; see [current status](docs/submission-status.md).
 
 ## Setup and development
 
@@ -76,7 +78,7 @@ See [the complete diagrams](docs/architecture.md). Matching happens in the inges
 |Webhook delivery|Up to five total attempts with possible duplicates; permanent failures and exhausted retries become queryable `failed`|
 |At-most-once?|No: uncertain outcomes can cause repeated requests|
 |Exactly-once?|No: a receiver may commit a side effect and lose the response before the sender records success|
-|Unconditional eventual receipt?|No: finite retries, receiver outages, revocation, and loss of the sole database copy can prevent receipt|
+|Unconditional eventual receipt?|No: finite retries, receiver outages, revocation, and loss of all database copies and usable backups can prevent receipt|
 
 The practical guarantee is **at-least-once-style processing with bounded HTTP delivery attempts**, not exactly-once side effects. Receivers must deduplicate by stable `deliveryId`. A Kafka publication or dispatch can repeat after a crash without creating another delivery job. A crash after successful HTTP receipt but before recording it can repeat the webhook. Lease fencing prevents old workers from overwriting a newer attempt.
 
@@ -96,15 +98,15 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 
 |Current choice|Benefit|Limit and next hardening trigger|
 |---|---|---|
-|One Droplet / one broker / one DB|Keeps the approved budget and operations small|Host failure stops service; add independent replicas and off-host recovery when availability/data-loss targets require it|
+|Four roles colocated on each of three Droplets|Limits HA infrastructure cost while surviving one tested Droplet failure|CPU/memory and regional failures are shared; separate roles or regions when measured load or failure targets justify the cost|
 |Match inside ingestion transaction|Atomic membership snapshot and fanout jobs|O(subscriptions + matches); move matching async with versioned membership if measured latency requires it|
 |Kafka dispatch, DB retry scheduler|Durable queue and queryable delayed attempts|Shared DB load; tune publisher/consumer counts using representative measurements|
 |Runtime administrator origin approvals|Immediate controlled onboarding/revocation|Origin-level permission, not per-path or tenant-specific approval; outbound network enforcement remains useful|
 |Static tenant credentials|Small, explicit authorization model|Operator provisioning/rotation; integrate identity management and tenant-specific quotas for broader service use|
-|Single-host plaintext internal bridge|No internal certificate infrastructure|Use authenticated TLS when components span machines; host administrators remain fully trusted|
+|Mutual TLS and separate internal authorities|Encrypts/authenticates cluster traffic and separates application/control credentials|Internal certificates last 90 days; renewal and expiry monitoring require operator ownership|
 |Bounded retries, no ordering/replay|Independent, finite delivery work|Terminal failures need an explicit operator redrive policy; ordering/replay remain optional extensions|
-|Process-local request limit|Simple protection for one API instance|Use shared quota enforcement and fair scheduling when adding replicas or noisy tenants|
-|Local backup script and release backup|Consistent recovery snapshots and tested restore|Local disk loss destroys both; configure encrypted off-host backups before accepting production data-loss commitments|
+|Per-replica request limit|Simple admission control on each application replica|Three replicas can admit up to three times one replica limit; shared tenant quotas and receiver fairness remain future work|
+|Daily encrypted Spaces backup and strict 24-hour retention|Independent storage and an authenticated restore procedure|Total cluster loss can lose up to roughly 24 hours; no continuous WAL/PITR, and expiring an old backup before a failed new one can leave none|
 |Explicit retention policy, no automatic deletion|Avoids unapproved data removal|Implement bounded retention after business/audit and idempotency-key expiry requirements are agreed|
 |Logs, metrics and health checks|Inspect requests, backlog and errors|Configure external alerts, dashboards and paging; no unmeasured SLO claim|
 

@@ -1,5 +1,35 @@
 # Verified submission and deployment
 
+## Latest decision: retain the existing live service
+
+On **24 November 2026 IST**, the user selected **“Keep the current service unchanged”** when explicit authorization was required to replicate existing production credentials/data to the two additional Droplets. No production credentials or database contents were replicated, no HA services were started, and no HA cutover was performed. Automatic promotion remains held (`HA_ENABLED=true`, `HA_DEPLOY_READY=false`). The existing HTTPS service remains the original `57b3fbf` release; the historical verification below describes that release.
+
+## Verified HA candidate — not activated in the cloud
+
+Candidate **`507f9896e914d8da00353626da2f8aa503bd31b1`** passed [all CI/release gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45335125767) and [exact-image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45336595057).
+
+- Local Java: **48 passed** (17 unit, 31 real PostgreSQL/Kafka/HTTP integration).
+- Python: **28 passed** (12 deployment security, 16 HA/backup).
+- Local full HA drill: **8 checks passed**, **106 acknowledged events preserved**, **28.82-second single-node recovery**; four synthetic webhooks received HTTP 204, including one while a whole simulated node was down.
+- Real PostgreSQL snapshot/age encryption/authenticated manifest/decryption/pg_restore preserved all nine tracked table counts. This local test used a filesystem S3 adapter; it is **not** an actual Spaces restore test.
+- Quorum loss refused unsafe acknowledgement; recovery preserved acknowledged events; proxy logs passed the database-credential redaction regression.
+- Exact CI images for app, PostgreSQL/backup tools, Caddy, Kafka 4.3.2 and etcd passed the fixable HIGH/CRITICAL vulnerability gate. Reports do not claim zero unknown/unfixed vulnerabilities or a fully patched workstation.
+- Five full-revision tags were published under `ghcr.io/sahil2237/`: `notification-fanout`, `notification-ha-tools`, `notification-ha-proxy`, `notification-kafka`, `notification-etcd`. The application package was visually confirmed **Private**. Signature/checksum/image-content verification succeeded when installing infrastructure images on all three Droplets.
+
+[Local HA evidence](evidence/local-ha-507f989.json) and [published image identities](evidence/published-images-507f989.json) contain synthetic/public metadata only.
+
+## Provisioned resources and remaining work
+
+Three 4-GB/2-vCPU Bangalore Droplets exist: `64.227.168.29`, `139.59.13.207`, `159.65.153.56`. A two-node regional load balancer (`174.138.121.225`) has three prepared backends. The original service still uses `https://64.227.168.29`; **the new load balancer is not an active HA API endpoint**. Cloud and host firewall rules restrict cluster traffic to private peers. The two idle nodes were patched/rebooted onto Ubuntu kernel `6.8.0-151`; the existing host remains on `6.8.0-149` pending an authorized rollout. Production Docker is `29.10.0`; the older Rancher development engine was not upgraded.
+
+A private Standard Spaces bucket, `notification-fanout-backups-sahil2237`, exists in Singapore because new Bangalore Spaces creation was unavailable. Bucket-scoped backup credentials, node-specific TLS and a protected recovery identity are prepared; offline CA signing keys remain off the Droplets. **The daily backup timers are not activated, and a real Spaces backup/restore and independent cloud host-failure/fencing test have not been performed.** The limited Spaces key cannot install a storage-native lifecycle rule; application-side expiry is configured in the candidate code, not asserted as an active cloud policy.
+
+These provisioned resources incur approximately **$101/month base** ($72 Droplets + $24 load balancer + $5 Spaces), even though HA is not activated. They have not been deleted or silently resized. This is about $77/month above the original $24 Droplet, before taxes/overages; remove unused resources only through an explicitly authorized cleanup.
+
+Further HA deployment requires an authorized credential/database replication plan, safe import of the existing data, cloud failover/fencing tests, daily Spaces backup activation and a real restore drill. Zero-loss scope is acknowledged commits through a tested single-node failure with safe quorum; daily backup disaster RPO is up to roughly 24 hours. Regional loss, continuous WAL/PITR, automatic internal-certificate renewal, shared tenant quotas and external paging remain separate work.
+
+## Existing single-host release — historical evidence
+
 The current deployed source revision is `57b3fbfb81743081b4b76382392e9ed2eed8fc27`. Verification completed on **24 November 2026 IST** (23 November UTC). The final evidence/documentation commit does not change the running application.
 
 - Private personal repository: [Sahil2237/notification-fanout](https://github.com/Sahil2237/notification-fanout).

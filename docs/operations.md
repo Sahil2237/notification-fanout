@@ -1,5 +1,7 @@
 # Operations, incidents and release acceptance
 
+**Current state:** the user retained the existing single-host service. HA candidate `507f989` is verified/published and images are staged, but HA application deployment and daily Spaces timers are not activated. Do not use the new load-balancer IP as a live API. See [current decision and evidence](submission-status.md) before applying either runbook.
+
 The selected environment is a single DigitalOcean Bangalore Ubuntu 24.04 Droplet. The root-only `/opt/notification-fanout/.env` contains tenant/admin tokens, database credentials and signing master. The API runs as UID 10001 in its container; PostgreSQL/Kafka use persistent Docker volumes. Never delete volumes as routine troubleshooting. Operator SSH and the restricted CI deployment account are different credentials.
 
 ## Routine checks and alerts
@@ -41,3 +43,15 @@ Restore to a replacement environment with owner/runtime roles and their protecte
 No automatic deletion of events, attempts or audits is enabled because the business retention period and idempotency-key expiry have not been agreed. Monitor growth and local backup storage; do not promise indefinite retention on an 80-GB disk. Future cleanup must preserve unresolved work and respect tenant/audit policy.
 
 Accept a release only after unit/integration and bundle tests, vulnerability gate, real container smoke, failed-startup rollback and restore tests pass; the signed image identity matches; live auth/origin changes and representative synthetic events pass; audit/receiver capture agree; and relevant recovery checks pass. A 10,000-event no-match probe cannot establish delivery capacity for slow receivers or large fanout. HA, off-host recovery, retention and external alerting remain explicit limits of the budget deployment.
+
+## HA candidate runbook (activation requires an authorized rollout)
+
+The candidate settings/scripts live in `deploy/ha/`; they are separate from the legacy single-host release above. Verify a successful trusted `ci.yml` run, detached bundle signatures, checksums and portable image identity before installation. Exactly three nodes, private peer firewalls, separate TLS authorities and a working required watchdog are prerequisites. Keep offline CA signing keys outside the cloud hosts. Preserve API/admin/signing identity only through an explicitly authorized replication plan.
+
+Freeze legacy application writes for a controlled import. Take a same-server consistent dump and compare every business/audit/schema-history table after restoring into the synchronous cluster; never export production database contents to the development workstation. Create roles, apply runtime grants, configure the RF3/min-ISR2 Kafka topic and least-privilege application ACLs, then enable the signed application promotion path. Do not force promotion of an asynchronous database replica. Once new writes are accepted, the old database is stale and cannot be used as an automatic rollback target.
+
+For subsequent app releases, `ha-release.sh` drains a backend, migrates forward, updates only that application, checks readiness and restores traffic before moving to the next node. PostgreSQL/Kafka/etcd/Caddy infrastructure updates are separate operator operations, one node at a time with quorum/replication health checked between nodes. Keep acknowledged synthetic event IDs and verify retrieval/fanout after failures. A local shared-VM test cannot establish host fencing.
+
+When activated, `notification-backup.timer` checks every five minutes; a database advisory lock permits one successful daily snapshot. `run-backup.sh` uses disk-backed scratch and a scoped Spaces key, a repeatable-read exported snapshot, age encryption, hashes and authenticated completion manifests. Retention is 24 hours plus check jitter while the cluster is healthy. Expiry can leave no backup after a failed next backup, and a whole-cluster outage can delay pruning. No provider lifecycle policy has been installed.
+
+Run `restore-test.sh MANIFEST_KEY` on an authorized host with the protected age identity and manifest key. It downloads/authenticates/decrypts the actual Spaces object, restores a fresh network-isolated PostgreSQL database, compares nine table counts, and cleans up plaintext/disposable state. Preserve recovery keys and role/configuration secrets outside the cluster. A daily dump is not continuous WAL/PITR and cannot provide zero-loss regional disaster recovery. Internal certificates expire after 90 days; renew and monitor them before expiry. No cloud restore or fencing result may be claimed until actually executed.

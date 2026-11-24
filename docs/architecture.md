@@ -54,22 +54,38 @@ sequenceDiagram
 ```
 
 ```mermaid
-flowchart LR
- G[Private GitHub default-branch push] --> T[Java and gateway security tests]
- T --> B[Build one image]
- B --> V[Vulnerability gate; real startup; rollback; restore]
- V --> S[Sign tested bundle + image identity]
- S -->|Pinned SSH; restricted upload user| R[Root-owned signature-verifying gateway]
- R -->|Backup; migration; grants; readiness/TLS gate| A
- subgraph Host[Bangalore Ubuntu 24.04 Droplet]
-  R
-  X[Caddy HTTPS; admin routes blocked] --> A[Java API / publisher / consumer / workers]
-  A <--> D[(PostgreSQL volume)]
-  A <--> K[(Kafka volume)]
+flowchart TB
+ U[REST clients] --> LB[DigitalOcean regional load balancer: 2 nodes]
+ subgraph BLR[Bangalore / BLR1 private VPC]
+  N1[Droplet 1: Caddy, Java replica, Kafka 1, PostgreSQL 1, etcd 1]
+  N2[Droplet 2: Caddy, Java replica, Kafka 2, PostgreSQL 2, etcd 2]
+  N3[Droplet 3: Caddy, Java replica, Kafka 3, PostgreSQL 3, etcd 3]
+  N1 <-->|TLS replication and quorum| N2
+  N2 <-->|TLS replication and quorum| N3
+  N3 <-->|TLS replication and quorum| N1
  end
- U[REST client] -->|Public HTTPS when configured| X
- M[Operator SSH tunnel] -->|Loopback API / admin token| A
- A -->|Signed HTTPS| H[Approved subscriber receiver]
+ LB -->|HTTPS passthrough; readiness on private 9080| N1
+ LB --> N2
+ LB --> N3
+ N1 --> H[Approved public HTTPS receivers]
+ N2 --> H
+ N3 --> H
+ N1 --> B[Daily job: PostgreSQL advisory lock, consistent snapshot, age encryption]
+ N2 --> B
+ N3 --> B
+ B --> S[Private DigitalOcean Spaces: Singapore, 24-hour backup retention]
+ G[Trusted GitHub verification] --> V[Scan app, database tools, proxy, Kafka, etcd]
+ V --> P[Sign exact images and bundle; publish private GHCR tags]
+ P --> R[Restricted deployment gateway: drain and update one app at a time]
+ R --> N1
+ R --> N2
+ R --> N3
 ```
 
-The budget deployment has a single failure boundary. Named volumes preserve state across container replacement/reboot, not disk destruction. Local backups and a same-server restore do not establish off-host recovery. Public IP HTTPS uses an explicit short-lived ACME profile and persistent Caddy state; monitor renewal. Runtime destination policy is in PostgreSQL, so approvals/revocations require no restart. The operator key remains privileged; CI uses a different restricted key and a signed-release gateway. No managed Kafka or other new paid cloud service is used. Current evidence and remaining limits are in submission-status.md.
+The boxes represent exactly three application/data Droplets; the daily job runs on those hosts, not a fourth compute node. PostgreSQL has one writable primary and one required synchronous standby (`remote_apply`), plus the third replica. Patroni uses a three-voter TLS etcd quorum and requires watchdog fencing. Kafka has three brokers/controllers, six event partitions, replication factor three, minimum ISR two, `acks=all`, and no unclean election. Losing safety quorum refuses/blocks writes rather than acknowledging unsafe commits. Application pools reject connections that have become standbys.
+
+The load balancer uses two managed nodes and private readiness probes. Caddy shares certificate/challenge storage and locks in a separate PostgreSQL database. Internal control, database and Kafka authorities are distinct; offline CA signing keys are not deployed. Internal certificates require renewal before their 90-day expiry. The cloud firewall and host firewall restrict cluster ports to the three private peers. Administrator endpoints remain private.
+
+One synthetic local drill verified 106 acknowledged events, actual Kafka/webhook delivery during a simulated node loss, refusal of writes without quorum, recovery, log redaction and encrypted database restoration. Local containers share one Rancher VM, so that does not prove independent host fencing. Cloud deployment and failure evidence must be recorded separately in [submission status](submission-status.md).
+
+Daily Spaces backups provide off-host recovery, not synchronous regional disaster replication. A single-node failure target is zero acknowledged-event loss with a surviving safe quorum; total cluster destruction can lose up to roughly 24 hours. One-day retention cannot recover old corruption, and application-side expiry can be delayed during a whole-cluster outage. Per-source ordering and replay are not implemented.
