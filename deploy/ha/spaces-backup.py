@@ -107,7 +107,8 @@ def main():
     if a.command=='fetch':
         if not all((a.manifest,a.output,a.identity)):p.error('fetch requires manifest, output and identity')
         print(json.dumps(fetch(client,bucket,a.manifest,a.output,a.identity)));return
-    with psycopg2.connect(os.environ['PG_BACKUP_DSN']) as connection:
+    connection=psycopg2.connect(os.environ['PG_BACKUP_DSN'])
+    try:
         connection.autocommit=True
         with connection.cursor() as cursor:
             cursor.execute('SELECT NOT pg_is_in_recovery(),pg_try_advisory_lock(781923649)');primary,locked=cursor.fetchone()
@@ -117,6 +118,7 @@ def main():
         if due(items,now):
             key=backup(client,bucket,connection,now,os.environ['AGE_RECIPIENT']);result.update(status='backed_up',manifest_key=key)
         print(json.dumps(result,sort_keys=True))
+    finally:connection.close()
 if __name__=='__main__':
     os.umask(0o077)
     main()

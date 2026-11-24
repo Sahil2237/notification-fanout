@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p .ha-runtime
-cp deploy/ha/{render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh} .ha-runtime/
+cp deploy/ha/{render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh,prepare-secrets.py,initialize-databases.py} .ha-runtime/
 cp deploy/droplet/verify-image.py .ha-runtime/
 docker pull "$ETCD_IMAGE"
 docker pull "$KAFKA_IMAGE"

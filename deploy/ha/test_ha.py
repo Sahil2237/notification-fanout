@@ -4,10 +4,10 @@ ROOT=pathlib.Path(__file__).parent
 
 def load(name,file):
     spec=importlib.util.spec_from_file_location(name,ROOT/file);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
-render=load('ha_render','render.py');backup=load('spaces_backup','spaces-backup.py');UTC=datetime.timezone.utc
+render=load('ha_render','render.py');backup=load('spaces_backup','spaces-backup.py');identity=load('ha_identity','prepare-secrets.py');UTC=datetime.timezone.utc
 
 def inventory():return {'nodes':[{'id':n,'private_ip':'10.122.0.'+str(n)} for n in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'app:tested','tools_image':'tools:tested','caddy_image':'proxy:tested','etcd_image':'etcd:v3.6.8','kafka_image':'apache/kafka:4.3.1'}
-def secrets():return {key:'a'*32 for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id')}|{'webhook_origins':['https://webhook.example']}
+def secrets():return {key:'a'*32 for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://webhook.example']}
 class ClusterConfigurationTest(unittest.TestCase):
     def test_requires_exactly_three_distinct_nodes(self):
         for nodes in (inventory()['nodes'][:2],inventory()['nodes']+[{'id':4,'private_ip':'10.0.0.4'}]):
@@ -35,6 +35,15 @@ class ClusterConfigurationTest(unittest.TestCase):
         self.assertFalse(any('/control' in volume for volume in compose['services']['app']['volumes']))
         self.assertEqual('https',pg['etcd3']['protocol']);self.assertEqual(3,len(pg['etcd3']['hosts'].split(',')))
         command=compose['services']['etcd']['command'];self.assertIn('--client-cert-auth=true',command);self.assertIn('--peer-client-cert-auth=true',command)
+class IdentityMigrationTest(unittest.TestCase):
+    def test_preserves_api_signing_and_database_identity(self):
+        old={key:key.replace('_','')+'a'*64 for key in ('PG_OWNER_PASSWORD','DB_PASSWORD','ADMIN_TOKEN','API_TOKEN','WEBHOOK_SIGNING_SECRET')};old['WEBHOOK_ORIGINS']='["https://example.com"]'
+        value=identity.build(old,'k'*64)
+        self.assertEqual(old['API_TOKEN'],value['api_token']);self.assertEqual(old['WEBHOOK_SIGNING_SECRET'],value['signing_secret']);self.assertEqual(old['DB_PASSWORD'],value['db_password'])
+        self.assertNotEqual(value['backup_password'],value['replication_password'])
+    def test_missing_existing_identity_fails_closed(self):
+        with self.assertRaises(KeyError):identity.build({},'k'*64)
+
 class BackupPolicyTest(unittest.TestCase):
     def setUp(self):
         self.now=datetime.datetime(2026,11,24,3,tzinfo=UTC);self.base=backup.PREFIX+'20261124T030000Z-'+'a'*32

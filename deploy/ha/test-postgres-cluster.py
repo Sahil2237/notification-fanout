@@ -11,7 +11,7 @@ def main():
     spec=importlib.util.spec_from_file_location('render',ROOT/'render.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     work=pathlib.Path(tempfile.mkdtemp(prefix='ha-ci-'));projects=[]
     inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'notification-ci:unused','tools_image':tools,'caddy_image':'caddy:2.11.9-alpine','etcd_image':etcd,'kafka_image':'apache/kafka:4.3.1'}
-    secrets={key:'ci-only-credential-abcdefghijklmnopqrstuvwxyz' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id')}|{'webhook_origins':['https://example.com']}
+    secrets={key:'ci-only-credential-abcdefghijklmnopqrstuvwxyz' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://example.com']}
     (work/'inventory.json').write_text(json.dumps(inv));(work/'secrets.json').write_text(json.dumps(secrets))
     run(['python3',str(ROOT/'create-pki.py'),str(work/'inventory.json'),str(work/'pki')])
     run(['docker','network','create','--subnet','172.29.0.0/24','notification-ha-ci'])

@@ -16,7 +16,7 @@ def validate(inventory):
 def render(inventory,secrets,node_id):
     validate(inventory);nodes=sorted(inventory['nodes'],key=lambda n:n['id']);node=next(n for n in nodes if n['id']==node_id)
     ip=node['private_ip'];name='node'+str(node_id);hosts=','.join(n['private_ip'] for n in nodes)
-    for field in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id'):
+    for field in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password'):
         if not re.fullmatch(r'[A-Za-z0-9_-]{20,}',secrets[field]):raise ValueError('Invalid or missing secret: '+field)
     ssl={'cacert':'/tls/control-ca.crt','cert':'/tls/control.crt','key':'/tls/control.key'}
     patroni={'scope':'notification-ha-v1','namespace':'/notification/','name':name,
@@ -33,7 +33,7 @@ def render(inventory,secrets,node_id):
     # Kafka identities are distinct from the control-plane CA. App certificates have topic/group ACLs only.
     kafka={'CLUSTER_ID':secrets['kafka_cluster_id'],'KAFKA_NODE_ID':str(node_id),'KAFKA_PROCESS_ROLES':'broker,controller','KAFKA_CONTROLLER_QUORUM_VOTERS':','.join(str(n['id'])+'@'+n['private_ip']+':9093' for n in nodes),
        'KAFKA_LISTENERS':'BROKER://'+ip+':9092,CONTROLLER://'+ip+':9093','KAFKA_ADVERTISED_LISTENERS':'BROKER://'+ip+':9092','KAFKA_LISTENER_SECURITY_PROTOCOL_MAP':'BROKER:SSL,CONTROLLER:SSL','KAFKA_CONTROLLER_LISTENER_NAMES':'CONTROLLER','KAFKA_INTER_BROKER_LISTENER_NAME':'BROKER',
-       'KAFKA_SSL_KEYSTORE_TYPE':'PEM','KAFKA_SSL_KEYSTORE_CERTIFICATE_CHAIN':'${KAFKA_NODE_CERT}','KAFKA_SSL_KEYSTORE_KEY':'${KAFKA_NODE_KEY}','KAFKA_SSL_TRUSTSTORE_TYPE':'PEM','KAFKA_SSL_TRUSTSTORE_CERTIFICATES':'${KAFKA_CA_CERT}','KAFKA_SSL_CLIENT_AUTH':'required','KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM':'https',
+       'KAFKA_SSL_KEYSTORE_TYPE':'PKCS12','KAFKA_SSL_KEYSTORE_LOCATION':'/tls/kafka.p12','KAFKA_SSL_KEYSTORE_PASSWORD':secrets['kafka_tls_password'],'KAFKA_SSL_TRUSTSTORE_TYPE':'PKCS12','KAFKA_SSL_TRUSTSTORE_LOCATION':'/tls/kafka-trust.p12','KAFKA_SSL_TRUSTSTORE_PASSWORD':secrets['kafka_tls_password'],'KAFKA_SSL_CLIENT_AUTH':'required','KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM':'https',
        'KAFKA_AUTHORIZER_CLASS_NAME':'org.apache.kafka.metadata.authorizer.StandardAuthorizer','KAFKA_SUPER_USERS':';'.join('User:CN=kafka-'+str(n['id']) for n in nodes),'KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND':'false',
        'KAFKA_DEFAULT_REPLICATION_FACTOR':'3','KAFKA_MIN_INSYNC_REPLICAS':'2','KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR':'3','KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS':'6','KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR':'3','KAFKA_TRANSACTION_STATE_LOG_MIN_ISR':'2','KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE':'false','KAFKA_AUTO_CREATE_TOPICS_ENABLE':'false','KAFKA_LOG_DIRS':'/var/lib/kafka/data','KAFKA_LOG_RETENTION_HOURS':'168','KAFKA_LOG_RETENTION_BYTES':'134217728','KAFKA_HEAP_OPTS':'-Xms256m -Xmx512m'}
     endpoints=','.join('https://'+n['private_ip']+':2379' for n in nodes)
@@ -45,9 +45,9 @@ def render(inventory,secrets,node_id):
     compose={'name':'notification-ha','services':{
       'etcd':dict(common,image=inventory['etcd_image'],mem_limit='256m',entrypoint=['/usr/local/bin/etcd'],command=etcd_cmd[1:],volumes=['etcd:/data','./tls/control:/tls:ro']),
       'postgres':dict(common,image=inventory['tools_image'],mem_limit='640m',devices=['/dev/watchdog:/dev/watchdog'],volumes=['postgres:/var/lib/postgresql/ha','./patroni.json:/config/patroni.json:ro','./tls/postgres:/tls:ro','./tls/control:/control:ro']),
-      'kafka':dict(common,image=inventory['kafka_image'],mem_limit='1152m',environment=kafka,volumes=['kafka:/var/lib/kafka/data']),
+      'kafka':dict(common,image=inventory['kafka_image'],mem_limit='1152m',environment=kafka,volumes=['kafka:/var/lib/kafka/data','./tls/kafka:/tls:ro']),
       'app':dict(common,image='${APP_IMAGE:?Set tested APP_IMAGE}',mem_limit='896m',stop_grace_period='45s',environment=env,entrypoint=['/bin/sh','/config/app-entrypoint.sh'],command=['server'],volumes=['./app-entrypoint.sh:/config/app-entrypoint.sh:ro','./tls/app:/tls:ro']),
-      'proxy':dict(common,image=inventory['caddy_image'],mem_limit='160m',environment={'TLS_DOMAIN':inventory['tls_domain'],'CADDY_DATABASE_DSN':'host='+hosts+' port=5432 dbname=caddy user=caddy password='+secrets['caddy_password']+' sslmode=verify-full sslrootcert=/tls/postgres-ca.crt target_session_attrs=read-write connect_timeout=3'},volumes=['./Caddyfile:/etc/caddy/Caddyfile:ro','./tls/app/postgres-ca.crt:/tls/postgres-ca.crt:ro','caddy:/data','caddy-config:/config'])},'volumes':{x:{} for x in ('postgres','etcd','kafka','caddy','caddy-config')}}
+      'proxy':dict(common,image=inventory['caddy_image'],mem_limit='160m',environment={'TLS_DOMAIN':inventory['tls_domain'],'CADDY_DATABASE_DSN':'host='+hosts+' port=5432 dbname=caddy user=caddy password='+secrets['caddy_password']+' sslmode=verify-full sslrootcert=/tls/postgres-ca.crt target_session_attrs=read-write connect_timeout=3 options=-cstatement_timeout=30000'},volumes=['./Caddyfile:/etc/caddy/Caddyfile:ro','./tls/app/postgres-ca.crt:/tls/postgres-ca.crt:ro','caddy:/data','caddy-config:/config'])},'volumes':{x:{} for x in ('postgres','etcd','kafka','caddy','caddy-config')}}
     migrate=dict(compose['services']['app'])
     migrate.pop('restart',None)
     migrate['profiles']=['tools'];migrate['command']=['db','migrate']

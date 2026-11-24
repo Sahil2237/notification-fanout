@@ -9,7 +9,12 @@ database:
   initialSize: 1
   minSize: 1
   maxSize: 8
-  validationQuery: SELECT 1
+  validationQuery: SELECT 1 / ((NOT pg_is_in_recovery())::int)
+  checkConnectionOnBorrow: true
+  validationInterval: 1 second
+  validationQueryTimeout: 2 seconds
+  maxWaitForConnection: 3 seconds
+  maxConnectionAge: 60 seconds
   properties:
     sslmode: verify-full
     targetServerType: primary

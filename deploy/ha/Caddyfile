@@ -9,11 +9,11 @@
         root /state
         try_files drain
     }
-    respond @draining 503
-    handle /health/ready {
-        reverse_proxy 127.0.0.1:8080
+    route {
+        respond @draining 503
+        reverse_proxy /health/ready 127.0.0.1:8080
+        respond 404
     }
-    respond 404
 }
 {$TLS_DOMAIN} {
     tls {
