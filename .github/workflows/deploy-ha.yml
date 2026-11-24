@@ -35,7 +35,7 @@ jobs:
         run: |
           [[ "$VERIFICATION_RUN_ID" =~ ^[0-9]+$ ]]
           gh api "repos/$GH_REPO/actions/runs/$VERIFICATION_RUN_ID" > verified-run.json
-          jq -e --arg repository "$GH_REPO" --arg branch "$DEFAULT_BRANCH" '.conclusion == "success" and .event == "push" and .head_branch == $branch and .head_repository.full_name == $repository' verified-run.json
+          jq -e --arg repository "$GH_REPO" --arg branch "$DEFAULT_BRANCH" '.conclusion == "success" and .event == "push" and .path == ".github/workflows/ci.yml" and .head_branch == $branch and .head_repository.full_name == $repository' verified-run.json
           sha=$(jq -r .head_sha verified-run.json)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           printf 'RELEASE_SHA=%s\n' "$sha" >> "$GITHUB_ENV"

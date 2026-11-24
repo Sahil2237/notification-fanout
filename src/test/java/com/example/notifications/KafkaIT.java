@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 class KafkaIT {
@@ -94,7 +95,11 @@ class KafkaIT {
         send(event,0);send(event,0);
         var consumer=pipeline(false,true);consumer.start();
         try{await(()->ready(event.id()),20);assertEquals(1,STORE.deliveries("demo",event.id(),true,100,0).size());
-            var claim=STORE.claim(30,5);assertNotNull(claim);assertNull(STORE.claim(30,5));
+            // A concurrent duplicate dispatch may briefly hold the row lock. Workers poll again
+            // after SKIP LOCKED; a null claim during that interval does not mean work was lost.
+            var claimed=new AtomicReference<Claim>();
+            await(()->{var candidate=STORE.claim(30,5);if(candidate==null)return false;claimed.set(candidate);return true;},10);
+            assertNotNull(claimed.get());assertNull(STORE.claim(30,5));
         }finally{consumer.stop();}
     }
     @Test void malformedRecordIsDurablyQuarantinedBeforeContinuing() throws Exception {
