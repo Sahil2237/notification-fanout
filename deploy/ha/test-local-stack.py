@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Rancher-only full-stack failure drill. Uses disposable data and at most four synthetic webhook calls."""
-import base64,hashlib,importlib.util,json,os,pathlib,shutil,ssl,subprocess,time,urllib.error,urllib.request,uuid
+import http.client,base64,hashlib,importlib.util,json,os,pathlib,shutil,ssl,subprocess,time,urllib.error,urllib.request,uuid
 ROOT=pathlib.Path(__file__).resolve().parent
 
 def load(name,file):
@@ -54,6 +54,8 @@ def validate(context):
     kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','Read','--operation','Write','--operation','Describe','--topic','notification-events-v1')
     kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','Read','--group','notification-dispatch-v1')
     kafka_cli('kafka-acls.sh','--add','--allow-principal','User:CN=notification-service','--operation','IdempotentWrite','--cluster')
+    description=kafka_cli('kafka-topics.sh','--describe','--topic','notification-events-v1')
+    assert 'ReplicationFactor: 3' in description
     checks['three_replica_mutual_tls_kafka']=True
     run(projects[0]+['run','--rm','--no-deps','migrate'])
     grants=(ROOT.parent/'droplet/grants.sql').read_text()
@@ -71,7 +73,7 @@ def validate(context):
             with urllib.request.urlopen(request,context=tls,timeout=10) as response:
                 body=response.read();return response.status,json.loads(body) if body else None
         except urllib.error.HTTPError as error:return error.code,None
-        except urllib.error.URLError:return 0,None
+        except (urllib.error.URLError, OSError, http.client.HTTPException):return 0,None
     try:
         wait(lambda:api('/health/ready',token=False)[0]==200,'Load-balanced HTTPS did not become ready')
         checks['trusted_local_https_and_load_balancing']=True
@@ -92,6 +94,12 @@ def validate(context):
         leader=next(m['name'] for m in context['cluster']() if m['role'] in ('leader','primary'));victim=int(leader[-1]);start=time.monotonic()
         run(projects[victim-1]+['stop','--timeout','0','app','proxy','kafka','postgres','etcd'])
         publish('after-node-failure');report['single_node_recovery_seconds']=round(time.monotonic()-start,2)
+        if receiver:
+            event=publish('visible-during-node-failure',True)
+            result=wait(lambda:next((x for x in (api('/v1/events/'+event+'/deliveries')[1] or {}).get('items',[]) if x['status']=='delivered'),None),'Kafka fanout did not deliver with one whole node unavailable')
+            assert result['attempts'][-1]['httpStatus']==204
+            delivered.append({'event_id':event,'delivery_id':result['id'],'http_status':204,'phase':'single-node-down'})
+            checks['kafka_fanout_and_webhook_delivery_with_one_node_down']=True
         for event in report['acknowledged_event_ids']:assert api('/v1/events/'+event)[0]==200,event
         checks['whole_simulated_node_loss_preserves_every_acknowledged_event']=True
         # Recover one node before testing quorum loss, then deliberately leave only one running node.
@@ -110,6 +118,10 @@ def validate(context):
         command += [client,'python3','-']
         completed=run(command,input=(ROOT/'test-backup-roundtrip.py').read_text(),text=True,capture_output=True)
         report['backup_roundtrip']=json.loads(completed.stdout);checks['encrypted_backup_restores_every_table']=True
+        for command in projects:
+            logs=out(command+['logs','--no-color','proxy'])
+            assert secret['caddy_password'] not in logs, 'Proxy logs disclosed database credential'
+        checks['proxy_logs_do_not_disclose_database_credentials']=True
         report['delivered_demo_events']=delivered;report['acknowledged_count']=len(report['acknowledged_event_ids'])
         output=ROOT.parent.parent/'.deploy/local-ha-result.json';output.write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
     finally:subprocess.run(['docker','rm','-f',frontend],check=False)

@@ -1,5 +1,14 @@
 {
     default_sni {$TLS_DOMAIN}
+    persist_config off
+    log {
+        format filter {
+            wrap json
+            fields {
+                storage>dsn delete
+            }
+        }
+    }
     storage postgresql {
         dsn "{$CADDY_DATABASE_DSN}"
     }
