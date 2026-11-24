@@ -3,8 +3,8 @@ set -euo pipefail
 mkdir -p .ha-runtime
 cp deploy/ha/{render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh,prepare-secrets.py,initialize-databases.py} .ha-runtime/
 cp deploy/droplet/verify-image.py .ha-runtime/
-docker pull "$ETCD_IMAGE"
-docker pull "$KAFKA_IMAGE"
+# Package the exact images already loaded and scanned; never refresh mutable tags here.
+docker image inspect "$ETCD_IMAGE" "$KAFKA_IMAGE" "$HA_TOOLS_IMAGE" "$HA_PROXY_IMAGE" >/dev/null
 python3 - <<'PYCODE'
 import json,os,pathlib,subprocess
 root=pathlib.Path('.ha-runtime');images={}
