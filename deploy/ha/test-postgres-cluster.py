@@ -6,10 +6,17 @@ ROOT=pathlib.Path(__file__).resolve().parent
 def run(args,**kwargs):return subprocess.run(args,check=True,**kwargs)
 def output(args):return subprocess.check_output(args,text=True).strip()
 def main():
-    if os.environ.get('GITHUB_ACTIONS')!='true':raise SystemExit('Disposable GitHub runner only')
+    local=os.environ.get('NOTIFICATION_HA_LOCAL_TEST')=='true'
+    if local:
+        if output(['docker','info','--format','{{.Name}}'])!='lima-rancher-desktop':raise SystemExit('Local mode is restricted to Rancher Desktop')
+    elif os.environ.get('GITHUB_ACTIONS')!='true':raise SystemExit('Disposable GitHub runner or explicit Rancher local test only')
     tools=os.environ['HA_TOOLS_IMAGE'];etcd=os.environ.get('ETCD_IMAGE','gcr.io/etcd-development/etcd:v3.7.4')
     spec=importlib.util.spec_from_file_location('render',ROOT/'render.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    work=pathlib.Path(tempfile.mkdtemp(prefix='ha-ci-'));projects=[]
+    base=ROOT.parent.parent/'.deploy/local-ha' if local else None
+    if base:base.mkdir(parents=True,exist_ok=True)
+    work=pathlib.Path(tempfile.mkdtemp(prefix='ha-ci-',dir=base));projects=[]
+    host_root=output(['docker','volume','inspect','notification-workspaces','--format','{{.Mountpoint}}']) if local else None
+    def host_path(path):return host_root+str(path)[len('/workspaces'):] if local else str(path)
     inv={'nodes':[{'id':i,'private_ip':'172.29.0.'+str(10+i)} for i in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'notification-ci:unused','tools_image':tools,'caddy_image':'caddy:2.11.9-alpine','etcd_image':etcd,'kafka_image':'apache/kafka:4.3.1'}
     secrets={key:'ci-only-credential-abcdefghijklmnopqrstuvwxyz' for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id','kafka_tls_password')}|{'webhook_origins':['https://example.com']}
     (work/'inventory.json').write_text(json.dumps(inv));(work/'secrets.json').write_text(json.dumps(secrets))
@@ -26,12 +33,15 @@ def main():
                     os.chown(path,999,999);path.chmod(0o400 if path.suffix=='.key' else 0o444)
                 (directory/'tls'/purpose).chmod(0o755)
             for key in ('app','proxy','migrate','kafka'):compose['services'].pop(key)
-            compose['services']['net']={'image':'alpine:3.23','command':['sleep','infinity'],'networks':{'test':{'ipv4_address':node['private_ip']}}}
+            compose['services']['net']={'image':os.environ.get('HA_NETWORK_IMAGE','alpine:3.23'),'command':['sleep','infinity'],'networks':{'test':{'ipv4_address':node['private_ip']}}}
             compose['networks']={'test':{'external':True,'name':'notification-ha-ci'}}
             for name in ('etcd','postgres'):
                 compose['services'][name]['network_mode']='service:net'
                 compose['services'][name]['depends_on']=['net']
             compose['services']['postgres'].pop('devices')
+            if local:
+                for service in compose['services'].values():
+                    service['volumes']=[host_path(directory/value[2:].split(':',1)[0])+':'+value.split(':',1)[1] if value.startswith('./') else value for value in service.get('volumes',[])]
             (directory/'patroni.json').write_text(json.dumps(pg));os.chown(directory/'patroni.json',999,999);(directory/'patroni.json').chmod(0o400)
             (directory/'compose.yaml').write_text(json.dumps(compose));command=['docker','compose','-p','notification-ha-ci'+str(i),'-f',str(directory/'compose.yaml')];projects.append(command)
             run(command+['up','-d'])

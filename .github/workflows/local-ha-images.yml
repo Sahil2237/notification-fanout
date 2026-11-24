@@ -1,0 +1,33 @@
+name: Prepare signed local HA vendor images
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Export official arm64 Kafka and etcd images
+        run: |
+          mkdir local-vendor
+          docker pull --platform linux/arm64 apache/kafka:4.3.1
+          docker pull --platform linux/arm64 gcr.io/etcd-development/etcd:v3.7.4
+          docker save apache/kafka:4.3.1 gcr.io/etcd-development/etcd:v3.7.4 | gzip > local-vendor/images.tar.gz
+          docker image inspect apache/kafka:4.3.1 gcr.io/etcd-development/etcd:v3.7.4 > local-vendor/images.json
+          (cd local-vendor && sha256sum images.tar.gz images.json > SHA256SUMS)
+      - name: Sign vendor transfer
+        env:
+          SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/local-ha-signing.pem"
+          trap 'rm -f "$RUNNER_TEMP/local-ha-signing.pem"' EXIT
+          openssl pkeyutl -sign -inkey "$RUNNER_TEMP/local-ha-signing.pem" -rawin -in local-vendor/SHA256SUMS -out local-vendor/SHA256SUMS.sig
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: local-ha-vendor-arm64
+          path: local-vendor/
+          retention-days: 3

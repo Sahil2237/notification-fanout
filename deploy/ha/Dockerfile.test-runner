@@ -1,0 +1,4 @@
+FROM public.ecr.aws/docker/library/docker:29-cli
+RUN apk add --no-cache python3 openssl bash openjdk21-jre-headless
+WORKDIR /workspaces/notification-fanout
+ENTRYPOINT ["python3"]

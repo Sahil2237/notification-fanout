@@ -1,7 +1,10 @@
-FROM caddy:2.11.9-builder AS xcaddy
-FROM golang:1.27.4-bookworm AS build
+ARG CADDY_BUILDER_IMAGE=caddy:2.11.9-builder
+ARG GO_IMAGE=golang:1.27.4-bookworm
+ARG CADDY_IMAGE=caddy:2.11.9-alpine
+FROM ${CADDY_BUILDER_IMAGE} AS xcaddy
+FROM ${GO_IMAGE} AS build
 COPY --from=xcaddy /usr/bin/xcaddy /usr/bin/xcaddy
-RUN xcaddy build v2.11.9 --with github.com/dmarcwise/caddy-storage-postgresql@34e4b04f73fdaf1ed0bb374f60eca4c6cfb5bf26
-FROM caddy:2.11.9-alpine
+RUN xcaddy build v2.11.9 --output /usr/bin/caddy --with github.com/dmarcwise/caddy-storage-postgresql@34e4b04f73fdaf1ed0bb374f60eca4c6cfb5bf26
+FROM ${CADDY_IMAGE}
 RUN apk upgrade --no-cache
 COPY --from=build /usr/bin/caddy /usr/bin/caddy
