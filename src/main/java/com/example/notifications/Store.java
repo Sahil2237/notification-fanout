@@ -306,6 +306,11 @@ public final class Store {
     }
 
     public Claim claim(int leaseSeconds, int maxAttempts) {
+        var reservation=reserve(leaseSeconds,maxAttempts);
+        return reservation != null && startAttempt(reservation) ? reservation : null;
+    }
+
+    public Claim reserve(int leaseSeconds, int maxAttempts) {
         return db.inTransaction(
                 h -> {
                     // Serialize reservations per subscriber across all replicas, then recheck with a fresh statement.
@@ -335,21 +340,14 @@ public final class Store {
                             h.createQuery(
                                             """
                                             UPDATE deliveries SET lease_token=:token, lease_expires_at=clock_timestamp()+:seconds * interval '1 second',
-                                            attempts=attempts+1 WHERE id=:id RETURNING *
+                                            attempts=attempts WHERE id=:id RETURNING *
                                             """)
                                     .bind("token", token)
                                     .bind("seconds", leaseSeconds)
                                     .bind("id", id.get())
                                     .mapToMap()
                                     .one();
-                    var number = (Integer) row.get("attempts");
-                    h.createUpdate(
-                                    "INSERT INTO delivery_attempts(id,delivery_id,attempt_number)"
-                                        + " VALUES(:id,:delivery,:number)")
-                            .bind("id", UUID.randomUUID())
-                            .bind("delivery", id.get())
-                            .bind("number", number)
-                            .execute();
+                    var number = (Integer) row.get("attempts")+1;
                     var tenant = (String) row.get("tenant_id");
                     return new Claim(
                             id.get(),
@@ -360,6 +358,25 @@ public final class Store {
                             number,
                             event(h, tenant, (UUID) row.get("event_id")));
                 });
+    }
+
+    public boolean startAttempt(Claim claim) {
+        return db.inTransaction(h->{
+            var changed=h.createUpdate("UPDATE deliveries SET attempts=attempts+1 WHERE id=:id AND lease_token=:token AND lease_expires_at>clock_timestamp() AND attempts=:previous")
+                    .bind("id",claim.id()).bind("token",claim.token()).bind("previous",claim.number()-1).execute();
+            if(changed==0)return false;
+            h.createUpdate("INSERT INTO delivery_attempts(id,delivery_id,attempt_number) VALUES(:id,:delivery,:number)")
+                    .bind("id",UUID.randomUUID()).bind("delivery",claim.id()).bind("number",claim.number()).execute();
+            return true;
+        });
+    }
+
+    public boolean deferForRetryBudget(Claim claim) {
+        return db.withHandle(h->h.createUpdate("""
+                UPDATE deliveries SET lease_token=NULL,lease_expires_at=NULL,
+                next_attempt_at=date_trunc('minute',clock_timestamp())+interval '1 minute'+random()*interval '1 second'
+                WHERE id=:id AND lease_token=:token AND lease_expires_at>clock_timestamp() AND attempts=:previous
+                """).bind("id",claim.id()).bind("token",claim.token()).bind("previous",claim.number()-1).execute()==1);
     }
 
     public boolean finish(Claim claim, Result result, RetryPolicy policy) {
@@ -604,18 +621,6 @@ public final class Store {
             return "auto-v1:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(
                     encode(List.of(identity.tenant(),identity.userId(),identity.compartmentId(),hash(input))).getBytes(StandardCharsets.UTF_8)));
         } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
-    }
-
-    public boolean allowRequest(String tenant, int limit) {
-        return db.withHandle(h -> h.createQuery("""
-                INSERT INTO fixed_window_limits(tenant_id,window_number,request_count)
-                VALUES(:tenant,floor(extract(epoch FROM clock_timestamp())/60)::bigint,1)
-                ON CONFLICT(tenant_id) DO UPDATE SET window_number=EXCLUDED.window_number,
-                request_count=CASE WHEN fixed_window_limits.window_number=EXCLUDED.window_number
-                  THEN fixed_window_limits.request_count+1 ELSE 1 END
-                WHERE fixed_window_limits.window_number<>EXCLUDED.window_number OR fixed_window_limits.request_count<:limit
-                RETURNING request_count
-                """).bind("tenant",tenant).bind("limit",limit).mapTo(Integer.class).findOne().isPresent());
     }
 
     private void deadLetter(Handle h, UUID delivery, String reason) {

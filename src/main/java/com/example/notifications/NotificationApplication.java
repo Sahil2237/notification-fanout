@@ -21,6 +21,7 @@ public final class NotificationApplication extends Application<ServiceConfigurat
 
     @Override
     public void initialize(Bootstrap<ServiceConfiguration> bootstrap) {
+        bootstrap.getObjectMapper().registerSubtypes(new com.fasterxml.jackson.databind.jsontype.NamedType(BoundedServerFactory.class,"bounded"));
         bootstrap
                 .getObjectMapper()
                 .disable(
@@ -53,6 +54,9 @@ public final class NotificationApplication extends Application<ServiceConfigurat
     public void run(ServiceConfiguration config, Environment environment) {
         config.validateSettings();
         config.prepareDatabaseSecurity();
+        var limiter=new RedisRateLimiter(config.redis);
+        environment.lifecycle().manage(limiter);
+        environment.metrics().register("redis.replicas",(Gauge<Integer>)limiter::replicaCount);
         var db = new JdbiFactory().build(environment, config.database, "postgresql");
         var reads = config.readDatabase == null ? db : new JdbiFactory().build(environment, config.readDatabase, "postgresql-replicas");
         var store = new Store(db, reads, environment.getObjectMapper(), config.kafka.enabled, config.maxQueuedEvents, config.subscriberConcurrency);
@@ -69,15 +73,15 @@ public final class NotificationApplication extends Application<ServiceConfigurat
         DeliveryWorker worker = null;
         if (config.workerEnabled) {
             var sender = new WebhookSender(environment.getObjectMapper(), destinations, config);
-            worker = new DeliveryWorker(store, sender, config, environment.metrics());
+            worker = new DeliveryWorker(store, sender, config, environment.metrics(),limiter);
             environment.lifecycle().manage(worker);
         }
-        environment.jersey().register(new ApiSecurity(config, Clock.systemUTC(), store));
+        environment.jersey().register(new ApiSecurity(config, Clock.systemUTC(), limiter, environment.metrics()));
         environment.jersey().register(new ApiErrors());
         environment
                 .jersey()
                 .register(new NotificationResource(store, destinations, environment.metrics(), config));
-        environment.jersey().register(new HealthResource(store, worker, pipeline));
+        environment.jersey().register(new HealthResource(store, worker, pipeline,limiter));
         environment
                 .healthChecks()
                 .register(
@@ -96,5 +100,10 @@ public final class NotificationApplication extends Application<ServiceConfigurat
                 .register(
                         "delivery.oldest_pending_seconds",
                         (Gauge<Double>) store::oldestPendingSeconds);
+        environment.metrics().register("events.acceptance_latency_p95_seconds", (Gauge<Double>) () ->
+            environment.metrics().timer("events.acceptance_latency").getSnapshot().get95thPercentile() / 1_000_000_000.0);
+        if (config.telemetry.enabled) {
+            environment.lifecycle().manage(new MetricsExporter(environment.metrics(), config.telemetry));
+        }
     }
 }

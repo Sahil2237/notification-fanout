@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export APP_IMAGE=${APP_IMAGE:-notification-fanout:smoke}
 export PG_OWNER_PASSWORD=smoke-owner-credential-32-characters
+export REDIS_PASSWORD=smoke-redis-password-at-least-32-characters
 export DB_PASSWORD=smoke-runtime-credential-32-characters
 export ADMIN_TOKEN=smoke-administrator-token-at-least-32-characters
 export API_TOKEN=smoke-api-token-at-least-32-characters
@@ -17,7 +18,7 @@ cleanup() {
 }
 trap cleanup EXIT
 "${compose[@]}" config --quiet
-"${compose[@]}" up -d --wait --wait-timeout 300 db kafka
+"${compose[@]}" up -d --wait --wait-timeout 300 db kafka redis
 "${compose[@]}" run --rm --no-deps kafka-init
 "${compose[@]}" run --rm --no-deps migrate
 "${compose[@]}" run --rm --no-deps grants

@@ -10,11 +10,13 @@ import java.util.Map;
 @Path("/health")
 @Produces("application/json")
 public final class HealthResource {
+    private final RequestLimiter limiter;
     private final Store store;
     private final DeliveryWorker worker;
     private final KafkaPipeline pipeline;
 
-    public HealthResource(Store store, DeliveryWorker worker, KafkaPipeline pipeline) {
+    public HealthResource(Store store, DeliveryWorker worker, KafkaPipeline pipeline, RequestLimiter limiter) {
+        this.limiter=limiter;
         this.store = store;
         this.worker = worker;
         this.pipeline=pipeline;
@@ -29,7 +31,7 @@ public final class HealthResource {
     @GET
     @Path("/ready")
     public Response ready() {
-        var ready = store.healthy() && (worker == null || worker.healthy()) && (pipeline == null || pipeline.healthy());
+        var ready = limiter.healthy() && store.healthy() && (worker == null || worker.healthy()) && (pipeline == null || pipeline.healthy());
         return Response.status(ready ? 200 : 503)
                 .entity(Map.of("status", ready ? "ready" : "unavailable"))
                 .build();

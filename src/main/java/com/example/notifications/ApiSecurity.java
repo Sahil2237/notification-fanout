@@ -25,7 +25,8 @@ import java.util.UUID;
 public final class ApiSecurity implements ContainerRequestFilter, ContainerResponseFilter {
     private final ServiceConfiguration config;
     private final Clock clock;
-    private final Store store;
+    private final RequestLimiter limiter;
+    private final com.codahale.metrics.MetricRegistry metrics;
     private final Map<String, Window> windows = new HashMap<>();
     private static final int MAX_BODY = 256 * 1024;
 
@@ -34,9 +35,13 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
     public ApiSecurity(ServiceConfiguration config, Clock clock) {
         this(config, clock, null);
     }
-    public ApiSecurity(ServiceConfiguration config, Clock clock, Store store) {
-        if (config.production && store == null) throw new IllegalArgumentException("Production requires the shared rate limiter");
-        this.config = config; this.clock = clock; this.store = store;
+    public ApiSecurity(ServiceConfiguration config, Clock clock, RequestLimiter limiter) {
+        this(config, clock, limiter, new com.codahale.metrics.MetricRegistry());
+    }
+    public ApiSecurity(ServiceConfiguration config, Clock clock, RequestLimiter limiter, com.codahale.metrics.MetricRegistry metrics) {
+        this.metrics = metrics;
+        if (config.production && limiter == null) throw new IllegalArgumentException("Production requires the shared rate limiter");
+        this.config = config; this.clock = clock; this.limiter = limiter;
     }
 
     @Override
@@ -108,7 +113,7 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
     }
 
     boolean allow(String tenant) {
-        if (store != null) return store.allowRequest(tenant, config.requestsPerMinute);
+        if (limiter != null) return limiter.allow(tenant, config.requestsPerMinute);
         synchronized (windows) {
         var minute = clock.millis() / 60000;
         var previous = windows.get(tenant);
@@ -139,6 +144,11 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
 
     @Override
     public void filter(ContainerRequestContext request, ContainerResponseContext response) {
+        if (!request.getUriInfo().getPath().startsWith("health/")) {
+            var status = response.getStatus();
+            metrics.counter(status >= 500 ? "http.server.errors" : status >= 400 ? "http.client.errors" : "http.success").inc();
+            if (status == 429) metrics.counter("http.rate.limited").inc();
+        }
         response.getHeaders().putSingle("X-Request-ID", request.getProperty("requestId"));
         response.getHeaders().putSingle("Cache-Control", "no-store");
         var eventId = request.getProperty("eventId");

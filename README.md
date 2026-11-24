@@ -105,7 +105,7 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 |Static tenant credentials|Small, explicit authorization model|Operator provisioning/rotation; integrate identity management and tenant-specific quotas for broader service use|
 |Mutual TLS and separate internal authorities|Encrypts/authenticates cluster traffic and separates application/control credentials|Internal certificates last 90 days; renewal and expiry monitoring require operator ownership|
 |Five retries and transactional delivery DLQ|Terminal failures are queryable and published to a separate Kafka DLQ without losing audit|Permanent failures go directly to DLQ; publication may repeat, so DLQ consumers deduplicate deliveryId; automatic redrive, ordering and replay remain optional|
-|Shared fixed-window request limit|Atomic tenant counters in existing HA PostgreSQL coordinate every application replica without a new Redis failure boundary|A primary write per authenticated request; fixed windows permit a boundary burst and counters share database availability|
+|Shared fixed-window request limit|Atomic Redis Lua counters coordinate application replicas before event persistence; retry budgets share the same store|Redis availability is required; asynchronous replication can lose counters on failover, and fixed windows permit a boundary burst. Redis cloud rollout remains pending|
 |Daily encrypted Spaces backup and strict 24-hour retention|Independent storage and an authenticated restore procedure|Total cluster loss can lose up to roughly 24 hours; no continuous WAL/PITR, and expiring an old backup before a failed new one can leave none|
 |Explicit retention policy, no automatic deletion|Avoids unapproved data removal|Implement bounded retention after business/audit and idempotency-key expiry requirements are agreed|
 |Logs, metrics and health checks|Inspect requests, backlog and errors|Configure external alerts, dashboards and paging; no unmeasured SLO claim|
@@ -113,3 +113,5 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 ## Submission
 
 Source, Mermaid diagrams, tests, workflows and runbooks are in the personal GitHub repository. Grant interviewer access to the private repository. Sign out of personal accounts used on the assessment workstation before handing it back; retain authorized server deployment credentials separately. No claim of exhaustive testing, zero data loss after disk destruction, or high availability is made by a green pipeline.
+
+Metrics-only DigitalOcean Insights export, configuration, metric names and verification status: [Metrics emission](docs/metrics.md). Alarms and ticket creation are outside the current requested scope.

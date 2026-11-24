@@ -13,6 +13,10 @@ import java.util.Map;
 
 public class ServiceConfiguration extends Configuration {
     @Valid @NotNull @JsonProperty public DataSourceFactory database = new DataSourceFactory();
+    @Valid @NotNull @JsonProperty public MetricsSettings telemetry = new MetricsSettings();
+    @Valid @NotNull @JsonProperty public RedisSettings redis = new RedisSettings();
+    @Min(1) @JsonProperty public int tenantRetryBudgetPerMinute = 300;
+    @Min(1) @JsonProperty public int subscriberRetryBudgetPerMinute = 30;
     @Valid @JsonProperty public DataSourceFactory readDatabase;
     @JsonProperty public boolean requireReplicaReads = false;
     @JsonProperty public Map<String,String> userIds = Map.of();
@@ -99,6 +103,8 @@ public class ServiceConfiguration extends Configuration {
     public int requestsPerMinute = 600;
 
     public void validateSettings() {
+        telemetry.validate();
+        redis.validate(production,singleHostDeployment);
         if (requireReplicaReads && readDatabase == null)
             throw new IllegalArgumentException("Replica-only reads require a separate standby pool");
         for (var tenant : credentials.keySet()) {

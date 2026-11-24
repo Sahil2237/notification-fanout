@@ -40,7 +40,7 @@ class ApplicationBudgetTest(unittest.TestCase):
         compose,_=render.render(inventory(),secrets(),1)
         env=compose['services']['app']['environment']
         self.assertEqual('8',env['DB_WRITE_POOL_MAX']);self.assertEqual('4',env['DB_READ_POOL_MAX'])
-        self.assertEqual('1',env['SUBSCRIBER_CONCURRENCY'])
+        self.assertEqual('1',env['SUBSCRIBER_CONCURRENCY']);self.assertIn('--name=node1',compose['services']['etcd']['command'])
         custom=inventory();custom['application']={'DB_WRITE_POOL_MAX':12,'DB_READ_POOL_MAX':6,'REQUESTS_PER_MINUTE':60}
         compose,_=render.render(custom,secrets(),1)
         self.assertEqual('12',compose['services']['app']['environment']['DB_WRITE_POOL_MAX'])
@@ -48,6 +48,26 @@ class ApplicationBudgetTest(unittest.TestCase):
         for value in (0,17,True,'8'):
             custom=inventory();custom['application']={'DB_WRITE_POOL_MAX':value}
             with self.assertRaises(ValueError):render.render(custom,secrets(),1)
+
+class MetricsConfigurationTest(unittest.TestCase):
+    def test_disabled_by_default_and_no_ingest_secret_in_migration(self):
+        compose,_=render.render(inventory(),secrets(),1)
+        self.assertNotIn('env_file',compose['services']['app'])
+        self.assertEqual('false',compose['services']['migrate']['environment']['METRICS_ENABLED'])
+    def test_metrics_use_separate_protected_file_and_per_droplet_identity(self):
+        value=inventory();value['nodes'][1]['droplet_id']=622797519
+        value['telemetry']={'enabled':True,'team_id':'01234567-0123-4123-8123-0123456789ab'}
+        compose,_=render.render(value,secrets(),2)
+        app=compose['services']['app'];env=app['environment']
+        self.assertEqual(['./metrics.env'],app['env_file'])
+        self.assertEqual('622797519',env['DO_DROPLET_ID'])
+        self.assertEqual('true',env['METRICS_ENABLED'])
+        self.assertNotIn('DO_METRICS_INGEST_TOKEN',env)
+        self.assertNotIn('env_file',compose['services']['migrate'])
+        self.assertEqual('false',compose['services']['migrate']['environment']['METRICS_ENABLED'])
+    def test_rejects_missing_resource_attribution(self):
+        value=inventory();value['telemetry']={'enabled':True,'team_id':'not-a-team-uuid'}
+        with self.assertRaises(ValueError):render.render(value,secrets(),1)
 
 class IdentityMigrationTest(unittest.TestCase):
     def test_preserves_api_signing_and_database_identity(self):
@@ -63,8 +83,8 @@ class BackupPolicyTest(unittest.TestCase):
         self.now=datetime.datetime(2026,11,24,3,tzinfo=UTC);self.base=backup.PREFIX+'20261124T030000Z-'+'a'*32
     def obj(self,suffix='json',age_hours=0):return {'Key':self.base+'.'+suffix,'LastModified':self.now-datetime.timedelta(hours=age_hours)}
     def test_durable_delivery_controls_are_in_snapshot_verification(self):
-        self.assertIn('delivery_dead_letters',backup.TABLES);self.assertIn('fixed_window_limits',backup.TABLES)
-        self.assertEqual(11,len(backup.TABLES))
+        self.assertIn('delivery_dead_letters',backup.TABLES);self.assertNotIn('fixed_window_limits',backup.TABLES)
+        self.assertEqual(10,len(backup.TABLES))
     def test_first_backup_and_incomplete_upload_are_due(self):
         self.assertTrue(backup.due([],self.now));self.assertTrue(backup.due([self.obj('tar.age')],self.now))
     def test_does_not_repeat_a_successful_daily_backup(self):self.assertFalse(backup.due([self.obj()],self.now))

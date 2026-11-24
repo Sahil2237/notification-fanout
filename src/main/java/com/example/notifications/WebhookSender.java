@@ -24,12 +24,19 @@ import javax.crypto.spec.SecretKeySpec;
 
 public final class WebhookSender implements AutoCloseable {
     private final CloseableHttpClient client;
-    private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
+    private final java.util.concurrent.ScheduledThreadPoolExecutor deadlines=BoundedExecutors.poller("webhook-deadlines");
+    private record Deadline(long at,AtomicBoolean expired) {}
+    private final java.util.concurrent.ConcurrentHashMap<HttpPost,Deadline> pending=new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.Semaphore slots;
     private final ObjectMapper json;
     private final WebhookPolicy destinations;
     private final ServiceConfiguration config;
     public WebhookSender(ObjectMapper json,WebhookPolicy destinations,ServiceConfiguration config) {
         this.json=json;this.destinations=destinations;this.config=config;
+        slots=new java.util.concurrent.Semaphore(config.workerThreads,true);
+        deadlines.scheduleWithFixedDelay(()->pending.forEach((request,deadline)->{
+            if(System.nanoTime()>=deadline.at()) {deadline.expired().set(true);request.cancel();}
+        }),25,25,TimeUnit.MILLISECONDS);
         var connections=PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(destinations.resolver())
             .setMaxConnTotal(config.workerThreads).setMaxConnPerRoute(config.workerThreads)
             .setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(2))
@@ -40,7 +47,7 @@ public final class WebhookSender implements AutoCloseable {
     }
     public Result send(Claim claim) {
         var expired=new AtomicBoolean();
-        java.util.concurrent.ScheduledFuture<?> deadline=null;
+        if(!slots.tryAcquire()) return new Result(null,"sender_bulkhead_full");
         HttpPost request=null;
         try {
             request=new HttpPost(destinations.validate(claim.webhookUrl()));
@@ -54,8 +61,7 @@ public final class WebhookSender implements AutoCloseable {
             request.setHeader("X-Webhook-Timestamp",timestamp);
             request.setHeader("X-Webhook-Signature","v1="+HexFormat.of().formatHex(hmac(tenantKey,timestamp+"."+data)));
             request.setEntity(new StringEntity(data,ContentType.APPLICATION_JSON));
-            var active=request;
-            deadline=deadlines.schedule(()->{expired.set(true);active.cancel();},config.requestTimeoutSeconds,TimeUnit.SECONDS);
+            pending.put(request,new Deadline(System.nanoTime()+TimeUnit.SECONDS.toNanos(config.requestTimeoutSeconds),expired));
             try(var response=client.executeOpen(null,request,null)) {
                 var code=response.getCode();
                 // Never drain an arbitrary receiver body. Closing this attempt sacrifices reuse.
@@ -64,7 +70,7 @@ public final class WebhookSender implements AutoCloseable {
             }
         } catch(IllegalArgumentException e){return new Result(null,"destination_policy");}
         catch(Exception e){return new Result(null,expired.get()?"timeout":"transport_error");}
-        finally{if(deadline!=null)deadline.cancel(false);if(request!=null)request.cancel();}
+        finally{if(request!=null){pending.remove(request);request.cancel();}slots.release();}
     }
     static byte[] hmac(byte[] secret, String text) {
         try {
@@ -76,5 +82,5 @@ public final class WebhookSender implements AutoCloseable {
         }
     }
 
-    @Override public void close(){deadlines.shutdownNow();client.close(CloseMode.IMMEDIATE);}
+    @Override public void close(){deadlines.shutdownNow();pending.keySet().forEach(HttpPost::cancel);client.close(CloseMode.IMMEDIATE);}
 }

@@ -1,4 +1,13 @@
 services:
+  redis:
+    image: public.ecr.aws/docker/library/redis:8.10.3@sha256:04d1eefe18169c3349884dc2a552f6c429d9a9d8eda4caab13d2b826dc6dfc4c
+    mem_limit: 128m
+    command: [redis-server, --maxmemory, 64mb, --maxmemory-policy, noeviction, --save, '', --appendonly, 'no']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 20
   kafka:
     image: apache/kafka:4.3.2
     hostname: notification-kafka
@@ -53,6 +62,8 @@ services:
       context: .
       target: runtime
     environment: &application_environment
+      REDIS_HOST: redis
+      TEST_REDIS_HOST: redis
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       TEST_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       DB_URL: jdbc:postgresql://db:5432/notifications
@@ -63,6 +74,8 @@ services:
       OTHER_API_TOKEN: ${OTHER_API_TOKEN:-local-other-token-change-me}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-local-signing-secret-change-me}
     depends_on:
+      redis:
+        condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
       db:
@@ -94,6 +107,8 @@ services:
       - "127.0.0.1:8081:8081"
       - "127.0.0.1:9090:9090"
     depends_on:
+      redis:
+        condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
       db:

@@ -157,6 +157,10 @@ class CoreTest {
         config.database.setUrl("jdbc:postgresql://db:5432/notifications");
         config.database.setProperties(java.util.Map.of("sslmode", "disable"));
         config.kafka.bootstrapServers = "kafka:9092";
+        config.redis.password="test-redis-password-at-least-32-characters";
+        config.redis.tls=true;config.redis.requiredReplicas=1;
+        config.redis.sentinelPassword="test-sentinel-password-at-least-32-characters";
+        config.redis.sentinels=java.util.List.of("10.0.0.1:26379","10.0.0.2:26379","10.0.0.3:26379");
         return config;
     }
 
@@ -246,6 +250,15 @@ class CoreTest {
         config.readDatabase.setValidationQuery("SELECT 1");
         config.readDatabase.setProperties(java.util.Map.of("targetServerType","primary"));
         assertThrows(IllegalArgumentException.class,config::validateSettings);
+    }
+
+    @Test void loopExecutorsRejectExtraWorkInsteadOfAccumulatingTasks() throws Exception {
+        var blocker=new java.util.concurrent.CountDownLatch(1);
+        var pool=BoundedExecutors.loops("bounded-test",1);
+        try {
+            pool.submit(()->{try{blocker.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+            assertThrows(java.util.concurrent.RejectedExecutionException.class,()->pool.submit(()->{}));
+        } finally {blocker.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(2,java.util.concurrent.TimeUnit.SECONDS));}
     }
 
 }

@@ -31,6 +31,7 @@ if [[ ! -e /opt/notification-fanout/.env ]]; then
   umask 077
   {
     printf 'PG_OWNER_PASSWORD=%s\n' "$(openssl rand -hex 32)"
+    printf 'REDIS_PASSWORD=%s\n' "$(openssl rand -hex 32)"
     printf 'DB_PASSWORD=%s\n' "$(openssl rand -hex 32)"
     printf 'ADMIN_TOKEN=%s\n' "$(openssl rand -hex 32)"
     printf 'API_TOKEN=%s\n' "$(openssl rand -hex 32)"

@@ -1,3 +1,11 @@
+redis:
+  sentinels: ${REDIS_SENTINELS}
+  user: limiter
+  password: ${REDIS_PASSWORD}
+  sentinelUser: discovery
+  sentinelPassword: ${REDIS_SENTINEL_PASSWORD}
+  tls: true
+  requiredReplicas: 1
 production: true
 adminToken: ${ADMIN_TOKEN}
 singleHostDeployment: false
@@ -74,6 +82,7 @@ kafka:
   securityProtocol: SSL
   publisherThreads: 1
 server:
+  type: bounded
   applicationConnectors:
     - type: http
       port: 8080
@@ -92,3 +101,13 @@ logging:
         type: json
         includesMdcKeys: [event_id, tenant_id]
         flattenMdc: true
+
+# Optional metrics-only DigitalOcean Insights export. No alarms or ticketing.
+telemetry:
+  enabled: ${METRICS_ENABLED:-false}
+  dropletId: "${DO_DROPLET_ID:-}"
+  teamId: "${DO_TEAM_ID:-}"
+  region: blr1
+  endpoint: https://otlp-insights-blr1.digitalocean.com/v1/metrics
+  tokenEnvironment: DO_METRICS_INGEST_TOKEN
+  intervalSeconds: 60

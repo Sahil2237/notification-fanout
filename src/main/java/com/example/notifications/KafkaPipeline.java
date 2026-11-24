@@ -36,7 +36,7 @@ public final class KafkaPipeline implements Managed {
 
     public KafkaPipeline(Store store,ObjectMapper json,KafkaSettings config,MetricRegistry metrics) {
         this.store=store;this.json=json;this.config=config;this.metrics=metrics;
-        executor=Executors.newFixedThreadPool(config.publisherThreads+2);
+        executor=BoundedExecutors.loops("kafka-loop",config.publisherThreads+2);
     }
     @Override public void start() {
         if(config.publisherEnabled) {

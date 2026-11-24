@@ -49,7 +49,7 @@ python3 "$release_dir/verify-image.py" "$release_dir/image.tar.gz" "$(cat "$rele
 # Bind-mounted initialization/configuration files must be readable by unprivileged container users.
 chmod 0644 "$release_dir"/{init-db.sh,grants.sql,Caddyfile}
 if [[ -n "$previous" && -f "$previous/backup.sh" ]]; then bash "$previous/backup.sh"; fi
-"${compose[@]}" up -d --wait --wait-timeout 300 db kafka
+"${compose[@]}" up -d --wait --wait-timeout 300 db kafka redis
 "${compose[@]}" run --rm --no-deps kafka-init
 "${compose[@]}" run --rm --no-deps migrate
 "${compose[@]}" run --rm --no-deps grants

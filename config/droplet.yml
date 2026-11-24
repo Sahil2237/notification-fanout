@@ -1,3 +1,6 @@
+redis:
+  host: ${REDIS_HOST:-redis}
+  password: ${REDIS_PASSWORD}
 production: true
 adminToken: ${ADMIN_TOKEN}
 singleHostDeployment: true
@@ -38,6 +41,7 @@ kafka:
   securityProtocol: PLAINTEXT
   publisherThreads: 1
 server:
+  type: bounded
   applicationConnectors:
     - type: http
       port: 8080

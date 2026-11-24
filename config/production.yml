@@ -1,3 +1,6 @@
+redis:
+  host: ${REDIS_HOST:-redis}
+  password: ${REDIS_PASSWORD}
 production: true
 adminToken: ${ADMIN_TOKEN}
 database:
@@ -37,6 +40,7 @@ kafka:
   username: ${KAFKA_USERNAME}
   password: ${KAFKA_PASSWORD}
 server:
+  type: bounded
   applicationConnectors:
     - type: http
       port: 8080

@@ -95,4 +95,19 @@ One synthetic local drill verified 106 acknowledged events, actual Kafka/webhook
 Daily Spaces backups provide off-host recovery, not synchronous regional disaster replication. A single-node failure target is zero acknowledged-event loss with a surviving safe quorum; total cluster destruction can lose up to roughly 24 hours. One-day retention cannot recover old corruption, and application-side expiry can be delayed during a whole-cluster outage. Per-source ordering and replay are not implemented.
 
 
-The new control layer uses shared primary-database fixed-window counters and per-subscription reservation rows. HTTP work holds no database transaction. Fair scheduling rotates due subscriptions by last claim; terminal deliveries and durable DLQ records commit together. DLQ publication has a separate retryable outbox and ownership tokens. Public history/list APIs use a bounded, standby-only pool; state transitions, policy and idempotency remain primary operations. See [identity, correlation and consistency details](reliability-controls.md).
+The new control layer uses shared Redis fixed-window counters and tenant/subscriber retry budgets and per-subscription reservation rows. HTTP work holds no database transaction. Fair scheduling rotates due subscriptions by last claim; terminal deliveries and durable DLQ records commit together. DLQ publication has a separate retryable outbox and ownership tokens. Public history/list APIs use a bounded, standby-only pool; state transitions, policy and idempotency remain primary operations. See [identity, correlation and consistency details](reliability-controls.md).
+
+```mermaid
+flowchart LR
+  API[Authenticated REST request] --> LIMIT[Redis atomic request window]
+  LIMIT --> DB[Durable event transaction]
+  DB --> KAFKA[Kafka event topic]
+  KAFKA --> JOB[Persistent delivery jobs]
+  JOB --> CLAIM[Fair per-subscription reservation]
+  CLAIM --> BUDGET[Redis retry budgets for retry attempts]
+  BUDGET --> HTTP[Bounded webhook workers]
+  APP[Local Dropwizard metrics] --> BRIDGE[Metrics-only bridge or in-process exporter]
+  BRIDGE --> INSIGHTS[DigitalOcean Insights OTLP metrics]
+```
+
+Redis and the updated application controls are source implementations awaiting their separate coordinated infrastructure/application rollout. The independent metrics bridge can run against the previous application release. No alarms or ticket integrations are requested.

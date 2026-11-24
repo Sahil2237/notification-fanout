@@ -9,6 +9,7 @@ source_dir="$PWD/deploy/droplet"
 mkdir -p "$root/releases/$good" "$root/releases/$bad"
 cat >"$root/.env" <<'EOF'
 PG_OWNER_PASSWORD=ci-owner-credential-at-least-32-characters
+REDIS_PASSWORD=ci-redis-password-at-least-32-characters
 DB_PASSWORD=ci-runtime-credential-at-least-32-characters
 API_TOKEN=ci-api-token-at-least-32-characters
 ADMIN_TOKEN=ci-admin-token-at-least-32-characters

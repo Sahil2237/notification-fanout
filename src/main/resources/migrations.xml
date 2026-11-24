@@ -14,4 +14,5 @@
       END $grant$;
     ]]></sql>
   </changeSet>
+  <changeSet id="007-redis-rate-limit" author="notification-fanout"><sqlFile path="migrations/007_redis_rate_limit.sql"/></changeSet>
 </databaseChangeLog>

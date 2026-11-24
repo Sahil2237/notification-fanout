@@ -43,7 +43,7 @@ class KafkaIT {
     }
     @AfterAll static void stopApi(){APP.after();}
     @BeforeEach void prepareTopic() throws Exception {
-        DB.useHandle(h->h.execute("TRUNCATE fixed_window_limits,kafka_dead_letters,delivery_attempts,deliveries,events,subscriptions CASCADE"));
+        DB.useHandle(h->h.execute("TRUNCATE kafka_dead_letters,delivery_attempts,deliveries,events,subscriptions CASCADE"));
         settings=new KafkaSettings();
         settings.bootstrapServers=System.getenv().getOrDefault("TEST_KAFKA_BOOTSTRAP_SERVERS","notification-kafka:9092");
         settings.topic="notification-test-"+UUID.randomUUID();settings.deadLetterTopic=settings.topic+"-dlq";settings.groupId="test-"+UUID.randomUUID();
@@ -76,7 +76,7 @@ class KafkaIT {
         }
         assertEquals(1,STORE.outboxPending());assertNull(STORE.claim(30,5));assertEquals(0,received.get());
         var pipeline=pipeline(true,true);
-        var worker=new DeliveryWorker(STORE,new WebhookSender(JSON,new WebhookPolicy(APP.getConfiguration()),APP.getConfiguration()),APP.getConfiguration(),new MetricRegistry());
+        var worker=new DeliveryWorker(STORE,new WebhookSender(JSON,new WebhookPolicy(APP.getConfiguration()),APP.getConfiguration()),APP.getConfiguration(),new MetricRegistry(),new TestLimiter());
         pipeline.start();worker.start();
         try {
             await(()->"delivered".equals(STORE.deliveries("demo",event.id(),true,10,0).getFirst().status()),20);

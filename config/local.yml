@@ -1,3 +1,5 @@
+redis:
+  host: ${REDIS_HOST:-notification-redis}
 adminToken: ${ADMIN_TOKEN:-local-admin-token-change-me-32-characters}
 database:
   driverClass: org.postgresql.Driver
@@ -27,6 +29,7 @@ retryBaseMillis: 1000
 retryCapMillis: 60000
 requestsPerMinute: ${REQUESTS_PER_MINUTE:-6000}
 server:
+  type: bounded
   applicationConnectors:
     - type: http
       port: 8080

@@ -15,13 +15,14 @@ import java.util.concurrent.TimeUnit;
 
 public final class DeliveryWorker implements Managed {
     private static final Logger LOG = LoggerFactory.getLogger(DeliveryWorker.class);
+    private final RequestLimiter limiter;
     private final Store store;
     private final WebhookSender sender;
     private final ServiceConfiguration config;
     private final MetricRegistry metrics;
     private final RetryPolicy retries;
     private final ExecutorService workers;
-    private final ScheduledExecutorService recovery = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService recovery = BoundedExecutors.poller("delivery-recovery");
     private volatile boolean running;
     private volatile long lastPoll = System.nanoTime();
 
@@ -29,7 +30,8 @@ public final class DeliveryWorker implements Managed {
             Store store,
             WebhookSender sender,
             ServiceConfiguration config,
-            MetricRegistry metrics) {
+            MetricRegistry metrics, RequestLimiter limiter) {
+        this.limiter=limiter;
         this.store = store;
         this.sender = sender;
         this.config = config;
@@ -40,7 +42,7 @@ public final class DeliveryWorker implements Managed {
                         config.retryBaseMillis,
                         config.retryCapMillis,
                         () -> ThreadLocalRandom.current().nextDouble());
-        workers = Executors.newFixedThreadPool(config.workerThreads);
+        workers = BoundedExecutors.loops("delivery-worker",config.workerThreads);
     }
 
     @Override
@@ -64,13 +66,19 @@ public final class DeliveryWorker implements Managed {
     private void loop() {
         while (running && !Thread.currentThread().isInterrupted()) {
             try {
-                var claim = store.claim(config.leaseSeconds, config.maxAttempts);
+                var claim = store.reserve(config.leaseSeconds, config.maxAttempts);
                 lastPoll = System.nanoTime();
                 if (claim == null) {
                     pause(200);
                     continue;
                 }
                 try (var context = new EventLog(claim.event().id(), claim.tenant())) {
+                try {
+                    if(claim.number()>1 && !limiter.allowRetry(claim.tenant(),claim.subscriptionId(),config.tenantRetryBudgetPerMinute,config.subscriberRetryBudgetPerMinute)) {
+                        store.deferForRetryBudget(claim);metrics.counter("delivery.retry_budget_deferred").inc();continue;
+                    }
+                } catch(RuntimeException e) {store.deferForRetryBudget(claim);throw e;}
+                if(!store.startAttempt(claim)) {metrics.counter("delivery.stale_reservations").inc();continue;}
                 var result = sender.send(claim);
                 var saved = store.finish(claim, result, retries);
                 metrics.counter("delivery.attempts").inc();

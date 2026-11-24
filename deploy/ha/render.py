@@ -41,10 +41,18 @@ def render(inventory,secrets,node_id):
     env={'DB_URL':db_url,'DB_USER':'notification_runtime','DB_PASSWORD':secrets['db_password'],'API_TOKEN':secrets['api_token'],'ADMIN_TOKEN':secrets['admin_token'],'WEBHOOK_SIGNING_SECRET':secrets['signing_secret'],'WEBHOOK_ORIGINS':json.dumps(secrets['webhook_origins']),
        'KAFKA_BOOTSTRAP_SERVERS':','.join(n['private_ip']+':9092' for n in nodes),'JAVA_TOOL_OPTIONS':'-Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError'}
     settings=inventory.get('application',{})
-    for name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000)]:
-        value=settings.get(name,default)
-        if type(value) is not int or value<1 or value>maximum:raise ValueError('Invalid bounded application setting: '+name)
-        env[name]=str(value)
+    for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000)]:
+        value=settings.get(setting_name,default)
+        if type(value) is not int or value<1 or value>maximum:raise ValueError('Invalid bounded application setting: '+setting_name)
+        env[setting_name]=str(value)
+    telemetry=inventory.get('telemetry',{})
+    if telemetry.get('enabled',False):
+        if telemetry.get('enabled') is not True:raise ValueError('Metrics enabled must be boolean')
+        team_id=telemetry.get('team_id','')
+        droplet_id=str(node.get('droplet_id',''))
+        if not re.fullmatch(r'[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',team_id):raise ValueError('Metrics require the DigitalOcean team UUID')
+        if not re.fullmatch(r'[0-9]{1,20}',droplet_id):raise ValueError('Metrics require each DigitalOcean Droplet ID')
+        env.update(METRICS_ENABLED='true',DO_TEAM_ID=team_id,DO_DROPLET_ID=droplet_id)
     env['SERVICE_USER_ID']=secrets.get('service_user_id','service')
     env['SERVICE_COMPARTMENT_ID']=secrets.get('service_compartment_id','default')
     common={'network_mode':'host','restart':'unless-stopped','logging':{'driver':'json-file','options':{'max-size':'10m','max-file':'3'}}}
@@ -55,10 +63,13 @@ def render(inventory,secrets,node_id):
       'kafka':dict(common,image=inventory['kafka_image'],mem_limit='1152m',environment=kafka,volumes=['kafka:/var/lib/kafka/data','./tls/kafka:/tls:ro']),
       'app':dict(common,image='${APP_IMAGE:?Set tested APP_IMAGE}',mem_limit='896m',stop_grace_period='45s',environment=env,entrypoint=['/bin/sh','/config/app-entrypoint.sh'],command=['server'],volumes=['./app-entrypoint.sh:/config/app-entrypoint.sh:ro','./tls/app:/tls:ro']),
       'proxy':dict(common,image=inventory['caddy_image'],mem_limit='160m',environment={'TLS_DOMAIN':inventory['tls_domain'],'CADDY_DATABASE_DSN':'host='+hosts+' port=5432 dbname=caddy user=caddy password='+secrets['caddy_password']+' sslmode=verify-full sslrootcert=/tls/postgres-ca.crt target_session_attrs=read-write connect_timeout=3 options=-cstatement_timeout=30000'},volumes=['./Caddyfile:/etc/caddy/Caddyfile:ro','./tls/app/postgres-ca.crt:/tls/postgres-ca.crt:ro','caddy:/data','caddy-config:/config'])},'volumes':{x:{} for x in ('postgres','etcd','kafka','caddy','caddy-config')}}
+    if telemetry.get('enabled',False):
+        compose['services']['app']['env_file']=['./metrics.env']
     migrate=dict(compose['services']['app'])
     migrate.pop('restart',None)
+    migrate.pop('env_file',None)
     migrate['profiles']=['tools'];migrate['command']=['db','migrate']
-    migrate['environment']=dict(env,DB_USER='notification_owner',DB_PASSWORD=secrets['pg_owner_password'])
+    migrate['environment']=dict(env,DB_USER='notification_owner',DB_PASSWORD=secrets['pg_owner_password'],METRICS_ENABLED='false')
     compose['services']['migrate']=migrate
     compose['services']['proxy']['volumes'].append('./health:/state:ro')
     # Control-plane credentials are mounted only into Patroni, never the application.

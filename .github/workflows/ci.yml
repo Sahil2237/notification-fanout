@@ -9,6 +9,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
+      redis:
+        image: redis:8.10.3
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
       kafka:
         image: apache/kafka:4.3.2
         ports:
@@ -45,6 +54,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      TEST_REDIS_HOST: localhost
       TEST_KAFKA_BOOTSTRAP_SERVERS: localhost:9094
       TEST_DB_URL: jdbc:postgresql://localhost:5432/notifications_test
       DB_USER: notifications
@@ -62,6 +72,9 @@ jobs:
       - name: Validate HA application configuration
         env:
           DB_URL: jdbc:postgresql://10.122.0.1:5432,10.122.0.2:5432,10.122.0.3:5432/notifications
+          REDIS_SENTINELS: '["10.122.0.1:26379","10.122.0.2:26379","10.122.0.3:26379"]'
+          REDIS_PASSWORD: ci-redis-credential-at-least-32-characters
+          REDIS_SENTINEL_PASSWORD: ci-sentinel-credential-at-least-32-characters
           DB_USER: notification_runtime
           DB_PASSWORD: ci-runtime-credential-at-least-32-characters
           API_TOKEN: ci-tenant-credential-at-least-32-characters
