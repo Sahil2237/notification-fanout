@@ -39,7 +39,7 @@ def validate(context):
         start=site.index('    tls {');end=site.index('    request_body {');site=site[:start]+'    tls /ingress/server.crt /ingress/server.key\n'+site[end:]
         (directory/'Caddyfile').write_text(prefix+'{$TLS_DOMAIN} {'+site);(directory/'health').mkdir(exist_ok=True)
         for name in ('app','proxy','migrate','kafka'):
-            service=full['services'][name];service['network_mode']='service:net';service['depends_on']=['net']
+            service=full['services'][name];service['network_mode']='service:net';service['depends_on']=['net'];service['pull_policy']='never'
             service['volumes']=[host(directory/v[2:].split(':',1)[0])+':'+v.split(':',1)[1] if v.startswith('./') else v for v in service.get('volumes',[])]
             if name=='proxy':
                 service['environment']['TLS_DOMAIN']=vip;service['volumes'].append(host(work/'ingress')+':/ingress:ro')
@@ -104,6 +104,12 @@ def validate(context):
         publish('after-quorum-recovery')
         for event in report['acknowledged_event_ids']:assert api('/v1/events/'+event)[0]==200,event
         checks['quorum_recovery_preserves_acknowledged_events']=True
+        backup_env={'NOTIFICATION_HA_LOCAL_TEST':'true','PGHOST':addresses,'PGPORT':'5432','PGUSER':'notification_backup','PGPASSWORD':secret['backup_password'],'PGDATABASE':'notifications','PGSSLMODE':'verify-full','PGSSLROOTCERT':'/tls/postgres-ca.crt','PGTARGETSESSIONATTRS':'read-write','PG_ADMIN_DSN':primary_dsn,'PG_ADMIN_PASSWORD':secret['pg_owner_password'],'PG_BACKUP_DSN':primary_dsn.replace('user=notification_owner','user=notification_backup').replace('password='+secret['pg_owner_password'],'password='+secret['backup_password'])}
+        command=['docker','exec','-i']
+        for key,value in backup_env.items():command+=['-e',key+'='+value]
+        command += [client,'python3','-']
+        completed=run(command,input=(ROOT/'test-backup-roundtrip.py').read_text(),text=True,capture_output=True)
+        report['backup_roundtrip']=json.loads(completed.stdout);checks['encrypted_backup_restores_every_table']=True
         report['delivered_demo_events']=delivered;report['acknowledged_count']=len(report['acknowledged_event_ids'])
         output=ROOT.parent.parent/'.deploy/local-ha-result.json';output.write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
     finally:subprocess.run(['docker','rm','-f',frontend],check=False)

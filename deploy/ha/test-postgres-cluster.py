@@ -48,6 +48,7 @@ def main(extra_validation=None):
             compose['services']['postgres'].pop('devices')
             if local:
                 for service in compose['services'].values():
+                    service['pull_policy']='never'
                     service['volumes']=[host_path(directory/value[2:].split(':',1)[0])+':'+value.split(':',1)[1] if value.startswith('./') else value for value in service.get('volumes',[])]
             (directory/'patroni.json').write_text(json.dumps(pg));os.chown(directory/'patroni.json',999,999);(directory/'patroni.json').chmod(0o400)
             (directory/'compose.yaml').write_text(json.dumps(compose));command=['docker','compose','-p','notification-ha-ci'+str(i),'-f',str(directory/'compose.yaml')];projects.append(command)
