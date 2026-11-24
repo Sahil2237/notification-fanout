@@ -23,12 +23,12 @@ cleanup() {
 trap cleanup EXIT
 bundle() {
   local sha=$1
-  cp "$source_dir"/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,verify-image.py} "$root/releases/$sha/"
+  cp "$source_dir"/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,verify-image.py,ha-release.sh} "$root/releases/$sha/"
   chmod 0600 "$root/releases/$sha"/{init-db.sh,grants.sql,Caddyfile}
   docker save "notification-fanout:$sha" | gzip >"$root/releases/$sha/image.tar.gz"
   docker image inspect "notification-fanout:$sha" --format '{{.Id}}' >"$root/releases/$sha/image-id"
   printf '%s\n' "$sha" >"$root/releases/$sha/release-sha"
-  (cd "$root/releases/$sha" && sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh verify-image.py >SHA256SUMS)
+  (cd "$root/releases/$sha" && sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh verify-image.py ha-release.sh >SHA256SUMS)
 }
 bundle "$good"
 bash "$root/releases/$good/release.sh" "$good"

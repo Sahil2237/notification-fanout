@@ -58,6 +58,7 @@ jobs:
           cache: maven
       - run: mvn -B -ntp verify
       - run: python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v
+      - run: python3 -m unittest discover -s deploy/ha -p 'test_*.py' -v
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -96,13 +97,13 @@ jobs:
       - name: Package the exact tested image
         run: |
           mkdir -p .release
-          cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,verify-image.py} .release/
+          cp deploy/droplet/{compose.yaml,init-db.sh,grants.sql,Caddyfile,release.sh,backup.sh,verify-image.py,ha-release.sh} .release/
           python3 deploy/droplet/pin-images.py .release/compose.yaml
           docker save "$APP_IMAGE" | gzip > .release/image.tar.gz
           docker image inspect "$APP_IMAGE" --format '{{.Id}}' > .release/image-id
           printf '%s\n' "$GITHUB_SHA" > .release/release-sha
           cd .release
-          sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh verify-image.py > SHA256SUMS
+          sha256sum image.tar.gz image-id release-sha compose.yaml init-db.sh grants.sql Caddyfile release.sh backup.sh verify-image.py ha-release.sh > SHA256SUMS
       - name: Sign a trusted default-branch release
         if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && vars.DROPLET_HOST != ''
         env:
@@ -124,3 +125,65 @@ jobs:
         with:
           name: security-report
           path: security-report.json
+
+  ha-runtime:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      HA_TOOLS_IMAGE: notification-ha-tools:${{ github.sha }}
+      HA_PROXY_IMAGE: notification-ha-proxy:${{ github.sha }}
+      ETCD_IMAGE: gcr.io/etcd-development/etcd:v3.7.4
+      KAFKA_IMAGE: apache/kafka:4.3.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build HA database and backup tools
+        run: docker build --platform linux/amd64 -t "$HA_TOOLS_IMAGE" -f deploy/ha/Dockerfile deploy/ha
+      - name: Verify real three-node synchronous PostgreSQL failover
+        run: sudo --preserve-env=GITHUB_ACTIONS,HA_TOOLS_IMAGE,ETCD_IMAGE python3 deploy/ha/test-postgres-cluster.py
+      - name: Build distributed HTTPS proxy
+        run: docker build --platform linux/amd64 -t "$HA_PROXY_IMAGE" -f deploy/ha/Dockerfile.caddy deploy/ha
+      - name: Scan HA database and backup tools
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.HA_TOOLS_IMAGE }}
+          format: json
+          output: ha-tools-security.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan HA proxy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.HA_PROXY_IMAGE }}
+          format: json
+          output: ha-proxy-security.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Package pinned HA runtime
+        run: bash deploy/ha/package-runtime.sh
+      - name: Sign trusted HA infrastructure artifact
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/ha-signing.pem"
+          trap 'rm -f "$RUNNER_TEMP/ha-signing.pem"' EXIT
+          openssl pkeyutl -sign -inkey "$RUNNER_TEMP/ha-signing.pem" -rawin -in .ha-runtime/SHA256SUMS -out .ha-runtime/SHA256SUMS.sig
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ha-runtime
+          path: .ha-runtime/
+          include-hidden-files: true
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: ha-security-reports
+          path: ha-*-security.json

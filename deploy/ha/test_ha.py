@@ -1,0 +1,70 @@
+import datetime,importlib.util,json,pathlib,unittest
+from unittest.mock import MagicMock,patch
+ROOT=pathlib.Path(__file__).parent
+
+def load(name,file):
+    spec=importlib.util.spec_from_file_location(name,ROOT/file);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+render=load('ha_render','render.py');backup=load('spaces_backup','spaces-backup.py');UTC=datetime.timezone.utc
+
+def inventory():return {'nodes':[{'id':n,'private_ip':'10.122.0.'+str(n)} for n in (1,2,3)],'tls_domain':'203.0.113.8','app_image':'app:tested','tools_image':'tools:tested','caddy_image':'proxy:tested','etcd_image':'etcd:v3.6.8','kafka_image':'apache/kafka:4.3.1'}
+def secrets():return {key:'a'*32 for key in ('pg_owner_password','replication_password','db_password','admin_token','api_token','signing_secret','caddy_password','backup_password','kafka_cluster_id')}|{'webhook_origins':['https://webhook.example']}
+class ClusterConfigurationTest(unittest.TestCase):
+    def test_requires_exactly_three_distinct_nodes(self):
+        for nodes in (inventory()['nodes'][:2],inventory()['nodes']+[{'id':4,'private_ip':'10.0.0.4'}]):
+            value=inventory();value['nodes']=nodes
+            with self.assertRaises(ValueError):render.validate(value)
+    def test_rejects_duplicate_and_public_addresses(self):
+        for ip in ('8.8.8.8','127.0.0.1','10.122.0.1'):
+            value=inventory();value['nodes'][1]['private_ip']=ip
+            with self.assertRaises(ValueError):render.validate(value)
+    def test_rejects_injected_image_or_weak_secret(self):
+        value=inventory();value['tools_image']='image; touch /tmp/bad'
+        with self.assertRaises(ValueError):render.validate(value)
+        secret=secrets();secret['replication_password']='weak'
+        with self.assertRaises(ValueError):render.render(inventory(),secret,1)
+    def test_postgresql_never_disables_synchronous_durability(self):
+        compose,pg=render.render(inventory(),secrets(),1);dcs=pg['bootstrap']['dcs']
+        self.assertTrue(dcs['synchronous_mode']);self.assertTrue(dcs['synchronous_mode_strict']);self.assertEqual(1,dcs['synchronous_node_count']);self.assertEqual(0,dcs['maximum_lag_on_failover'])
+        self.assertEqual('remote_apply',dcs['postgresql']['parameters']['synchronous_commit']);self.assertEqual('on',dcs['postgresql']['parameters']['fsync']);self.assertEqual('required',pg['watchdog']['mode'])
+    def test_kafka_has_three_copies_and_no_unclean_election(self):
+        compose,_=render.render(inventory(),secrets(),2);env=compose['services']['kafka']['environment']
+        self.assertEqual('3',env['KAFKA_DEFAULT_REPLICATION_FACTOR']);self.assertEqual('2',env['KAFKA_MIN_INSYNC_REPLICAS']);self.assertEqual('false',env['KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE']);self.assertEqual(3,len(env['KAFKA_CONTROLLER_QUORUM_VOTERS'].split(',')))
+        self.assertEqual('required',env['KAFKA_SSL_CLIENT_AUTH']);self.assertEqual('false',env['KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND'])
+    def test_app_cannot_read_control_plane_credentials(self):
+        compose,pg=render.render(inventory(),secrets(),3)
+        self.assertFalse(any('/control' in volume for volume in compose['services']['app']['volumes']))
+        self.assertEqual('https',pg['etcd3']['protocol']);self.assertEqual(3,len(pg['etcd3']['hosts'].split(',')))
+        command=compose['services']['etcd']['command'];self.assertIn('--client-cert-auth=true',command);self.assertIn('--peer-client-cert-auth=true',command)
+class BackupPolicyTest(unittest.TestCase):
+    def setUp(self):
+        self.now=datetime.datetime(2026,11,24,3,tzinfo=UTC);self.base=backup.PREFIX+'20261124T030000Z-'+'a'*32
+    def obj(self,suffix='json',age_hours=0):return {'Key':self.base+'.'+suffix,'LastModified':self.now-datetime.timedelta(hours=age_hours)}
+    def test_first_backup_and_incomplete_upload_are_due(self):
+        self.assertTrue(backup.due([],self.now));self.assertTrue(backup.due([self.obj('tar.age')],self.now))
+    def test_does_not_repeat_a_successful_daily_backup(self):self.assertFalse(backup.due([self.obj()],self.now))
+    def test_previous_day_is_due_after_scheduled_hour(self):self.assertTrue(backup.due([self.obj(age_hours=4)],self.now))
+    def test_retention_boundary_is_exactly_twenty_four_hours(self):
+        young=self.obj(age_hours=23.999);old=self.obj(age_hours=24)
+        self.assertEqual([old['Key']],backup.expired([young,old],self.now))
+    def test_never_selects_foreign_objects_for_deletion(self):
+        client=MagicMock();client.get_paginator.return_value.paginate.return_value=[{'Contents':[self.obj(age_hours=25),{'Key':'important/unrelated.json','LastModified':self.now-datetime.timedelta(days=2)}]}]
+        values=backup.candidates(client,'bucket');self.assertEqual(1,len(values));backup.prune(client,'bucket',values,self.now)
+        client.delete_object.assert_called_once_with(Bucket='bucket',Key=self.obj(age_hours=25)['Key'])
+    def test_manifest_authentication_rejects_tampering(self):
+        value={'schema_version':1,'object_key':self.base+'.tar.age','sha256':'a'*64,'bytes':10}
+        signed=backup.seal_manifest(value,'secret'*8);self.assertEqual(value['object_key'],backup.verify_manifest(signed,'secret'*8)['object_key'])
+        signed['bytes']=11
+        with self.assertRaises(ValueError):backup.verify_manifest(signed,'secret'*8)
+    def test_manifest_rejects_path_escape_and_invalid_hash(self):
+        for key,sha in (('../outside.tar.age','a'*64),(self.base+'.tar.age','not-a-hash')):
+            with self.assertRaises(ValueError):backup.safe_manifest({'schema_version':1,'object_key':key,'sha256':sha,'bytes':1})
+    def test_failed_upload_never_publishes_completion_manifest(self):
+        connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value;cursor.fetchone.side_effect=[('snapshot',)]+[(0,)]*len(backup.TABLES)
+        client=MagicMock();client.upload_file.side_effect=OSError('simulated upload failure')
+        def run(args,**kwargs):
+            if args[0]=='pg_dump':pathlib.Path(next(a.split('=',1)[1] for a in args if a.startswith('--file='))).write_bytes(b'dump')
+            elif args[0]=='age':kwargs['stdout'].write(b'encrypted')
+        with patch.object(backup.subprocess,'run',side_effect=run):
+            with self.assertRaises(OSError):backup.backup(client,'bucket',connection,self.now,'public-recipient')
+        client.put_object.assert_not_called()
+if __name__=='__main__':unittest.main()

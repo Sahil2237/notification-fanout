@@ -102,8 +102,8 @@ public class ServiceConfiguration extends Configuration {
                     || !"disable".equals(database.getProperties().get("sslmode"))) {
                 throw new IllegalArgumentException("Single-host mode requires the dedicated db and kafka Docker services");
             }
-        } else if (production && !"SASL_SSL".equals(kafka.securityProtocol)) {
-            throw new IllegalArgumentException("Managed production Kafka requires SASL_SSL");
+        } else if (production && !"SASL_SSL".equals(kafka.securityProtocol) && !"SSL".equals(kafka.securityProtocol)) {
+            throw new IllegalArgumentException("Multi-host production Kafka requires authenticated TLS");
         }
         if (leaseSeconds <= requestTimeoutSeconds + 2) {
             throw new IllegalArgumentException(

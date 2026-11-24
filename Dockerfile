@@ -19,6 +19,7 @@ COPY --from=build /workspaces/notification-fanout/target/notification-fanout.jar
 COPY config/local.yml ./config.yml
 COPY config/production.yml ./production.yml
 COPY config/droplet.yml ./droplet.yml
+COPY config/ha.yml ./ha.yml
 USER app
 EXPOSE 8080 8081
 ENTRYPOINT ["java", "-jar", "/opt/app/notification-fanout.jar"]

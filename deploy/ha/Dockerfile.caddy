@@ -1,0 +1,4 @@
+FROM caddy:2.11.9-builder AS build
+RUN xcaddy build v2.11.9 --with github.com/dmarcwise/caddy-storage-postgresql@34e4b04f73fdaf1ed0bb374f60eca4c6cfb5bf26
+FROM caddy:2.11.9-alpine
+COPY --from=build /usr/bin/caddy /usr/bin/caddy

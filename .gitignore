@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 .release/
 security-report.json
+
+.ha-runtime/
+ha-*-security.json

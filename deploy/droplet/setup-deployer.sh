@@ -19,7 +19,8 @@ visudo -cf /etc/sudoers.d/notification-deploy
 python3 - <<'PYCODE'
 import os,pathlib,secrets
 path=pathlib.Path('/opt/notification-fanout/.env')
-text=path.read_text()
+text=path.read_text() if path.exists() else ""
+if not path.exists():path.write_text(text)
 if not any(line.startswith('ADMIN_TOKEN=') for line in text.splitlines()):
     with path.open('a') as stream:stream.write('\nADMIN_TOKEN='+secrets.token_hex(32)+'\n')
 path.chmod(0o600)

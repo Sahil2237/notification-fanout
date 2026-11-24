@@ -8,6 +8,9 @@ release_sha=${1:?Usage: release.sh TESTED_COMMIT_SHA}
 root=/opt/notification-fanout
 release_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 [[ "$release_dir" == "$root/releases/$release_sha" ]] || exit 1
+if [[ -f "$root/ha/enabled" ]]; then
+  exec bash "$release_dir/ha-release.sh" "$release_sha"
+fi
 mkdir -p "$root"
 exec 9>"$root/deploy.lock"
 flock -n 9 || { echo 'Another deployment is running'; exit 1; }

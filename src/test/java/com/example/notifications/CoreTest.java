@@ -208,4 +208,26 @@ class CoreTest {
         assertThrows(IllegalArgumentException.class,config::validateSettings);
     }
 
+    @Test void kafkaMutualTlsRequiresAllCredentialsAndValidatesHostnames() {
+        var config=new KafkaSettings();config.securityProtocol="SSL";
+        assertThrows(IllegalArgumentException.class,()->config.properties("test"));
+        config.caCertificate="test-ca";config.clientCertificate="test-client";
+        assertThrows(IllegalArgumentException.class,()->config.properties("test"));
+        config.clientPrivateKey="test-private-key";
+        var properties=config.properties("test");
+        assertEquals("SSL",properties.get("security.protocol"));
+        assertEquals("https",properties.get("ssl.endpoint.identification.algorithm"));
+        assertEquals("PEM",properties.get("ssl.keystore.type"));
+        assertEquals(config.clientCertificate,properties.get("ssl.keystore.certificate.chain"));
+        assertEquals(config.clientPrivateKey,properties.get("ssl.keystore.key"));
+        assertFalse(properties.containsKey("sasl.jaas.config"));
+    }
+    @Test void multiHostProductionRequiresEncryptedKafka() {
+        var config=dropletConfig();config.singleHostDeployment=false;
+        config.kafka.securityProtocol="SSL";
+        assertDoesNotThrow(config::validateSettings);
+        config.kafka.securityProtocol="PLAINTEXT";
+        assertThrows(IllegalArgumentException.class,config::validateSettings);
+    }
+
 }

@@ -1,0 +1,39 @@
+{
+    default_sni {$TLS_DOMAIN}
+    storage postgresql {
+        dsn "{$CADDY_DATABASE_DSN}"
+    }
+}
+:9080 {
+    @draining file {
+        root /state
+        try_files drain
+    }
+    respond @draining 503
+    handle /health/ready {
+        reverse_proxy 127.0.0.1:8080
+    }
+    respond 404
+}
+{$TLS_DOMAIN} {
+    tls {
+        issuer acme {
+            dir https://acme-v02.api.letsencrypt.org/directory
+            profile shortlived
+        }
+    }
+    request_body {
+        max_size 300KB
+    }
+    @administrator path /v1/admin/*
+    respond @administrator 404
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+    }
+    reverse_proxy 127.0.0.1:8080
+    log {
+        output stdout
+        format json
+    }
+}
