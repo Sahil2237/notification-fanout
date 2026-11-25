@@ -6,7 +6,24 @@ Checked against application `6474ad3`, effective node configuration and the Digi
 
 The public REST base is `https://174.138.121.225`. A managed regional external load balancer in BLR1 forwards to the three Caddy/application backends; the overview showed all three Active and the balancer Healthy. Readiness probes use private port 9080, path `/health/ready`; a backend drain file returns503 on that route. Health-based removal/rejoin is implemented. The existing architecture uses HTTPS passthrough to Caddy, which terminates public TLS and forwards to Java on loopback 8080.
 
-**The exact balancing algorithm and sticky-session/health-threshold settings were not verified in this review.** Browser access to Settings failed after the healthy overview was read. Do not label it round-robin, least-connections, weighted routing or a precise failure-detection interval from an assumed provider default. An operator should record the effective settings before using a specific algorithm in an interview claim. Connection reuse can also make request counts differ even with evenly allocated connections.
+**Verified follow-up, 25 November 2026:** live Settings values are recorded below and in [sanitized inspection evidence](evidence/load-balancer-2026-11-25.json). The earlier statement that the health/affinity settings were unconfirmed is superseded. Both edit forms were cancelled without saving; no settings changed.
+
+Traffic distribution is **DigitalOcean-managed**, rather than a user-selected round-robin/least-connections setting. The provider describes distribution intended to balance new connections/requests approximately evenly, and its API marks the algorithm selector deprecated. The Settings page exposes no algorithm selector. This confirms the provider contract, not a disclosed internal implementation or a measured equal request split. Sources: [current features](https://docs.digitalocean.com/products/networking/load-balancers/details/features/) and [API deprecation](https://docs.digitalocean.com/reference/api/reference/load-balancers/).
+
+| Effective live setting | Verified value |
+| --- | --- |
+| Health protocol, port and path | HTTP, 9080,`/health/ready` |
+| Probe interval | 5 seconds |
+| Response timeout | 3 seconds |
+| Unhealthy threshold | 2 failed checks |
+| Healthy/rejoin threshold | 2 successful checks |
+| Sticky sessions / session affinity |Off; no sticky-session cookie affinity is enabled |
+| Backend keepalive |Enabled |
+| HTTP idle timeout | 60 seconds |
+| PROXY protocol |Disabled |
+| Managed LB nodes / active backends | 2 / 3 |
+
+Two probes at a five-second interval do not establish an exactly-ten-second outage/recovery SLA: probe phase/timeouts, in-flight traffic and dependency recovery matter. Sticky sessions off does not mean every consecutive request reaches a different Droplet; connection reuse and backend health still affect observed distribution. The load balancer's own HTTP-to-HTTPS redirect is off; Caddy owns its HTTPS/redirect handling. Do not equate the LB setting with a public cleartext-ingestion guarantee.
 
 There is no separately deployed API gateway product, WAF, service mesh or API-management portal. Caddy provides reverse proxy/TLS/body limits/private-admin rejection. The application itself authenticates, authorizes, validates, rate-limits and handles API errors. `/v1` provides contract versioning; it does not imply a gateway.
 

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-11-25T04:19:32.732993+00:00",
+  "verified_date_ist": "2026-11-25",
+  "load_balancer": {
+    "id": "15a568f0-1172-4b6f-9ddb-6a4fad34ee1f",
+    "name": "notification-fanout-ha",
+    "public_ipv4": "174.138.121.225",
+    "region": "blr1",
+    "type": "regional_external_http",
+    "managed_nodes": 2,
+    "overview_status": "Healthy",
+    "active_backend_droplets": 3
+  },
+  "evidence_method": "Read live DigitalOcean Control Panel overview/settings; opened health/advanced forms to read effective fields and cancelled without saving. No API response or synthetic balancing benchmark is claimed.",
+  "distribution": {
+    "policy": "DigitalOcean-managed distribution",
+    "user_selectable_algorithm": false,
+    "round_robin_or_least_connections_selection": "deprecated by provider",
+    "specific_internal_algorithm_name": null,
+    "scope": "Algorithm behavior is established by current provider documentation; actual health/affinity values below were read from this load balancer. No provider-internal implementation name or exact equal request split is claimed.",
+    "sources": [
+      "https://docs.digitalocean.com/products/networking/load-balancers/details/features/",
+      "https://docs.digitalocean.com/reference/api/reference/load-balancers/"
+    ]
+  },
+  "health_check": {
+    "protocol": "http",
+    "port": 9080,
+    "path": "/health/ready",
+    "check_interval_seconds": 5,
+    "response_timeout_seconds": 3,
+    "unhealthy_threshold": 2,
+    "healthy_threshold": 2
+  },
+  "session_affinity": {
+    "sticky_sessions_enabled": false,
+    "cookie_affinity_enabled": false
+  },
+  "additional_observed_settings": {
+    "backend_keepalive_enabled": true,
+    "http_idle_timeout_seconds": 60,
+    "proxy_protocol_enabled": false,
+    "load_balancer_http_to_https_redirect_enabled": false,
+    "forwarding_rules": [
+      {
+        "entry_protocol": "http",
+        "entry_port": 80,
+        "target_protocol": "http",
+        "target_port": 80
+      },
+      {
+        "entry_protocol": "https",
+        "entry_port": 443,
+        "target_protocol": "https",
+        "target_port": 443
+      }
+    ]
+  },
+  "changes_applied": false,
+  "interpretation_limits": [
+    "Two failed or successful probes define state transitions, not a guaranteed exactly-ten-second failover time. Probe scheduling, timeout, in-flight traffic and dependency recovery affect observed interruption.",
+    "Sticky sessions off does not require consecutive requests or reused connections to hit different backends.",
+    "This inspection does not retest data-plane load distribution or change application/infrastructure settings."
+  ]
+}

@@ -134,7 +134,7 @@ flowchart TB
     GATE --> N3
 ```
 
-There are exactly three compute Droplets, not dedicated machines for every component. The load balancer and Spaces are separate managed services. Kafka, PostgreSQL and Redis are self-managed. All three hosts share a region; independent physical-host/availability-zone placement is not guaranteed.
+There are exactly three compute Droplets, not dedicated machines for every component. The load balancer and Spaces are separate managed services. The 25 November read-only follow-up verified HTTP health checks on9080/health/ready every 5 seconds, response timeout 3 seconds, unhealthy/healthy thresholds 2/2 and sticky sessions off. Distribution is provider-managed; the provider has deprecated algorithm selection. These are not an exact failover SLA or a named internal scheduling algorithm. See [verified LB settings](network-security.md#load-balancing-and-gateway-boundary). Kafka, PostgreSQL and Redis are self-managed. All three hosts share a region; independent physical-host/availability-zone placement is not guaranteed.
 
 | Layer | Deployed contract | Failure boundary |
 | --- | --- | --- |

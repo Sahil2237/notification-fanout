@@ -251,6 +251,7 @@
     "Receiver-side deduplication is needed for exactly-once business effects",
     "Last observed Insights provider404; no confirmed Metrics Explorer visibility",
     "No new complete disaster recovery or representative fanout soak test",
-    "Exact current LB balancing algorithm was not verified by later documentation review"
-  ]
+    "LB settings were unverified at the initial review; superseded by load-balancer-2026-11-25.json"
+  ],
+  "follow_up_load_balancer_verification": "load-balancer-2026-11-25.json"
 }
