@@ -1,5 +1,7 @@
 # Metrics emission
 
+See the [source-derived concepts/metrics catalogue](concepts-and-metrics.md) for every explicit local-to-OTLP mapping, the local-only instruments and component-specific monitoring gaps.
+
 This feature emits aggregate metrics only. It creates no alerts, alarms, incident tickets, dashboards, log exports, or traces.
 
 ## Current state

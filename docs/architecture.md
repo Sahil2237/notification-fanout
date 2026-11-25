@@ -1,5 +1,7 @@
 # Deployed architecture and request flows
 
+For a diagram-led presentation, start with [visual HLD](hld.md), [component LLD guide](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md). This document retains the detailed canonical request/state diagrams.
+
 This describes application revision `6474ad3b0c043677066c539f3523c075b7358af0`, verified on 24 November 2026. See [deployment evidence](submission-status.md), [requirements coverage](requirements.md) and [design decisions](design.md). Role names below are logical roles: PostgreSQL and Redis primaries can move between hosts.
 
 ## Event ingestion, fanout, retries and audit

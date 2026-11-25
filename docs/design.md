@@ -1,5 +1,7 @@
 # System design: actual implementation and trade-offs
 
+[Visual HLD](hld.md), [separate component LLDs](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md) provide the diagram-led companion to these decisions.
+
 Runtime reference: `6474ad3`, verified 24 November 2026. Documentation refresh: 25 November2026 IST. [Assessment coverage](requirements.md), [architecture](architecture.md), [deployment evidence](submission-status.md), [API](api.md), [network/authentication](network-security.md).
 
 ## A. Scope, users and acceptance

@@ -67,3 +67,7 @@ Authentication is static tenant/admin bearer credentials, not OAuth/OIDC. Java/a
 - The original named-editor requirement was VS Code/Cursor; IntelliJ was used at the user's request and the Dev Container alternative is checked in. Interviewer repository access and personal-account sign-out remain final handoff obligations.
 
 The provisioning estimate was approximately $101/month base for the three Droplets, two LB units and Standard Spaces; it is historical, excludes taxes/overages/unrelated resources and is not a current pricing quotation. Redis added no paid compute node. The historical10,000-event no-match 50/s probe is [separate evidence](evidence/release-57b3fbf.json), not a fanout capacity or10,000 events/s claim.
+
+## Documentation review: restore-helper installation gap
+
+Read-only inspection on the first HA host found the legacy `/usr/local/sbin/notification-restore-test` copy lacks the current delivery-DLQ metadata support, while `/opt/notification-fanout/ha/restore-test.sh` contains it. [Operations](operations.md#restore-command-version-caveat-25-november-documentation-review) now uses the current HA path. Legacy-helper synchronization across hosts and a fresh ten-table actual Spaces restore remain unverified; this documentation release does not claim to fix or retest them.
