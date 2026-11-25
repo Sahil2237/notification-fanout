@@ -1,14 +1,16 @@
 # Shared Redis quota deployment
 
+**Current status:** the three-host Redis/Sentinel infrastructure and application 6474ad3 controls are deployed. Shared quota, automatic cloud promotion, existing-client recovery and replica rejoin passed; see [version-pinned evidence](../../docs/submission-status.md). The procedure below describes bootstrap/release safeguards, not a pending rollout.
+
 Three existing Bangalore Droplets host one Redis process and one Sentinel each. The primary has two replicas; three Sentinels use quorum2 to elect a replacement. No additional paid machine or managed database is required. This store controls API admission and retry budgets only. PostgreSQL remains the durable event, idempotency and delivery-audit store.
 
 ## Security and resource boundary
 
-Redis and Sentinel expose TLS-only ports6379 and26379 on each host's private address and loopback. The cloud and host firewalls must admit only the three approved private peer IPs. Neither port is public. The application validates a separate Redis CA and server names; control-plane and PostgreSQL signing keys are not reused. The offline Redis CA private key stays outside the Droplets. Node certificates expire after90days and need operator renewal.
+Redis and Sentinel expose TLS-only ports6379 and26379 on each host's private address and loopback. The cloud and host firewalls must admit only the three approved private peer IPs. Neither port is public. The application validates a separate Redis CA and server names; control-plane and PostgreSQL signing keys are not reused. The offline Redis CA private key stays outside the Droplets. Node certificates expire after90 days and need operator renewal.
 
 Application `limiter` credentials can run the quota script only on `notification:limits:v1:*`; they cannot flush data, alter configuration, administer identities or publish Sentinel control messages. The independent `discovery` identity can find primaries and subscribe to primary-switch notifications, but cannot force failover. Replication, Sentinel data control, Sentinel peer administration and operator administration have independent credentials. Only the two application credentials and public Redis CA enter application containers.
 
-Processes run as UID999, drop capabilities, disallow privilege escalation and use read-only root filesystems. Redis has128MiB/0.5CPU and Sentinel64MiB/0.15CPU caps. Redis limits clients to128 and data to64MiB with `noeviction`. AOF uses `appendfsync always`. Configuration/state directories remain writable for automatic role/configuration changes; bootstrapping refuses to overwrite them on a restart.
+Processes run as UID999, drop capabilities, disallow privilege escalation and use read-only root filesystems. Redis has128 MiB/0.5CPU and Sentinel64 MiB/0.15CPU caps. Redis limits clients to128 and data to64 MiB with `noeviction`. AOF uses `appendfsync always`. Configuration/state directories remain writable for automatic role/configuration changes; bootstrapping refuses to overwrite them on a restart.
 
 ## Admission, replication and failure behavior
 
@@ -34,6 +36,6 @@ For a low-impact shared-limit check, keep all API backends drained, seed the new
 
 The real TLS/Sentinel fixture uses the application's packaged Jedis implementation. Local testing verified three independent clients sharing one quota, TLS hostname rejection, restricted application ACLs, automatic failover after the primary Redis/Sentinel pair stops, recovery of an already-connected client, fail-closed behavior when no replica can acknowledge writes, and rejoining stopped nodes. `test-redis-cluster.py` repeats this drill in CI against the patched/scanned Redis image. `test_redis.py` and `test_ha.py` cover configuration, role separation, topology and restart safeguards.
 
-The Rancher fixture uses disposable containers/data and a private Docker network, with source and results under `/workspaces/notification-fanout`. Its Ubuntu24 runner needs access to the local Docker socket; do not point it at a cloud Docker daemon. The local runner's Docker CLI/interpreter are read-only binds from Rancher's VM, and its Java process uses the existing Java25 image.
+The Rancher fixture uses disposable containers/data and a private Docker network, with source and results under `/workspaces/notification-fanout`. Its Ubuntu24 runner needs access to the local Docker socket; do not point it at a cloud Docker daemon. The local runner's Docker CLI/interpreter are read-only binds from Rancher's VM, and its Java process uses the existing Java 25 image.
 
-At preparation time,72Java tests,41Python tests and the real Redis failover fixture passed locally. Production rollout and cloud evidence must be recorded separately; local tests do not establish that cloud Redis is active.
+At preparation time,72 Java tests,41 Python tests and the real Redis failover fixture passed locally. Production rollout and cloud evidence must be recorded separately; local tests do not establish that cloud Redis is active.

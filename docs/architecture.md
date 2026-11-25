@@ -1,113 +1,156 @@
-# Event Notification Fanout architecture
+# Deployed architecture and request flows
+
+This describes application revision `6474ad3b0c043677066c539f3523c075b7358af0`, verified on 24 November 2026. See [deployment evidence](submission-status.md), [requirements coverage](requirements.md) and [design decisions](design.md). Role names below are logical roles: PostgreSQL and Redis primaries can move between hosts.
+
+## Event ingestion, fanout, retries and audit
 
 ```mermaid
 flowchart LR
- P[Producer] -->|Bearer + type/source/JSON| A[Dropwizard REST API]
- S[Subscriber: create/list/delete rules] --> A
- M[Private operator: approve/revoke origin] -->|Separate admin credential| A
- A -->|Read active subscriptions and current origin policy| D[(PostgreSQL)]
- A -->|Atomic event + matching jobs + outbox| D
- A -->|202 only after commit| P
- D --> O[Leased outbox publisher]
- O -->|UUID key; idempotent producer; acks all| K[Kafka: six partitions]
- K --> C[Dispatch consumer]
- C -->|Activate jobs transactionally| D
- C -->|Commit offset after database commit| K
- C -->|Quarantine malformed envelope| D
- D -->|Claim due job with fenced lease| W[Delivery worker]
- W -->|Recheck origin / DNS; signed HTTPS POST| H[Subscriber receiver]
- H -->|2xx / error / timeout| W
- W -->|Attempt audit + delivered / failed / next due time| D
- D -->|Due retry or expired lease| W
- Q[Event/subscription delivery history] --> A
- A -->|Tenant-scoped read-only API queries| R[(PostgreSQL standbys)]
- D -->|Synchronous plus streaming replication| R
- D -->|Terminal delivery and attempt atomically| DL[(Durable delivery DLQ)]
- DL --> DP[Leased DLQ publisher]
- DP -->|deliveryId key and event correlation| DK[Kafka delivery DLQ]
+    P[Producer or subscriber] --> LB[DigitalOcean load balancer]
+    LB --> A[One of three Dropwizard instances]
+    A --> AUTH[Authenticate tenant and validate request]
+    AUTH --> RL[Redis shared fixed-minute tenant limit]
+    RL -->|Allowance exhausted| R429[HTTP 429]
+    RL -->|Redis or replication unavailable| R503[HTTP 503]
+    RL -->|Admitted write| TX[Primary transaction: identity check and subscription matching]
+    TX --> DB[(PostgreSQL primary: events, jobs, outbox and audit)]
+    TX -->|Commit before response| ACK[HTTP 202 with original or new event ID]
+    DB --> O[Leased outbox publisher]
+    O -->|Internal event UUID key, acks all| K[Kafka event topic: six partitions, RF3, min ISR2]
+    K --> C[Three consumers in one group]
+    C -->|Activate existing jobs and commit DB before offset| DB
+    DB --> CLAIM[Fair subscription reservation and expiring delivery lease]
+    CLAIM -->|Initial attempt| W[Bounded webhook worker]
+    CLAIM -->|Retry requires shared tenant and subscription budget| RB[Redis retry budgets]
+    RB -->|Granted| W
+    RB -->|Unavailable or exhausted: defer without HTTP attempt| DB
+    W -->|Recheck origin and DNS, signed HTTPS POST| H[Approved subscriber receiver]
+    H -->|Response or timeout| RESULT[Token-checked result transaction]
+    RESULT -->|Attempt audit and delivered, failed or next retry time| DB
+    DB -->|Due retry or recovered lease| CLAIM
+    RESULT -->|Terminal failure: same transaction| DL[(Delivery dead-letter outbox)]
+    DL --> DP[Leased DLQ publisher]
+    DP -->|Stable delivery ID key| DK[Kafka delivery DLQ]
+    AUTH -->|Admitted history or list GET| RD[(PostgreSQL replica-only read pool)]
+    DB -->|Required synchronous standby plus another streaming replica| RD
 ```
 
-Subscription matching is synchronous in the ingestion transaction, defining the membership snapshot. HTTP delivery is asynchronous. A broker outage delays dispatch but does not remove accepted DB events. Outbox publication and Kafka consumption may repeat after crashes; database uniqueness prevents duplicate jobs. A successful receiver request whose response/result is lost may be retried: stable delivery identity and receiver deduplication remain essential. Retries are bounded; see README for terminal-failure semantics. Event UUID keys distribute one event type across partitions; per-source ordering is not implemented.
+Matching happens **before** Kafka publication, inside ingestion's database transaction. The transaction saves the event, one job for each matching subscription and the outbox entry together. Kafka consumption activates those jobs; it does not create a second fanout. Subscription changes require no restart. Existing jobs retain their destination snapshot after a subscription is deleted.
+
+The tenant allowance is 6,000 authenticated requests per fixed minute across all instances, including reads and writes. Redis stores counters, not authoritative event history. There is no independent per-user quota and no business-data response cache. Administrative destination policy, identity checks, job coordination and other consistency-sensitive reads use the database primary.
+
+## Critical request sequence
 
 ```mermaid
 sequenceDiagram
- participant P as Producer
- participant A as REST API
- participant D as PostgreSQL
- participant O as Outbox publisher
- participant K as Kafka
- participant C as Consumer
- participant W as Delivery worker
- participant H as HTTPS receiver
- P->>A: POST structured event + optional idempotency key
- A->>D: BEGIN; read subscriptions; save event, matches and outbox; COMMIT
- A-->>P: 202 + event ID
- O->>D: Claim outbox lease
- O->>K: Publish with event UUID key
- K-->>O: Broker acknowledgement
- O->>D: Mark publication
- K->>C: Event envelope
- C->>D: Activate delivery jobs; COMMIT
- C->>K: Commit consumed offset
- W->>D: Claim due delivery + persist attempt; COMMIT
- W->>D: Check latest approved-origin state
- W->>H: Signed HTTPS POST; public-address DNS validation at connection
- H-->>W: Response or timeout
- W->>D: Save attempt and delivered/failed/retry schedule
- Note over D,W: Expired claims recover with a new lease; stale completions are fenced
+    participant P as Producer
+    participant A as REST instance
+    participant R as Redis primary and replicas
+    participant D as PostgreSQL primary and synchronous standby
+    participant O as Outbox publisher
+    participant K as Kafka
+    participant C as Dispatch consumer
+    participant W as Webhook worker
+    participant H as Subscriber receiver
+    P->>A: POST /v1/events with optional Idempotency-Key and producer eventId
+    A->>R: Atomic tenant window check, then WAIT on the same connection
+    alt Quota exhausted
+        A-->>P: 429
+    else Counter service or acknowledgement unavailable
+        A-->>P: 503
+    else Admitted
+        A->>D: Transaction: deduplicate, match subscriptions, save event/jobs/outbox
+        D-->>A: Commit with synchronous remote_apply
+        A-->>P: 202, event ID and duplicate flag
+        O->>D: Claim unpublished or undispatched outbox work
+        O->>K: Publish event UUID key with acks=all
+        K-->>O: Acknowledge
+        O->>D: Save publication result
+        K->>C: Event envelope, possibly repeated
+        C->>D: Idempotent job activation and commit
+        C->>K: Commit offset after database commit
+        W->>D: Reserve subscription slot and lease a due job and commit
+        Note over W,D: Retry budget and attempt-start checks precede HTTP and network work holds no DB transaction
+        W->>H: Signed HTTPS POST with stable Delivery ID and Event ID
+        H-->>W: Response or timeout
+        W->>D: Fenced result, attempt audit and next state in one transaction
+        Note over W,D: Terminal failure also inserts the durable delivery dead letter
+    end
 ```
+
+## Delivery state and retry loop
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingDispatch: Ingestion transaction commits
+    PendingDispatch --> PendingDue: Kafka dispatch transaction
+    PendingDue --> Leased: Fair subscription reservation
+    Leased --> PendingDue: Budget unavailable, before starting HTTP
+    Leased --> Sending: Persist attempt start
+    Sending --> Delivered: HTTP 2xx and valid ownership
+    Sending --> PendingDue: Retryable error with attempts remaining
+    Sending --> Failed: Permanent failure or six attempts exhausted
+    Leased --> PendingDue: Expired lease recovered with new token
+    Sending --> PendingDue: Uncertain expired attempt with attempts remaining
+    Sending --> Failed: Expired final attempt recovered
+    Delivered --> [*]
+    Failed --> [*]
+```
+
+The stored delivery status is only `pending`, `delivered` or `failed`; the diagram's pending substates explain dispatch readiness, due time and lease ownership. Transient errors allow one initial attempt plus five retries. Backoff and attempt history are durable. Permanent policy/HTTP failures terminate earlier. Expired final attempts also become failed/dead-lettered.
+
+The final-state transaction rejects a stale or expired ownership token. It cannot undo an HTTP request already accepted by the receiver. Repeated HTTP effects remain possible; receivers must transactionally deduplicate `deliveryId`. DLQ publication can also repeat after an uncertain acknowledgement. Failed delivery history remains available if its Kafka DLQ publication is delayed.
+
+## DigitalOcean deployment and failure boundaries
 
 ```mermaid
 flowchart TB
- U[REST clients] --> LB[DigitalOcean regional load balancer: 2 nodes]
- subgraph BLR[Bangalore / BLR1 private VPC]
-  N1[Droplet 1: Caddy, Java replica, Kafka 1, PostgreSQL 1, etcd 1]
-  N2[Droplet 2: Caddy, Java replica, Kafka 2, PostgreSQL 2, etcd 2]
-  N3[Droplet 3: Caddy, Java replica, Kafka 3, PostgreSQL 3, etcd 3]
-  N1 <-->|TLS replication and quorum| N2
-  N2 <-->|TLS replication and quorum| N3
-  N3 <-->|TLS replication and quorum| N1
- end
- LB -->|HTTPS passthrough; readiness on private 9080| N1
- LB --> N2
- LB --> N3
- N1 --> H[Approved public HTTPS receivers]
- N2 --> H
- N3 --> H
- N1 --> B[Daily job: PostgreSQL advisory lock, consistent snapshot, age encryption]
- N2 --> B
- N3 --> B
- B --> S[Private DigitalOcean Spaces: Singapore, 24-hour backup retention]
- G[Trusted GitHub verification] --> V[Scan app, database tools, proxy, Kafka, etcd]
- V --> P[Sign exact images and bundle; publish private GHCR tags]
- P --> R[Restricted deployment gateway: drain and update one app at a time]
- R --> N1
- R --> N2
- R --> N3
+    CLIENT[REST clients] --> LB[Regional managed load balancer: two units]
+    subgraph BLR[Bangalore BLR1 private VPC]
+        N1[Droplet 1: Caddy, Java, Kafka, PostgreSQL, etcd, Redis, Sentinel, metrics bridge]
+        N2[Droplet 2: Caddy, Java, Kafka, PostgreSQL, etcd, Redis, Sentinel, metrics bridge]
+        N3[Droplet 3: Caddy, Java, Kafka, PostgreSQL, etcd, Redis, Sentinel, metrics bridge]
+        N1 <-->|Private replication and quorum traffic| N2
+        N2 <-->|Private replication and quorum traffic| N3
+        N3 <-->|Private replication and quorum traffic| N1
+    end
+    LB -->|HTTPS passthrough, private readiness port 9080| N1
+    LB --> N2
+    LB --> N3
+    N1 --> H[Approved public HTTPS receivers]
+    N2 --> H
+    N3 --> H
+    N1 --> B[Timers on existing hosts: advisory lock, consistent dump, age encryption]
+    N2 --> B
+    N3 --> B
+    B --> S[Private Spaces bucket in Singapore: daily backup, 24-hour retention]
+    N1 --> MET[DigitalOcean Insights export: last observed provider HTTP 404]
+    N2 --> MET
+    N3 --> MET
+    CI[GitHub Actions: tests, real-service failure drills and image scans] --> SIGN[Signed exact tested artifacts and private GHCR images]
+    SIGN --> GATE[Restricted promotion gateway: verify, drain and update]
+    GATE --> N1
+    GATE --> N2
+    GATE --> N3
 ```
 
-The boxes represent exactly three application/data Droplets; the daily job runs on those hosts, not a fourth compute node. PostgreSQL has one writable primary and one required synchronous standby (`remote_apply`), plus the third replica. Patroni uses a three-voter TLS etcd quorum and requires watchdog fencing. Kafka has three brokers/controllers, six event partitions, replication factor three, minimum ISR two, `acks=all`, and no unclean election. Losing safety quorum refuses/blocks writes rather than acknowledging unsafe commits. Application pools reject connections that have become standbys.
+There are exactly three compute Droplets, not dedicated machines for every component. The load balancer and Spaces are separate managed services. Kafka, PostgreSQL and Redis are self-managed. All three hosts share a region; independent physical-host/availability-zone placement is not guaranteed.
 
-The load balancer uses two managed nodes and private readiness probes. Caddy shares certificate/challenge storage and locks in a separate PostgreSQL database. Internal control, database and Kafka authorities are distinct; offline CA signing keys are not deployed. Internal certificates require renewal before their 90-day expiry. The cloud firewall and host firewall restrict cluster ports to the three private peers. Administrator endpoints remain private.
+| Layer | Deployed contract | Failure boundary |
+| --- | --- | --- |
+| Application | Three active instances; four delivery workers each; subscription concurrency one across instances | Healthy backends receive new traffic; in-flight requests can fail during replacement or failover |
+| PostgreSQL | One primary, one required synchronous standby and another streaming replica; `remote_apply`; Patroni, three-member etcd and required watchdog | Single-node loss with safe surviving quorum targets preservation of acknowledged commits; unsafe writes block/fail |
+| Kafka | Three brokers/controllers; six event partitions; RF3, min ISR2; idempotent producer and no unclean election | One broker loss is tolerated when remaining replicas are in sync; quorum loss delays dispatch |
+| Redis | One primary, two replicas; three Sentinels with quorum two; private TLS ports 6379/26379 | Promotion tested with existing application clients; missing safe acknowledgement fails admission closed; recent counters can be lost because replication is asynchronous |
+| Read queries | Standby-only pool, maximum four connections per application; primary/write pool maximum eight | Replica lag is visible as eventual consistency; no primary fallback when replicas are unavailable |
+| Backup | One successful snapshot per UTC day, authenticated and age-encrypted, private Spaces; current snapshot metadata checks ten tables | Total cluster loss can lose roughly a day of data or more if backups fail/expire; no continuous WAL/PITR or regional service failover |
 
-One synthetic local drill verified 106 acknowledged events, actual Kafka/webhook delivery during a simulated node loss, refusal of writes without quorum, recovery, log redaction and encrypted database restoration. Local containers share one Rancher VM, so that does not prove independent host fencing. Separate cloud evidence now records watchdog reboot, promotion to a different primary while its predecessor was powered off, two-broker webhook delivery and a restore from actual Spaces in [submission status](submission-status.md).
+Caddy shares public certificate storage/locks in a separate PostgreSQL database. Internal PostgreSQL, Kafka, control-plane and Redis authorities are separate; offline signing keys are not deployed. Cluster firewalls allow only approved private peers; administrator APIs stay private. Root passwords are locked and SSH password authentication is disabled; authorized SSH keys are used.
 
-Daily Spaces backups provide off-host recovery, not synchronous regional disaster replication. A single-node failure target is zero acknowledged-event loss with a surviving safe quorum; total cluster destruction can lose up to roughly 24 hours. One-day retention cannot recover old corruption, and application-side expiry can be delayed during a whole-cluster outage. Per-source ordering and replay are not implemented.
+The initial control-version cutover drained and stopped all old workers before migration/promotion. Compatible future releases use rolling application promotion. Infrastructure changes remain separate operations. Daily backups do not create an automatic pre-migration snapshot. See [release and recovery procedures](operations.md).
 
+## Evidence and unfinished capabilities
 
-The new control layer uses shared Redis fixed-window counters and tenant/subscriber retry budgets and per-subscription reservation rows. HTTP work holds no database transaction. Fair scheduling rotates due subscriptions by last claim; terminal deliveries and durable DLQ records commit together. DLQ publication has a separate retryable outbox and ownership tokens. Public history/list APIs use a bounded, standby-only pool; state transitions, policy and idempotency remain primary operations. See [identity, correlation and consistency details](reliability-controls.md).
+The latest rollout preserved the original 10,136 events and five subscriptions by count/content comparison before adding synthetic probes. Cross-instance quota exhaustion, generated/explicit idempotency, conflict 409, public HTTPS, replica reads, one signed external webhook capture, Redis promotion and replica rejoin passed. Earlier evidence separately records whole-Droplet/PostgreSQL failover, Kafka operation with two brokers and an actual encrypted Spaces restore; those drills were not all repeated for the latest application release.
 
-```mermaid
-flowchart LR
-  API[Authenticated REST request] --> LIMIT[Redis atomic request window]
-  LIMIT --> DB[Durable event transaction]
-  DB --> KAFKA[Kafka event topic]
-  KAFKA --> JOB[Persistent delivery jobs]
-  JOB --> CLAIM[Fair per-subscription reservation]
-  CLAIM --> BUDGET[Redis retry budgets for retry attempts]
-  BUDGET --> HTTP[Bounded webhook workers]
-  APP[Local Dropwizard metrics] --> BRIDGE[Metrics-only bridge or in-process exporter]
-  BRIDGE --> INSIGHTS[DigitalOcean Insights OTLP metrics]
-```
-
-Redis and the updated application controls are source implementations awaiting their separate coordinated infrastructure/application rollout. The independent metrics bridge can run against the previous application release. No alarms or ticket integrations are requested.
+No managed queue, per-source ordered delivery, time-range replay API, per-user quota, horizontal autoscaler or general response cache is deployed. Metrics are emitted locally and bridges run, but Insights visibility remains unverified after the last observed provider 404. Alarms and tickets were explicitly excluded. No exhaustive-test, zero-interruption, full-region RPO0 or measured production-throughput claim is made. The [submission status](submission-status.md) records exact evidence and remaining work.

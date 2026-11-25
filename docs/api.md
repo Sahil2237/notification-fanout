@@ -20,7 +20,7 @@ Event input:
 ```json
 {"type":"order.created","source":"checkout","payload":{"order_id":"o-123","customer":{"tier":"gold"}}}
 ```
-Type/source nonblank, <=128 characters. Payload is required but can be null, scalar, array or object. Body <=256KiB, JSON nesting <=32, numeric token length <=256. Request authentication happens before body parsing. Filters have <=20 conditions; paths <=256; URLs <=2048. Unknown/unexpected input is rejected by Jackson/validation where applicable.
+Type/source nonblank, <=128 characters. Payload is required but can be null, scalar, array or object. Body <=256 KiB, JSON nesting <=32, numeric token length <=256. Request authentication happens before body parsing. Filters have <=20 conditions; paths <=256; URLs <=2048. Unknown/unexpected input is rejected by Jackson/validation where applicable.
 
 Accepted response:
 ```json
@@ -32,7 +32,7 @@ Delivery: id, eventId, subscriptionId, status (pending/delivered/failed), attemp
 
 Page: `{ "items": [], "limit":20, "offset":0, "hasMore":false }`. limit 1..100, offset 0..100000. Stable ordering by creation time/ID; concurrent inserts/deletes mean offset pages are not a snapshot.
 
-Errors: malformed JSON/business validation 400; bean validation 422; unsupported media type 415; authentication 401 (WWW-Authenticate:Bearer); foreign/missing resource 404; conflicting idempotency/subscription cap 409; oversized 413; process-local tenant limit 429 (Retry-After:60); persistence unavailable 503; unexpected server failure 500. Application errors have code/message/requestId; Dropwizard's built-in parsing/bean-validation errors can use its standard error envelope. Every matched response still receives the correlation header. Sensitive internal exceptions are not returned.
+Errors: malformed JSON/business validation 400; bean validation 422; unsupported media type 415; authentication 401 (WWW-Authenticate:Bearer); foreign/missing resource 404; conflicting idempotency/subscription cap 409; oversized 413; shared Redis tenant limit 429 (Retry-After:60); persistence, replica-read or shared Redis unavailable 503; unexpected server failure 500. Application errors have code/message/requestId; Dropwizard's built-in parsing/bean-validation errors can use its standard error envelope. Every matched response still receives the correlation header. Sensitive internal exceptions are not returned.
 
 Webhook POST body:
 ```json
@@ -55,3 +55,10 @@ Approvals require an origin without path/query/credentials and public HTTPS DNS 
 
 
 Event requests also accept optional producer `eventId` (UUID). Missing Idempotency-Key now generates a stable, identity-scoped key; see [the full identity contract](reliability-controls.md). The canonical accepted event.id remains the correlation ID returned in X-Event-ID and propagated downstream. User/compartment identity comes from authenticated operator configuration, not untrusted body fields. HA history/list GETs use standby-only reads and may lag; X-Read-Source=replica and X-Read-Consistency=eventual describe this behavior. No replica fallback to primary is performed. New HA transient delivery failures allow six total attempts, then enter the durable delivery DLQ and Kafka notification-deliveries-dlq-v1.
+
+
+## Idempotency scope, updates and network access
+
+Only event ingestion has the explicit/generated Idempotency-Key contract. Repeating POST /v1/subscriptions can create another subscription for the same URL; distinct registrations intentionally produce distinct delivery jobs. Origin approval upserts policy state but has no general key-based response-replay contract. DELETE subscription is repeatable with 204. No PUT/PATCH, ETag or If-Match update contract is implemented.
+
+Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Current public Droplet ingress and broad outgoing rules are documented in [network-security.md](network-security.md), including the lack of load-balancer-only backend ingress.

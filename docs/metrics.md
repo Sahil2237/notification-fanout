@@ -13,9 +13,9 @@ The metrics-only bridge is **running on all three existing Droplets**, using the
 
 A DigitalOcean administrator/provider must enable the team's custom telemetry preview or confirm a functioning supported BLR1 ingestion endpoint. Do not infer preview entitlement from token scope availability. The active bridges continue bounded one-minute export attempts and can recover once the endpoint accepts telemetry. No alerts, tickets or extra paid resources were created.
 
-After explicit authorization, a 90-day metrics token was created; DigitalOcean automatically includes `insights:read` with `insights:custom_ingest`. Protected root-owned copies reside at `/opt/notification-fanout/ha/metrics/metrics.env` on the three approved hosts. The temporary workstation/container token staging files were removed. The token expires on22February2027 and needs operator rotation. Its value is never committed or printed.
+After explicit authorization, a 90-day metrics token was created; DigitalOcean automatically includes `insights:read` with `insights:custom_ingest`. Protected root-owned copies reside at `/opt/notification-fanout/ha/metrics/metrics.env` on the three approved hosts. The temporary workstation/container token staging files were removed. The token expires on 22 February 2027 and needs operator rotation. Its value is never committed or printed.
 
-The event application itself remains the preceding `bd082b6` release. Redis and the new application controls require their own coordinated rollout; the independent metrics process does not activate them. Automatic application deployment is held with `HA_DEPLOY_READY=false` until that prerequisite is ready.
+The event application is now `6474ad3` with Redis and delivery controls activated. The independent bridges still use the verified `cf92a03` metrics JAR; in-process export remains disabled to avoid duplicate export. `HA_DEPLOY_READY=true` was restored after cloud validation. This does not resolve the last observed provider 404 or establish Metrics Explorer visibility.
 
 ## What is emitted
 
@@ -37,13 +37,14 @@ The existing loopback-only Dropwizard admin `/metrics` endpoint remains availabl
 | `notification.delivery.oldest.pending.seconds` | Age of the oldest pending job |
 | `notification.kafka.outbox.pending` | Events awaiting Kafka dispatch |
 | `notification.kafka.oldest.undispatched.seconds` | Age of the oldest undispatched event |
-| `notification.kafka.published` / `notification.kafka.dispatched` | Kafka publishing and matching progress |
+| `notification.kafka.published` / `notification.kafka.dispatched` | Kafka publishing and durable dispatch-activation progress |
 | `notification.kafka.publish.errors` / `notification.kafka.consumer.errors` | Kafka failures |
 | `notification.kafka.quarantined` | Invalid Kafka records durably quarantined |
 | `notification.kafka.dead.letters.published` | Dead-letter outbox records published to Kafka |
 | `notification.kafka.dead.letter.publish.errors` | Dead-letter publishing failures |
 | `notification.delivery.recovered` / `notification.delivery.worker.errors` | Worker recovery and processing failures |
 | `notification.redis.replicas` | Replica count observed on the Redis primary |
+| `notification.metrics.scrape.success` | Independent bridge local scrape succeeded (1) or failed (0) |
 | `notification.http.admission.waiting` | Requests waiting for bounded HTTP admission |
 | `notification.http.admission.rejected` | Cumulative local rejected admission count (gauge) |
 
@@ -72,7 +73,7 @@ Gauge collection omits a failed dependency sample while retaining other metrics.
 
 ## Validation
 
-Local full verification: **71 Java tests** (26 unit, 45 integration), **34 Python tests** (12 deployment, 22 HA/backup/configuration), all passing. The metrics-specific six tests include the actual bounded production HTTP transport, one-attempt failure behavior, counter baselining and source restart handling.
+Historical metrics-release local verification: **71 Java tests** (26 unit, 45 integration), **34 Python tests** (12 deployment, 22 HA/backup/configuration), all passing. The metrics-specific six tests include the actual bounded production HTTP transport, one-attempt failure behavior, counter baselining and source restart handling.
 
 `MetricsExporterTest` verifies delta values across consecutive collections, required resource attribution, one bounded service label, exclusion of unapproved instruments, omission of a failed gauge, a real authenticated OTLP/HTTP protobuf request to a local collector, export failure without transport retries, and rejection of untrusted or region-mismatched endpoints. Cloud visibility is a separate release acceptance check.
 
@@ -82,15 +83,15 @@ DigitalOcean bills custom telemetry against the team's shared Insights ingestion
 
 ## Independent bridge for an existing release
 
-`com.example.notifications.MetricsBridge` reads only `http://127.0.0.1:8081/metrics`, with redirects disabled, two/three-second connect/read timeouts and a 1MiB response limit. It has no application bearer token, database credential, Kafka identity or Redis credential. It exports the same fixed instrument allowlist. The first scrape baselines pre-existing counters so installing it does not report historical traffic as a new burst; subsequent scrapes count increases, including after a source process restart. A source outage emits `notification.metrics.scrape.success=0` and suppresses stale gauges. A bridge restart can lose counter increments around the restart, consistent with best-effort telemetry.
+`com.example.notifications.MetricsBridge` reads only `http://127.0.0.1:8081/metrics`, with redirects disabled, two/three-second connect/read timeouts and a 1 MiB response limit. It has no application bearer token, database credential, Kafka identity or Redis credential. It exports the same fixed instrument allowlist. The first scrape baselines pre-existing counters so installing it does not report historical traffic as a new burst; subsequent scrapes count increases, including after a source process restart. A source outage emits `notification.metrics.scrape.success=0` and suppresses stale gauges. A bridge restart can lose counter increments around the restart, consistent with best-effort telemetry.
 
-`deploy/ha/metrics-compose.yaml` defines the canonical full-image bridge deployment with a separate Java entry point. It has a read-only filesystem, non-root UID, no Linux capabilities, no new privileges, a 256MiB memory cap, a 0.25 CPU cap and a 64-process limit. No service port is exposed. This allows metrics to be deployed independently of the Redis/application controls cutover. **Use one exporter per node: stop the independent bridge before enabling in-process `telemetry.enabled`, to avoid duplicate series.**
+`deploy/ha/metrics-compose.yaml` defines the canonical full-image bridge deployment with a separate Java entry point. It has a read-only filesystem, non-root UID, no Linux capabilities, no new privileges, a 256 MiB memory cap, a 0.25 CPU cap and a 64-process limit. No service port is exposed. This allows metrics to be deployed independently of the Redis/application controls cutover. **Use one exporter per node: stop the independent bridge before enabling in-process `telemetry.enabled`, to avoid duplicate series.**
 
 ### Current bandwidth-conscious cloud installation
 
-The signed CI application bundle was downloaded and its Ed25519 signature and every SHA256 entry verified inside the Rancher workspace. Only the 57MiB application JAR was extracted from that exact image and transferred over pinned-host-key SSH, then checked against SHA256 `5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c` on each host. The Java25 runtime definition is identical between the running application and verified metrics release. Each metrics container therefore reuses the existing verified runtime image, with the new JAR mounted read-only at `/opt/metrics/runtime.jar`. This avoids retransferring the larger runtime layers. It does not claim that the event application was upgraded.
+The signed CI application bundle was downloaded and its Ed25519 signature and every SHA256 entry verified inside the Rancher workspace. Only the 57 MiB application JAR was extracted from that exact image and transferred over pinned-host-key SSH, then checked against SHA256 `5a46357593c8106b85658c5ca0292c47b10c4aa85006be91a3cec7ec2908882c` on each host. The Java 25 runtime definition is identical between the running application and verified metrics release. Each metrics container therefore reuses the existing verified runtime image, with the new JAR mounted read-only at `/opt/metrics/runtime.jar`. This avoids retransferring the larger runtime layers. It does not claim that the event application was upgraded.
 
-Effective configuration is under `/opt/notification-fanout/ha/metrics/`: `compose.yaml`, `image.env`, protected `metrics.env`, and `runtime.jar`. The bridge has a 256MiB memory cap,0.25CPU cap,64-process cap, read-only root filesystem, non-root UID10001, all Linux capabilities dropped, and no public listener. The in-process exporter remains disabled to prevent duplicate export.
+Effective configuration is under `/opt/notification-fanout/ha/metrics/`: `compose.yaml`, `image.env`, protected `metrics.env`, and `runtime.jar`. The bridge has a 256 MiB memory cap,0.25CPU cap,64-process cap, read-only root filesystem, non-root UID10001, all Linux capabilities dropped, and no public listener. The in-process exporter remains disabled to prevent duplicate export.
 
 To inspect or stop **only** the metrics bridge, use the following on a Droplet as an authorized operator:
 
@@ -103,4 +104,4 @@ For future JAR updates, stage to a new filename, verify the signed source artifa
 
 The SDK can log a long provider error page; checking only a short log tail can omit the line containing the HTTP status. Runtime verification searched the complete bounded recent log window, confirmed the actual SDK404 response on every node, and separately checked the UI. Absence of a warning in a short tail is not proof of successful ingestion.
 
-When bridging the older application release, counters for newer controls can remain zero and unsupported gauges are omitted. Those values do not establish that Redis limits, replica-only API reads or the delivery DLQ have been activated. Refer to the deployed application revision and the separate controls rollout status.
+The current bridges scrape the new application revision. Unsupported gauges are omitted; a zero/missing metric is not deployment proof. The Redis controls rollout was separately verified as recorded in submission-status.md. The current full runtime suite is 72 Java/41 Python tests; metrics-release counts above are historical.

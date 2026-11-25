@@ -1,69 +1,62 @@
-# Verification matrix
+# Requirements-to-verification matrix
 
-The current source suite contains 19 unit and 41 integration tests; release-gateway tests add 12 Python security tests, and HA configuration/backup tests add 19 more Python tests. Deployed release evidence is version-specific in submission-status.md. Run `mvn -B -ntp verify` and `python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v`. Tests use a dedicated disposable PostgreSQL database and real Kafka/HTTP endpoints. Never configure the test database URL to a production/shared database.
+Runtime release `6474ad3` passed [CI45447905686](https://github.com/Sahil2237/notification-fanout/actions/runs/45447905686) and [image publication45450924076](https://github.com/Sahil2237/notification-fanout/actions/runs/45450924076). Counts below were checked against that run's JUnit XML, not stale documentation. Documentation-only changes use diagram/link/contract checks rather than claiming a new application test/deployment run.
 
-|Requirement / material risk|Automated evidence|
-|---|---|
-|Type/source/payload filters, null/missing, arrays and JSON Pointer|CoreTest filter cases; ServiceIT all JSON kinds|
-|Durable transaction and storage error response|ServiceIT event/fanout rollback and simulated SQLSTATE 53100 HTTP 503; KafkaIT atomic outbox rollback|
-|Dynamic subscription management and tenant isolation|ServiceIT REST lifecycle, deletion boundary and ownership tests|
-|Runtime origin approval / revocation / administrative isolation|ServiceIT approve/list/revoke without restart, fresh Store persistence and revoked seed protection; CoreTest public HTTPS approval|
-|Actual DNS rebinding / mixed private answers|CoreTest injected lookup changes between registration and connection resolver|
-|Concurrency / duplicate requests / stale workers|ServiceIT concurrent idempotency, distinct claims, lost HTTP-success result and lease fencing|
-|Retries / final failure / timeout / audit|ServiceIT real 500/500/204, permanent response, exhaustion, real slow receiver cancellation, retry timing and null HTTP status|
-|Backpressure rollback|ServiceIT bounded outbox rejects a new event but preserves a duplicate request|
-|Real REST → Kafka → webhook flow|KafkaIT full journey with dispatch gating and recorded HTTP response|
-|Kafka recovery / poison data / offset boundaries|KafkaIT broker outage, restarts, duplicate envelopes, quarantine, partition-specific dispatch failure and outbox lease recovery|
-|10,000 records with one type|KafkaIT sends 10,000 UUID-keyed records to a real six-partition topic and checks distribution; this is not a full-service throughput SLO|
-|Release authenticity / path safety|Python tests for tampered image/signature, symlinks, manifest paths, revision mismatch and immutable release reuse|
-|Container/schema/runtime privilege correctness|CI Compose smoke test with distinct migration/runtime roles, DDL denial, ingestion and dispatch|
-|Failed startup / rollback / database restore|CI executes the real release script with an image that migrates but fails server startup, checks rollback and restores a pre-release dump|
-|HA configuration, certificate boundaries, backup integrity and retention|16 Python cases in deploy/ha/test_ha.py|
-|Independent PostgreSQL processes and etcd quorum|CI real three-member TLS cluster preserves 100 acknowledged rows after primary loss and accepts another write|
-|Full local HA, fanout, quorum loss and backup restore|Rancher test-local-stack.py: 106 acknowledged events, four HTTP 204 deliveries including one with a whole simulated node down, recovery, all nine restored table counts, and no proxy credential leakage|
-|Dependency vulnerabilities|CI scans the application, PostgreSQL/backup tools, proxy, Kafka and etcd; gates on fixable HIGH/CRITICAL findings and uploads reports|
+## Executed release checks
 
-Cloud verification is separate from CI: record the exact deployed revision and image ID, prove live admin changes do not restart the app, post synthetic matching/nonmatching events, verify audit and the external request/HMAC, and test service restart recovery. The existing deployment already passed reboot and same-host restore; each changed release needs its own live evidence. See submission-status.md for historical results and the latest workflow/release reports for new outcomes.
+| Suite | Tests | Outcome |
+| --- | --- | --- |
+| CoreTest |21|Passed |
+| MetricsExporterTest |4|Passed |
+| MetricsBridgeTest |2|Passed |
+| ServiceIT: real PostgreSQL/HTTP |29|Passed |
+| KafkaIT: real Kafka/PostgreSQL/HTTP |12|Passed |
+| RedisIT: real Redis integration |4|Passed |
+| Java total |72:27 unit+45 integration|Zero failures/errors/skips in CI reports |
+| Python deployment/security |12|Passed |
+| Python HA/configuration/backup |29|Passed |
+| Python total |41|Passed |
 
-Cloud host-failure and actual Spaces restore evidence are recorded separately from the local eight-check HA drill. Unproven boundaries include region-wide disaster recovery, long-duration saturation, broad receiver-fairness testing, automated paging and agreed production p95/p99 SLOs. A load probe must state whether it includes HTTP ingestion, matching fanout, delivery, payload size, duration and receiver latency. No test suite is described as exhaustive. The 10,000-record test initially exposed a local Kafka sequencing failure with multiple in-flight batches; a single in-flight request and bounded producer deadlines passed the rerun.
+CI additionally exercised real runtime startup/DB permissions, deliberate failed-release rollback and restore, real three-member synchronous PostgreSQL failure with JDBC standby reads, real TLS Redis/Sentinel promotion with existing Jedis clients, proxy routes/draining, signed packaging and fixable HIGH/CRITICAL image scans. Those drills are not extra Java/Python test-case counts. Scans passed for the app, database/backup tools, proxy, Kafka, etcd and Redis images at build time; they do not prove absence of unfixed, unknown or future vulnerabilities, or that the Rancher host engine was upgraded.
 
+## Material-risk coverage
 
-The first hosted security gate rejected older transitive versions. The fixes pin Jackson BOM 2.21.7, Jetty BOM 12.1.10, Guava 33.7.2-jre, HTTP Core/H2 5.4.3 and lz4-java 1.11.4. All are same-series fixes verified from Maven Central. Vulnerability findings are not suppressed; the hosted scan passed with zero fixable HIGH/CRITICAL findings before promotion. Public IP certificate preflight succeeded with normal system trust validation; `default_sni` selects the IP certificate for clients that omit SNI.
+| Requirement or failure risk | Automated verification | Cloud evidence boundary |
+| --- | --- | --- |
+| Structured/filterable durable acceptance | Filter/null/missing/array/JSON Pointer cases; all JSON kinds; transaction rollback/storage-error responses; atomic outbox rollback | Latest public202/replay and pre-migration preservation of 10,136 events/five subscriptions |
+| Dynamic subscriptions and authorization | REST lifecycle, tenant ownership, deletion boundary, invalid filters and origin approval/revocation | Historical public HTTPS registration; latest normal list/history reads |
+| Destination abuse | Public HTTPS policy, mixed/private DNS answers and connection-time rebinding cases; administrator isolation | Public administrator404 and signed synthetic receiver capture; no exhaustive penetration-test claim |
+| Duplicate event requests | Concurrent explicit/generated canonical identities; producer-ID conflict and identity scoping | Same missing-key body through three apps returned original event; explicit replay/conflict 409 |
+| Kafka duplicate/recovery boundary | Outage/restart, duplicate envelopes, quarantine, partition-specific failure, offset-after-DB-commit and outbox lease recovery | Earlier whole-host broker loss retained ISR2 and delivered a webhook; latest normal pipeline/capture |
+| Single event-type distribution |10,000UUID-keyed records through real six-partition Kafka | Not a10,000 events/s or complete fanout benchmark |
+| Retry/timeout/audit | Real500/500/204, permanent errors, timeout cancellation, backoff, null status and six-total-attempt exhaustion | Latest live event delivered204 in one attempt; no new live six-failure exhaustion probe |
+| Fencing and partial failures | Concurrent claims, lost HTTP-success result, expired/stale worker/DLQ tokens and rollback if terminal DLQ insert fails | Redis failure did not cause a second observed successful-event capture; no universal exactly-once claim |
+| Shared rate limit and retry budgets | Real Redis atomic windows, independent clients, reset/identity behavior and bounded resource configuration | Synthetic two-slot quota produced200,200,429,429,429 across apps; counter removed before reopening ingress |
+| Redis safety/HA | TLS hostname rejection, application ACL denial, existing client follows promotion, no-replica failure closes admission, rejoin | Latest cloud Redis/Sentinel primary-pair stop yielded503,503,200; all app clients recovered; replicas rejoined |
+| Subscriber isolation/fairness | Cross-instance reservation caps and least-recently-claimed scheduling | No representative long-running heterogeneous-receiver fairness/soak claim |
+| Replica-only reads | Reject primary as read pool; actual JDBC standby selection before/after promotion; fail when no standby remains | Latest history/list responses identify replica/eventual |
+| Delivery DLQ | Atomic terminal record, tenant history, real Kafka DLQ publication, publisher ownership and event correlation | Topic/ACL provisioned RF3/min ISR2; backup role can read new DLQ table |
+| Release authenticity and rollback | Bad signature/path/symlink/manifest/digest/config/layer rejection; real failed-startup rollback/restore | Latest app images verified by portable identity and promoted on all hosts; no infrastructure restart during application rollout |
+| PostgreSQL HA/data | Real TLS etcd/PostgreSQL cluster preserves100 acknowledged rows after primary loss and accepts another write | Earlier actual Droplet power-off promoted a different primary; latest data-preservation comparison is separate |
+| Backup integrity/retention | Manifest/checksum/authentication/expiry-prefix tests and isolated restore drills; historical metadata compatibility | Earlier actual Spaces archive restored all nine snapshot counts. New ten-table actual Spaces restore not executed for latest rollout |
+| Metrics/export | Six Java exporter/bridge tests: actual bounded local OTLP HTTP transport, deltas/labels, endpoint rejection, failure/no retry, scrape/restart behavior | Bridges running; last provider 404 means Explorer visibility remains unverified |
 
+Historical [local HA evidence](evidence/local-ha-507f989.json), [whole-Droplet/Spaces restore evidence](evidence/cloud-ha-bd082b6.json) and [latest controls evidence](evidence/cloud-redis-6474ad3.json) are deliberately separate. The full historical Rancher HA drill preserved 106 acknowledged events and four HTTP 204 deliveries; it was not rerun in full for the Redis rollout. The new dedicated Redis drill was run locally and in CI.
 
-Cloud promotion revealed that the OCI-backed Docker engine reports a manifest ID where the CI engine reports a config ID. The portable identity verifier checks the signed archive's original config SHA-256, every root filesystem layer digest, architecture/OS and normalized runtime configuration; it never accepts a mismatched image merely because its tag matches. Five dedicated tests cover cross-engine identity and rejection of changed layers, entrypoint, user and archive digest. Release CI also starts with root-only bind-mounted init/config files to exercise the explicit container-read permissions needed on a fresh server.
+## Reproduce safely
 
+Inside the Ubuntu container under `/workspaces/notification-fanout`:
 
-## Verified cloud release
+```sh
+mvn -B -ntp verify
+python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v
+python3 -m unittest discover -s deploy/ha -p 'test_*.py' -v
+```
 
-Revision `57b3fbf` passed the [hosted release gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45257513323), [signed deployment](https://github.com/Sahil2237/notification-fanout/actions/runs/45258726373), public HTTPS/webhook/HMAC checks, real broker outage recovery, five-attempt HTTP 503 failure audit, app restart, same-server backup restore and full Droplet reboot. The 10,000-event no-match probe accepted, persisted and dispatched every event at an offered 50/s (p95 local HTTP acceptance 73.81 ms). See [current results and limits](submission-status.md) and [sanitized evidence](evidence/release-57b3fbf.json); this does not establish fanout throughput or host-loss recovery.
+Use dedicated disposable test services/database only. Tests migrate/truncate test data; never set TEST_DB_URL or test Kafka/Redis endpoints to shared production resources. The CI workflow documents actual ephemeral-service/image dependencies and guards for destructive local HA fixtures. See README and deploy/ha/redis.md for local setup rather than copying cloud credentials.
 
-## HA release gates
+For cloud release acceptance, verify signed revision/image identity, all three app/proxy readiness states, expected replication/quorum, authenticated public HTTPS, synthetic matching/nonmatching behavior as appropriate, history, receiver capture/HMAC and original-event idempotency. Record which failure drills were actually repeated. Do not manipulate a live request quota; the latest fixture ran only while every backend was drained and removed its synthetic state before opening ingress.
 
-Revision `507f9896e914d8da00353626da2f8aa503bd31b1` passed [all verification and image gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45335125767) and [exact-image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45336595057). The local suite passed 48 Java and 28 Python tests. Kafka is 4.3.2 with updated base packages; the proxy uses Go 1.27.4 and a fixed networking module. The scan scope is known, fixable HIGH/CRITICAL findings at scan time, not a guarantee that every tool or future vulnerability is absent. The existing Rancher host engine is older development infrastructure and is not the production Docker engine.
+## Remaining validation gaps
 
-
-## Activated cloud HA verification — 24 November 2026
-
-Application bd082b6 passed the complete [CI gates](https://github.com/Sahil2237/notification-fanout/actions/runs/45341972631), [image publication](https://github.com/Sahil2237/notification-fanout/actions/runs/45343398780) and [signed three-node rollout](https://github.com/Sahil2237/notification-fanout/actions/runs/45343513088). The cloud checks are recorded in [sanitized evidence](evidence/cloud-ha-bd082b6.json).
-
-| Material risk | Executed cloud verification |
-| --- | --- |
-| Import omission/corruption | Nine table counts/content fingerprints matched at import; all 10,011 immutable original events matched again after failures/reboots |
-| Unsafe primary process | Paused primary triggered watchdog host reboot; required watchdog unit/device checks passed after real boots |
-| Host failure | Powered primary Droplet off through DigitalOcean; another PostgreSQL member automatically became primary; accepted and delivered a new event while only two hosts were running |
-| Kafka single-broker loss | All six partitions had ISR 2 during the whole-host outage, with successful new webhook delivery; all returned to ISR 3 after rejoin |
-| Lost acknowledged work | All 124 acknowledged synthetic event IDs were retrievable after failure/maintenance; total event count 10,135 |
-| Receiver/audit mismatch | Four new deliveries returned 204; external capture IDs, body and HMAC verified against audit |
-| Unusable off-host backup | Downloaded/authenticated/decrypted actual encrypted Spaces archive; isolated PostgreSQL restore matched all nine snapshot counts; same-day backup repeat returned not_due |
-| Reboot/image drift | All three running application images match the signed artifact, APP_IMAGE persists, all hosts run kernel 6.8.0-151/Docker 29.10.0 with zero pending apt upgrades and no reboot requirement |
-| Ingress security | Normal HTTPS certificate validation, unauthenticated tenant 401, public administrator endpoint 404 |
-
-The host-offline probe proves another-primary promotion; the earlier watchdog reboot probe did not, because its original leader returned. Requests can time out or receive 503 during failover. Exact response-time SLOs, an elapsed 24-hour Spaces expiry/public-certificate renewal cycle, full-region restore, independent-zone placement, slow-receiver fanout capacity and external paging remain unverified/unimplemented as detailed in the current status.
-
-
-## New delivery-control verification
-
-The source suite now covers concurrent canonical generated keys and producer-ID conflicts, identity scoping, a shared fixed-window cap across independent Store instances and window reset, subscriber reservations/fairness across instances, six-attempt exhaustion, rollback when the DLQ insert fails, tenant-scoped dead-letter history, real Kafka DLQ publication with event correlation, stale DLQ publisher fencing, request correlation headers, MDC cleanup and rejection of a primary presented as a strict read pool.
-
-The hosted PostgreSQL HA fixture additionally runs the application JDBC driver against actual standby nodes before and after promotion and verifies connection failure when only the primary remains. Those hosted results must be recorded from the successful run before promotion. New snapshots verify the two additional durable-control tables; restore accepts historical snapshot metadata too.
+No suite covers every possible failure. Full-region recovery, full-service disaster RTO, elapsed certificate-renewal/backup-expiry cycles, sustained representative fanout/slow-receiver saturation, endpoint-wide fairness and a negotiated production availability/latency SLO remain open. No separate per-user quota, autoscaler, ETag update, managed queue, ordering or replay tests can pass as implemented features because those capabilities do not exist. Alarms/tickets were excluded. Exact current LB algorithm remains unverified; health-based routing and active backends were observed.

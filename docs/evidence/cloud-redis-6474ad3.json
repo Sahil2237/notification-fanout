@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "runtime_revision": "6474ad3b0c043677066c539f3523c075b7358af0",
+  "rollout_date": "2026-11-24",
+  "scope": "Named rollout checks, not an exhaustive or regional disaster guarantee",
+  "verification_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45447905686",
+  "image_publication_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45450924076",
+  "shared_quota": {
+    "seed": {
+      "seeded_remaining": 2,
+      "seconds_left": 59
+    },
+    "responses": [
+      {
+        "node": 1,
+        "status": 200,
+        "read_source": "replica"
+      },
+      {
+        "node": 2,
+        "status": 200,
+        "read_source": "replica"
+      },
+      {
+        "node": 3,
+        "status": 429,
+        "read_source": "replica"
+      },
+      {
+        "node": 1,
+        "status": 429,
+        "read_source": "replica"
+      },
+      {
+        "node": 2,
+        "status": 429,
+        "read_source": "replica"
+      }
+    ],
+    "cleanup": {
+      "synthetic_quota_removed": true,
+      "observed_count": "6000"
+    }
+  },
+  "webhook_and_idempotency": {
+    "event_id": "c9264b6f-1e5a-4a9c-8eea-f6ee519edf94",
+    "marker": "shared-redis-release-d19ca904-1089-4fe2-ada6-8909d74add9c",
+    "missing_key_duplicates": [
+      false,
+      true,
+      true
+    ],
+    "delivery_id": "7a403f50-4aa8-44d9-9e82-6ec26ff7e7e5",
+    "status": "delivered",
+    "attempt_count": 1,
+    "http_status": 204,
+    "headers": {
+      "Date": "Tue, 24 Nov 2026 17:52:25 GMT",
+      "Vary": "Accept-Encoding",
+      "Content-Type": "application/json",
+      "X-Request-ID": "50b17215-4d0f-491f-ab87-fe3aa3003e47",
+      "Cache-Control": "no-store",
+      "X-Event-ID": "c9264b6f-1e5a-4a9c-8eea-f6ee519edf94",
+      "X-Read-Consistency": "eventual",
+      "X-Read-Source": "replica",
+      "Content-Length": "491",
+      "Connection": "close"
+    },
+    "explicit_key_replay": true,
+    "explicit_key_conflict_http": 409
+  },
+  "redis_failover": {
+    "old_primary_node": 1,
+    "new_primary_private_ip": "10.122.0.5",
+    "existing_application_clients_recovered": true,
+    "observed_http": [
+      503,
+      503,
+      200
+    ],
+    "all_three_application_instances_http": [
+      200,
+      200,
+      200
+    ],
+    "all_replicas_rejoined": true,
+    "final_topology": [
+      {
+        "node": 1,
+        "role": "slave",
+        "replicas": null,
+        "replication_state": "connected",
+        "elected_primary": "10.122.0.5",
+        "sentinel_peers": 2
+      },
+      {
+        "node": 2,
+        "role": "slave",
+        "replicas": null,
+        "replication_state": "connected",
+        "elected_primary": "10.122.0.5",
+        "sentinel_peers": 2
+      },
+      {
+        "node": 3,
+        "role": "master",
+        "replicas": 2,
+        "replication_state": null,
+        "elected_primary": "10.122.0.5",
+        "sentinel_peers": 2
+      }
+    ]
+  },
+  "public_api": {
+    "public_https_health": 200,
+    "public_https_ingestion": 202,
+    "duplicate_returned_original_event": true,
+    "read_source": "replica",
+    "event_id": "c9264b6f-1e5a-4a9c-8eea-f6ee519edf94",
+    "delivery_id": "7a403f50-4aa8-44d9-9e82-6ec26ff7e7e5",
+    "delivery_attempts": 1,
+    "tls_certificate_verified": true
+  },
+  "final_nodes": [
+    {
+      "node": 1,
+      "app_sha": "6474ad3b0c043677066c539f3523c075b7358af0",
+      "app_ready": 200,
+      "proxy_ready": 200,
+      "cutover_flag_absent": true,
+      "drain_absent": true,
+      "shared_sentinel_endpoints": [
+        "10.122.0.2:26379",
+        "10.122.0.6:26379",
+        "10.122.0.5:26379"
+      ],
+      "limit_per_minute": "6000",
+      "writer_pool": "8",
+      "reader_pool": "4"
+    },
+    {
+      "node": 2,
+      "app_sha": "6474ad3b0c043677066c539f3523c075b7358af0",
+      "app_ready": 200,
+      "proxy_ready": 200,
+      "cutover_flag_absent": true,
+      "drain_absent": true,
+      "shared_sentinel_endpoints": [
+        "10.122.0.2:26379",
+        "10.122.0.6:26379",
+        "10.122.0.5:26379"
+      ],
+      "limit_per_minute": "6000",
+      "writer_pool": "8",
+      "reader_pool": "4"
+    },
+    {
+      "node": 3,
+      "app_sha": "6474ad3b0c043677066c539f3523c075b7358af0",
+      "app_ready": 200,
+      "proxy_ready": 200,
+      "cutover_flag_absent": true,
+      "drain_absent": true,
+      "shared_sentinel_endpoints": [
+        "10.122.0.2:26379",
+        "10.122.0.6:26379",
+        "10.122.0.5:26379"
+      ],
+      "limit_per_minute": "6000",
+      "writer_pool": "8",
+      "reader_pool": "4"
+    }
+  ],
+  "external_receipt": {
+    "event_id": "c9264b6f-1e5a-4a9c-8eea-f6ee519edf94",
+    "delivery_id": "7a403f50-4aa8-44d9-9e82-6ec26ff7e7e5",
+    "marker": "shared-redis-release-d19ca904-1089-4fe2-ada6-8909d74add9c",
+    "webhook_request_id": "8a1455e7-f451-4aa9-872c-62beba2e490d",
+    "matching_webhook_captures": 1,
+    "hmac_verified": true,
+    "event_and_delivery_headers_verified": true
+  },
+  "data_preservation": {
+    "original_events": 10136,
+    "original_subscriptions": 5,
+    "counts_and_selected_content_fingerprints_preserved": true,
+    "comparison_before_synthetic_probes": true,
+    "cloud_record": "/opt/notification-fanout/ha/redis-data-preservation-result.json"
+  },
+  "java_test_suites": [
+    {
+      "suite": "com.example.notifications.CoreTest",
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "com.example.notifications.KafkaIT",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "com.example.notifications.MetricsBridgeTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "com.example.notifications.MetricsExporterTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "com.example.notifications.RedisIT",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "com.example.notifications.ServiceIT",
+      "tests": 29,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "python_tests": {
+    "deployment": 12,
+    "ha_configuration_backup": 29,
+    "total": 41
+  },
+  "backup_update": {
+    "backup_only_tools_revision": "6474ad3",
+    "postgres_not_restarted": true,
+    "current_snapshot_metadata_tables": 10,
+    "backup_role_delivery_dlq_read_verified": true,
+    "new_ten_table_spaces_restore_executed": false,
+    "historical_nine_table_spaces_restore_reference": "cloud-ha-bd082b6.json"
+  },
+  "limits": [
+    "No managed queue, replay API or per-source ordering",
+    "No independent per-user quota or horizontal autoscaling",
+    "Redis asynchronous replication can lose recent quota updates",
+    "Receiver-side deduplication is needed for exactly-once business effects",
+    "Last observed Insights provider404; no confirmed Metrics Explorer visibility",
+    "No new complete disaster recovery or representative fanout soak test",
+    "Exact current LB balancing algorithm was not verified by later documentation review"
+  ]
+}
