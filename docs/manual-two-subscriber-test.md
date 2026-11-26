@@ -7,6 +7,8 @@
 | **Process health — liveness** | [https://174.138.121.225/health/live](https://174.138.121.225/health/live) | HTTP 200, `{"status":"alive"}` |
 | **Service health — readiness** | [https://174.138.121.225/health/ready](https://174.138.121.225/health/ready) | HTTP 200, `{"status":"ready"}`; HTTP 503 when unavailable |
 
+**Per-Droplet metrics:** [Open the individual commands for all three Droplets](#10-metrics-and-operator-health). Metrics are private; execute the commands inside the selected Droplet.
+
 Neither URL requires a bearer token. Use HTTPS on the standard port 443; do not append `:8080` or `:8081`. The service is an API, so its base URL is not a web dashboard. A health response is from the backend selected by the load balancer; it does not individually verify all three Droplets. All `/v1` API requests below require your tenant token.
 
 This is a repeatable smoke test for the deployed application at **https://174.138.121.225**. Run the commands in order in the **same Bash session**. It creates two subscriptions under your token's tenant, sends one new event, checks its two deliveries, and optionally verifies idempotency and removes the test subscriptions. It does not require an application redeployment.
@@ -252,7 +254,52 @@ Expected: **202**, original internal ID, `duplicate:true`. Reusing an identity w
 
 There is **no public application `/metrics` URL**. Java admin port 8081 is loopback-only on each Droplet; do not open a firewall rule for this test. Public `/health/ready` reports the selected backend, not a three-node inventory.
 
-As an authorized operator, open a Droplet console or an entitled SSH shell and run these commands **on that Droplet**. The restricted CI deployment account is not a general operator shell. Repeat on `64.227.168.29`, `139.59.13.207` and `159.65.153.56` when checking every instance.
+### Open the correct Droplet console first
+
+1. Open [DigitalOcean](https://cloud.digitalocean.com/) and select team **Blitz_team13_Hyd**.
+2. Find the Droplet by its public IP in the table below and open its authorized console. Alternatively, use your existing entitled operator SSH access.
+3. Run the block for that Droplet **inside its shell**, then repeat on the other two Droplets. No application bearer token is needed for loopback metrics; access is controlled by your operator access to the host.
+
+| Application instance | Droplet public IP | Metrics URL from inside that Droplet |
+| --- | --- | --- |
+| Node 1 | `64.227.168.29` | `http://127.0.0.1:8081/metrics` |
+| Node 2 | `139.59.13.207` | `http://127.0.0.1:8081/metrics` |
+| Node 3 | `159.65.153.56` | `http://127.0.0.1:8081/metrics` |
+
+**127.0.0.1 means the machine where you execute curl.** Running this URL in your laptop/container terminal will not inspect a cloud Droplet. The restricted CI deployment account is not a general operator shell. Use your normal operator account/console; do not change the CI account or expose port 8081.
+
+### Node 1 — run on 64.227.168.29
+
+```bash
+printf 'Metrics from node 1 (64.227.168.29), hostname: '
+hostname
+curl --fail-with-body --silent --show-error --max-time 5 \
+  -w '\nHTTP %{http_code}\n' http://127.0.0.1:8081/metrics
+```
+
+### Node 2 — run on 139.59.13.207
+
+```bash
+printf 'Metrics from node 2 (139.59.13.207), hostname: '
+hostname
+curl --fail-with-body --silent --show-error --max-time 5 \
+  -w '\nHTTP %{http_code}\n' http://127.0.0.1:8081/metrics
+```
+
+### Node 3 — run on 159.65.153.56
+
+```bash
+printf 'Metrics from node 3 (159.65.153.56), hostname: '
+hostname
+curl --fail-with-body --silent --show-error --max-time 5 \
+  -w '\nHTTP %{http_code}\n' http://127.0.0.1:8081/metrics
+```
+
+Each command should print Dropwizard JSON with `gauges`, `counters`, `timers` and other sections, followed by **HTTP 200**. These are application/runtime metrics, not complete metrics for Kafka brokers, PostgreSQL servers or Redis processes. A metrics HTTP 200 alone does not prove the application's dependencies are healthy; use readiness and the healthcheck below too.
+
+### Readable health and business metrics — run on each of the three Droplets
+
+The raw commands above need curl only. The formatted commands below also require jq. Run before and after your single-event test to compare values on each node; no extra metrics port or application deployment is needed.
 
 ```bash
 curl --fail-with-body --silent --show-error --max-time 5 http://127.0.0.1:8080/health/ready | jq .
@@ -262,6 +309,18 @@ curl --fail-with-body --silent --show-error --max-time 5 http://127.0.0.1:8081/m
 ```
 
 Useful local names: `events.accepted`, `events.duplicates`, `delivery.succeeded`, `delivery.unsuccessful_attempts`, `delivery.pending`, `delivery.oldest_pending_seconds`, `kafka.published`, `kafka.dispatched`, `kafka.outbox_pending`, `kafka.oldest_undispatched_seconds`, `redis.replicas`, and `cache.*`. Some counters appear only after their first occurrence. Local metric names differ from the exported `notification.*` names; see [metrics contract](metrics.md).
+
+| What to inspect | JSON path in the local metrics response | Interpretation |
+| --- | --- | --- |
+| Newly accepted events | `.counters["events.accepted"].count` | Per-process counter; one new event is accepted by one app instance |
+| Duplicate ingestion requests | `.counters["events.duplicates"].count` | Per-process counter; appears after use |
+| Successful delivery outcomes | `.counters["delivery.succeeded"].count` | Per-process saved successes; inspect all three nodes |
+| Failed HTTP attempts | `.counters["delivery.unsuccessful_attempts"].count` | Failed attempts, not necessarily terminal delivery failures |
+| Pending deliveries | `.gauges["delivery.pending"].value` | Shared database-backed backlog; do not sum across nodes |
+| Oldest pending delivery | `.gauges["delivery.oldest_pending_seconds"].value` | Backlog age; use with pending count |
+| Events awaiting publication/dispatch | `.gauges["kafka.outbox_pending"].value` | Counts outbox rows with neither publication nor dispatch complete; excludes already-published events still awaiting matching. Not Kafka broker consumer lag |
+| Redis replicas seen | `.gauges["redis.replicas"].value` | Replica count observed through the application's limiter client |
+| Acceptance latency | `.timers["events.acceptance_latency"]` | Per-process timing statistics; not a global percentile |
 
 One event increments acceptance on the instance handling the POST; two successful deliveries may be processed on different instances. Do not expect each instance's counters to increase by the global totals. Counters can reset on process restart. Shared database backlog gauges describe the same work and must not be summed across replicas. Per-instance latency p95 is not a cluster-wide percentile.
 
@@ -319,4 +378,4 @@ Expected: **204** for each. Inbox expiry was requested as 24 hours; provider pol
 | Receiver shows GET as well as POST | Receiving URL was opened in a browser; use viewer/history URLs instead |
 | Signature header present | Not proof of HMAC validation; the receiver must verify it using the appropriate key |
 
-Verification on 26 November 2026: public liveness/readiness returned 200; Droplet 1 loopback metrics and administrator healthcheck returned 200; active Webhook.site origin was confirmed. All 15 Bash blocks passed syntax checks. Both generated filter examples matched the generated event payload, and the delivery completion predicate passed success/pending/incomplete fixtures. The requests were checked against source contracts. This documentation task did not create inboxes/subscriptions or emit a new event. Run it with your own tenant token and inboxes to obtain end-to-end evidence for your demo. Earlier cloud delivery validations remain separate historical evidence.
+Verification on 26 November 2026: public liveness/readiness returned 200; loopback metrics on all three Droplets returned 200 with the expected JSON sections, and Droplet 1 administrator healthcheck returned 200; active Webhook.site origin was confirmed. All 18 Bash blocks passed syntax checks. Both generated filter examples matched the generated event payload, and the delivery completion predicate passed success/pending/incomplete fixtures. The requests were checked against source contracts. This documentation task did not create inboxes/subscriptions or emit a new event. Run it with your own tenant token and inboxes to obtain end-to-end evidence for your demo. Earlier cloud delivery validations remain separate historical evidence.
