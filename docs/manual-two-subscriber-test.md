@@ -1,5 +1,14 @@
 # Manual test: one event, two subscriptions, two webhook deliveries
 
+## Open these health URLs directly in your browser
+
+| Check | Full clickable URL | Expected response |
+| --- | --- | --- |
+| **Process health — liveness** | [https://174.138.121.225/health/live](https://174.138.121.225/health/live) | HTTP 200, `{"status":"alive"}` |
+| **Service health — readiness** | [https://174.138.121.225/health/ready](https://174.138.121.225/health/ready) | HTTP 200, `{"status":"ready"}`; HTTP 503 when unavailable |
+
+Neither URL requires a bearer token. Use HTTPS on the standard port 443; do not append `:8080` or `:8081`. The service is an API, so its base URL is not a web dashboard. A health response is from the backend selected by the load balancer; it does not individually verify all three Droplets. All `/v1` API requests below require your tenant token.
+
 This is a repeatable smoke test for the deployed application at **https://174.138.121.225**. Run the commands in order in the **same Bash session**. It creates two subscriptions under your token's tenant, sends one new event, checks its two deliveries, and optionally verifies idempotency and removes the test subscriptions. It does not require an application redeployment.
 
 The examples use synthetic data and two distinct Webhook.site inboxes. Both subscriptions belong to one authenticated tenant; they are not two new tenant accounts. The tenant is determined by the bearer token. Keep your token and inbox IDs private; do not commit run output. Only the two subscription POSTs and the single event POST create application resources. Subscription POST is not idempotent: do not rerun it blindly after a lost response; inspect the subscription list first.
