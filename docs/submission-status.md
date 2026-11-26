@@ -1,5 +1,15 @@
 # Verified deployment and submission status
 
+## Latest validated application release: 27ecd2a (November 26)
+
+The five-minute event identity TTL and 1,000 requests/second per-tenant shared Redis quota are deployed on all three existing nodes. All report readiness 200 and are undrained. A fresh synthetic public request returned 202; its identical replay returned the same event. Both cache aliases had 297 seconds remaining when inspected and neither participated in LRU. Replaying the earlier event 94b53336-a2d7-45fa-bd11-d5e9d20d93d3, older than the cache window, returned its original database identity. Events increased by exactly one on every database member; delivery counts remained unchanged.
+
+Local verification passed 91 Java tests and 48 Python deployment tests. The complete GitHub verification pipeline and rolling deployment succeeded. See [machine-readable release evidence](evidence/five-minute-cloud-2026-11-26.json).
+
+The five-tenant target is 5,000 events/second aggregate: 1.5 million events or up to three million aliases per five-minute window. Existing cache admission remains bounded at 32 MiB / 50,000 entries; it is **not sized for this full working set**, and sustained aggregate 5,000/s cloud performance is **not verified**. The optional tenant-credential map supports provisioning distinct identities; this release preserves the existing service credential and does not itself create five customer tenants. Cache saturation falls back to PostgreSQL. No paid resize was performed. [Capacity assumptions and remaining work](capacity-1000-rps.md).
+
+Earlier revision-specific statements and tests below are historical.
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 ## Latest deployment: f0c4d33, November 26

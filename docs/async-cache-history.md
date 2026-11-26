@@ -2,7 +2,7 @@
 
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
-This is the current source implementation contract for the November 26 redesign. The original redesign was deployed as f0c4d33; subsequent expiry and quota changes require their own release validation. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
+This is the current source implementation contract for the November 26 redesign. The original redesign was deployed as f0c4d33; the five-minute expiry and shared per-second quota follow-up is validated on all three nodes as release 27ecd2a. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
 
 ## Requirements and boundaries
 

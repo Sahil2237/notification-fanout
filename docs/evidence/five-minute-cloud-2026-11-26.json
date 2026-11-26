@@ -1,0 +1,64 @@
+{
+  "event_id": "6decbfd9-3bbb-4c70-ad48-1c77425c2b85",
+  "new_status": 202,
+  "duplicate_status": 202,
+  "same_original_event": true,
+  "rate_limit": 1000,
+  "rate_window_seconds": 1,
+  "cached_alias_count": 2,
+  "ttl_remaining_seconds": [
+    297,
+    297
+  ],
+  "identity_lru_members": 0,
+  "expiry_policy_seconds": 300,
+  "run_id": "five-minute-08a65e22-1768-4387-b59f-d4ad02b3ddf4",
+  "release": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+  "older_than_five_minutes_postgres_duplicate_verified": true,
+  "older_event_id": "94b53336-a2d7-45fa-bd11-d5e9d20d93d3",
+  "nodes": [
+    {
+      "node": 1,
+      "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    },
+    {
+      "node": 2,
+      "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    },
+    {
+      "node": 3,
+      "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    }
+  ],
+  "ci_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45855313505",
+  "deployment_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45857677360",
+  "local_java_tests": 91,
+  "local_python_tests": 48,
+  "paid_resize_performed": false,
+  "full_five_tenant_working_set_provisioned": false,
+  "aggregate_5000_rps_cloud_load_test_performed": false
+}
