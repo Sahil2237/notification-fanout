@@ -1,5 +1,7 @@
 # Visual design guide
 
+[Hands-on test: one event → two subscribers → webhook verification](manual-two-subscriber-test.md) — copy-and-paste REST requests, health checks, delivery audit and private metrics access.
+
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
