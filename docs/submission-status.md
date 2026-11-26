@@ -2,6 +2,31 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
+## Latest deployment: f0c4d33, November 26
+
+Application revision `f0c4d332cbe5dbeaa70142edc31f563c576c7b3c` is running and ready on all three existing Droplets. [Sanitized evidence](evidence/cloud-async-cache-history-f0c4d33.json), [passing CI](https://github.com/Sahil2237/notification-fanout/actions/runs/45839195205), [current design](async-cache-history.md).
+
+| Check | Observed result |
+| --- | --- |
+| Local validation | 27 unit + 59 integration Java tests; 42 Python tests; 42 Mermaid diagrams and valid local links |
+| Hosted CI | Verification, tested-release and HA-runtime jobs passed; signed artifacts verified on every host |
+| Cutover | All backends drained, old apps stopped, migrations applied, cache-only ACL scope added, new apps verified, ingress reopened |
+| Preserved baseline | 10,138 events, five subscription records, 15 delivery identities; 14 older terminal records moved to history before probes |
+| Duplicate/cache path | Same event across three instances returned duplicate flags false/true/true; changed content 409; forced expiry of only synthetic aliases still returned original event from PostgreSQL |
+| External webhook | Event e43ce95d-5483-42cd-a5cc-60fa3db82688, delivery c07dbf43-0a0a-4d8c-8db2-c2a44b516f90; one HTTP 204 attempt/capture; HMAC and IDs verified |
+| History | Only synthetic completed_at was aged to exercise 24-hour archival; same Delivery ID/status/attempt remained queryable through a replica |
+| Subscription cache | Temporary filtered registrations exercised generation changes and a one-record 20% cache ceiling; all temporary registrations were soft-deleted afterward |
+| Public HTTPS | Ingestion 202, duplicate original ID, conflict 409, invalid credential 401, replica read header and readiness 200 |
+| Final data | 10,140 events (two synthetic probes added), ten subscription records (five temporary records soft-deleted), 16 delivery identities, one hot plus 15 historical delivery records |
+| Operations | Daily backup timers active; both restore-helper paths synchronized to verified 13-table-compatible tools; HA_DEPLOY_READY restored true |
+
+The regular automatic rolling workflow was intentionally gated/skipped for this incompatible change; the operator performed the signed-artifact coordinated deployment. Docs-only follow-up commits do not require a runtime redeploy. Data services/proxy were not replaced by the app cutover. The backup tools image alone was refreshed.
+
+**Capacity limit:** 10,000 events/second is a target with a checked-in k6 scenario, not an achieved SLO. Existing hardware, tenant quota, finite cache, primary write capacity and outbound workers are not sized/proven for sustained target fanout. No new actual thirteen-table Spaces restore or whole-Droplet cloud failure drill is claimed. The earlier release record below is historical.
+
+## Historical release record
+
+
 Documentation refreshed25 November 2026 IST. Runtime evidence below is pinned to the 24 November rollout of **6474ad3b0c043677066c539f3523c075b7358af0**; a documentation-only Git commit does not establish a new runtime deployment. No service, firewall or credential change is part of this documentation refresh.
 
 ## Current deployed system

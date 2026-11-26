@@ -2,7 +2,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-[Visual HLD](../hld.md) | [Controls contract](../reliability-controls.md) | [Redis operations](../../deploy/ha/redis.md). This is one Redis primary/two replicas plus three Sentinel processes on the existing hosts, not sharded Redis Cluster and not a general application-response cache. Source/runtime 6474ad3.
+[Visual HLD](../hld.md) | [Controls contract](../reliability-controls.md) | [Redis operations](../../deploy/ha/redis.md). This is one Redis primary/two replicas plus three Sentinel processes on the existing hosts, not sharded Redis Cluster and not a general application-response cache. Source/runtime f0c4d33.
 
 ## Low-level requirements
 
@@ -90,3 +90,7 @@ Replica acknowledgement is not a guarantee every replica persisted the latest qu
 redis.replicas is an app gauge of observed primary replica count. http.rate.limited and delivery.retry_budget_deferred show effects on admission/retries; raw latency/CPU/evictions/Sentinel quorum are not a complete exported Redis dashboard in this implementation. Readiness checks primary/replication health. Provider-native Redis monitoring is not created just by self-hosting Redis. [Exact catalogue](../concepts-and-metrics.md).
 
 [RedisIT](../../src/test/java/com/example/notifications/RedisIT.java), config tests and [real TLS/Sentinel drill](../../deploy/ha/test-redis-cluster.py) cover shared windows, hostname rejection, restricted app ACLs, existing-client promotion, missing replica refusal and rejoin. [Latest cloud evidence](../evidence/cloud-redis-6474ad3.json) records separate cloud failover and shared quota checks while all backends were drained, with synthetic counter removed before reopening. Source: [RedisRateLimiter](../../src/main/java/com/example/notifications/RedisRateLimiter.java), [settings](../../src/main/java/com/example/notifications/RedisSettings.java), [bootstrap](../../deploy/ha/redis-cluster.py). Reconsider strict accounting, per-user verified claims or a different burst algorithm only with explicit semantics and tests; no extra paid Redis service was added.
+
+## Targeted caches added in this redesign
+
+Committed event identities expire after 600 seconds and fall back to PostgreSQL. Current-generation subscription records have a per-tenant 20% ceiling and explicit LRU. Cache-only Lua eviction retains server noeviction and cannot remove quota keys. Separate two-connection/200 ms cache pool limits interference with limiter traffic. Global defaults cap estimated cache bytes at 4 MiB and entries at 10,000; eviction can occur before TTL. No strict full-ten-minute working-set or 10,000/s capability is claimed. See the [cache contract and failure diagrams](../async-cache-history.md).

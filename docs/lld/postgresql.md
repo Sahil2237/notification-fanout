@@ -2,7 +2,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-[Visual HLD](../hld.md) | [etcd coordination](etcd.md) | [Operations](../operations.md). Three self-managed PostgreSQL 17/Patroni members on existing BLR 1 hosts. Logical roles move; do not hard-code node 3 as permanent primary. Runtime read/write configuration is 6474ad3; running database infrastructure was not replaced by that app rollout.
+[Visual HLD](../hld.md) | [etcd coordination](etcd.md) | [Operations](../operations.md). Three self-managed PostgreSQL 17/Patroni members on existing BLR 1 hosts. Logical roles move; do not hard-code node 3 as permanent primary. Runtime read/write configuration is f0c4d33; running database infrastructure was not replaced by that app rollout.
 
 ## Low-level requirements
 
@@ -22,9 +22,11 @@
 erDiagram
     EVENTS ||--o{ DELIVERIES : fans_out
     SUBSCRIPTIONS ||--o{ DELIVERIES : receives
-    DELIVERIES ||--o{ DELIVERY_ATTEMPTS : records
+    DELIVERY_IDENTITIES ||--o{ DELIVERY_ATTEMPTS : records
+    DELIVERY_IDENTITIES ||--o| DELIVERIES : active
+    DELIVERY_IDENTITIES ||--o| DELIVERY_HISTORY : terminal
     EVENTS ||--o| EVENT_OUTBOX : publishes
-    DELIVERIES ||--o| DELIVERY_DEAD_LETTERS : terminates
+    DELIVERY_IDENTITIES ||--o| DELIVERY_DEAD_LETTERS : terminates
     EVENTS {
         uuid id PK
         string tenant_id
@@ -123,3 +125,7 @@ Runtime role has scoped DML, migration owner runs schema changes, backup role ca
 App backlog/age gauges and audit indirectly observe database-backed work. Patroni role/lag, synchronous standby, connection utilization, locks, WAL/disk and backup age are operational inspection signals; a dedicated PostgreSQL exporter/dashboard/alert suite is not implemented by notification.* metrics. See [catalogue](../concepts-and-metrics.md). Source/config: [Store](../../src/main/java/com/example/notifications/Store.java), [HA config](../../config/ha.yml), [renderer](../../deploy/ha/render.py), [backup](../../deploy/ha/spaces-backup.py), [restore](../../deploy/ha/restore-test.sh).
 
 ServiceIT covers transactions/constraints/claims/read roles; hosted HA tests exercise real sync failover/JDBC standbys. Historical whole-Droplet/actual-Spaces checks and latest data-preservation evidence are separate in [validation](../validation.md). Reconsider pooling, partitions, retention or a managed database when measured connection/IO/storage/SLO demands justify it, not just because event counts grow.
+
+## New durable structures
+
+`subscription_versions` serializes subscription-generation changes against matching. `delivery_identities` preserves delivery ID and event/subscription pair uniqueness across archival. `delivery_history` stores terminal records moved after 24 hours. `all_deliveries` is a view, not a fourth new table; status queries use it within one replica-read transaction. Attempts and DLQ foreign keys now reference the identity anchor. Migrations 008–010 include backfill, trigger, runtime/backup privileges and candidate/outbox indexes.

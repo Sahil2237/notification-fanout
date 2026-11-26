@@ -2,7 +2,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-[Visual HLD](../hld.md) | [Business application LLD](notification-app.md). Dropwizard 5/Java 25 runs inside each Notification application JVM. It is a framework/runtime, not a fourth service or an additional set of three app replicas. Source/config reference 6474ad3.
+[Visual HLD](../hld.md) | [Business application LLD](notification-app.md). Dropwizard 5/Java 25 runs inside each Notification application JVM. It is a framework/runtime, not a fourth service or an additional set of three app replicas. Source/config reference f0c4d33.
 
 ## Low-level requirements
 
@@ -78,3 +78,7 @@ Local metrics include http.success/client.errors/server.errors/rate.limited, htt
 Core/config, ServiceIT admission/security and exporter/bridge tests cover the runtime boundaries; hosted CI starts the exact image with least-privilege DB roles and exercises failed startup rollback. Source: [NotificationApplication](../../src/main/java/com/example/notifications/NotificationApplication.java), [BoundedServerFactory](../../src/main/java/com/example/notifications/BoundedServerFactory.java), [BoundedExecutors](../../src/main/java/com/example/notifications/BoundedExecutors.java), [ApiSecurity](../../src/main/java/com/example/notifications/ApiSecurity.java), [HealthResource](../../src/main/java/com/example/notifications/HealthResource.java), [config](../../config/ha.yml).
 
 No OAuth/OIDC, separate API gateway, public admin port, resource update/ETag endpoint or automatic Droplet scaling is implemented. Increase pool/thread bounds only after measuring workload and combined host/DB capacity; a larger thread count can worsen saturation.
+
+## Cache lifecycle and history maintenance
+
+Optional RedisApplicationCache has a separate fair two-connection pool with 200 ms limits and one fixed 60-second maintenance task. It closes before the shared limiter during managed shutdown. Cache errors are optional misses, while quota errors remain fail-closed. Delivery recovery also archives a bounded terminal batch (default 100 per pass, after 24 hours). New local counters cache.hits/misses/errors and delivery.archived are not added to the existing bridge allowlist automatically.

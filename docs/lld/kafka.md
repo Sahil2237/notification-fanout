@@ -2,7 +2,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-[Visual HLD](../hld.md) | [PostgreSQL outbox](postgresql.md) | [Notification workers](notification-app.md). Real self-managed Kafka 4.3.2 runs as three broker/controller members, one per existing Droplet. Managed Kafka was explicitly deferred. The application is 6474ad3; broker infrastructure remains separately versioned.
+[Visual HLD](../hld.md) | [PostgreSQL outbox](postgresql.md) | [Notification workers](notification-app.md). Real self-managed Kafka 4.3.2 runs as three broker/controller members, one per existing Droplet. Managed Kafka was explicitly deferred. The application is f0c4d33; broker infrastructure remains separately versioned.
 
 ## Low-level requirements
 
@@ -24,7 +24,7 @@ flowchart LR
     OUT --> PUB[Leased publisher: one loop per app]
     PUB -->|Event UUID key and acks all| TOPIC[notification-events-v1]
     TOPIC --> CON[Consumer group notification-dispatch-v1]
-    CON --> ACT[Transaction: activate existing delivery jobs]
+    CON --> ACT[Transaction: match subscriptions and create delivery jobs]
     ACT --> OFF[Commit Kafka offset after DB commit]
     CON -->|Malformed envelope| QUAR[(DB kafka_dead_letters quarantine)]
     QUAR --> OFF
@@ -63,7 +63,7 @@ sequenceDiagram
     participant C as Consumer
     participant D as PostgreSQL
     K->>C: Event record at offset n
-    C->>D: Idempotently activate existing jobs and commit
+    C->>D: Idempotently match subscriptions and create jobs and commit
     alt Crash before offset commit
         K->>C: Record n may be delivered again
         C->>D: Repeated activation is harmless

@@ -2,7 +2,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-[Visual HLD](hld.md) | [Component LLDs](README.md#separate-low-level-design-documents) | [Metrics operations](metrics.md). This inventory is tied to the 6474ad3 source contract and later read-only LB settings, not a claim that all possible observability is deployed. Local declared instrumentation, exporter allowlist, provider-native telemetry and proposed/missing signals are explicitly different categories.
+[Visual HLD](hld.md) | [Component LLDs](README.md#separate-low-level-design-documents) | [Metrics operations](metrics.md). This inventory is tied to the f0c4d33 source contract and later read-only LB settings, not a claim that all possible observability is deployed. Local declared instrumentation, exporter allowlist, provider-native telemetry and proposed/missing signals are explicitly different categories.
 
 ## Concepts map
 

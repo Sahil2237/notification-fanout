@@ -1,6 +1,6 @@
 # Asynchronous matching, bounded caches and delivery history
 
-This is the implementation contract for the November 26 redesign. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
+This is the implementation contract for the November 26 redesign, deployed as f0c4d33 on all three existing hosts. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
 
 ## Requirements and boundaries
 
@@ -136,3 +136,5 @@ Bounded publisher batches allow up to 32 records to be outstanding per loop, usi
 [scripts/load-events.js](../scripts/load-events.js) is an open-arrival k6 test with a configurable 10,000 requests/second target, unique identities and explicit remote-load guard. Run against a disposable capacity environment with representative payloads/subscriptions and adequate quotas. Its example acceptance thresholds are p99 below 500 ms, fewer than 1% request failures and zero generator-dropped iterations; these are proposed test gates, not a contracted or achieved SLO. A no-match test does not prove fanout capacity. Measure backlog drain after the test and record generator saturation, replica settings, duration and receiver latency.
 
 Deployment requires a coordinated cutover: obtain passing signed application/runtime artifacts; stage before outage; pause automatic rolling promotion; drain all backends; stop old apps; migrate once; extend existing Redis ACLs only within cache namespace; start/verify all new apps; verify preserved data and public/synthetic flow; reopen ingress. Do not reverse migrations automatically or run an old matching contract against newly queued events. Backup tools/restore verifier must include subscription_versions, delivery_identities and delivery_history (13 snapshot metadata tables including Liquibase history). Earlier nine/ten-table evidence remains historical.
+
+Release closure: [cloud evidence](evidence/cloud-async-cache-history-f0c4d33.json) confirms the functional checks and current public service. Capacity benchmarking and a new thirteen-table actual Spaces restore remain explicitly unexecuted.

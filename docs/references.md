@@ -16,3 +16,6 @@ Dependency compatibility was additionally checked by compiling and running the i
 ## Load-balancer verification, 25 November 2026
 
 Live settings were read from the DigitalOcean Control Panel and recorded in [sanitized evidence](evidence/load-balancer-2026-11-25.json). Provider behavior is supported separately by [Load Balancers Features](https://docs.digitalocean.com/products/networking/load-balancers/details/features/) and the [Load Balancers API reference](https://docs.digitalocean.com/reference/api/reference/load-balancers/): distribution is provider-managed and the former algorithm selector is deprecated. A deprecated example field is not evidence that the active scheduler is traditional round-robin. Health timing, affinity and other effective values come from the live settings inspection, not assumed defaults.
+
+- [Redis key eviction](https://redis.io/docs/latest/develop/reference/eviction/): server-wide eviction is distinct from our explicitly bounded cache-only LRU; quota keys remain outside it.
+- [PostgreSQL INSERT/ON CONFLICT](https://www.postgresql.org/docs/17/sql-insert.html): authoritative uniqueness and concurrent duplicate decisions.

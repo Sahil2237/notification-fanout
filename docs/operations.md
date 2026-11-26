@@ -56,3 +56,9 @@ For public ingress, SSH scope, broad outgoing rules, ETag/idempotency boundaries
 ### Restore command version caveat (25 November documentation review)
 
 A read-only comparison on the first HA host found that `/usr/local/sbin/notification-restore-test` is an older independent copy without `delivery_dead_letters` snapshot support. The current `/opt/notification-fanout/ha/restore-test.sh` supports that table. Use the current HA-path command above after confirming the script matches the reviewed repository version on the restore host; do not assume the legacy command is a symlink. This documentation update did not replace host files or perform a new Spaces restore. Synchronizing the legacy installed helper on every host and executing a fresh ten-table restore remain deployment/validation work.
+
+## November 26 release closure
+
+The signed f0c4d33 application and backup-only artifacts were verified on all hosts. Migrations 008–010 are applied; all three apps are ready and drains/coordinated-cutover flags are removed. Daily backup timers are active and HA_DEPLOY_READY is true. The legacy restore-helper drift described above is **resolved on all three hosts**: /usr/local/sbin/notification-restore-test and the HA-path helper now have identical verified content and accept thirteen-table snapshots plus historical formats. This confirms installation, not a new thirteen-table actual Spaces restore.
+
+Both targeted caches use the existing Redis/Sentinel deployment, separate from quota keys and with a separate bounded client pool. Restore-to-an-older-database procedures must clear the optional notification:cache:v2:* namespace before reopening traffic; never flush the whole shared Redis database or delete quota keys as cache maintenance. Retention moves terminal work after 24 hours; it does not delete audit or identities. Status uses all_deliveries. See the redesign contract for generation locks, processing-time membership and rollback limitations.

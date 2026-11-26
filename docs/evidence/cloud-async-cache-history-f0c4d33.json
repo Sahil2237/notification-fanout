@@ -1,0 +1,195 @@
+{
+  "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+  "recorded_at": "2026-11-26T14:55:43.174638+00:00",
+  "ci_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45839195205",
+  "local_java_tests": 86,
+  "local_python_tests": 42,
+  "ten_thousand_events_per_second_benchmark_executed": false,
+  "before_cutover": [
+    {
+      "node": 1,
+      "node_primary": false,
+      "events": 10138,
+      "subscriptions": 5,
+      "deliveries": 15,
+      "producer_conflict_groups": 0,
+      "revision": "6474ad3b0c043677066c539f3523c075b7358af0"
+    },
+    {
+      "node": 2,
+      "node_primary": false,
+      "events": 10138,
+      "subscriptions": 5,
+      "deliveries": 15,
+      "producer_conflict_groups": 0,
+      "revision": "6474ad3b0c043677066c539f3523c075b7358af0"
+    },
+    {
+      "node": 3,
+      "node_primary": true,
+      "events": 10138,
+      "subscriptions": 5,
+      "deliveries": 15,
+      "producer_conflict_groups": 0,
+      "revision": "6474ad3b0c043677066c539f3523c075b7358af0"
+    }
+  ],
+  "signed_application_artifacts": [
+    {
+      "node": 1,
+      "signed_artifact_verified": true,
+      "kind": "app"
+    },
+    {
+      "node": 2,
+      "signed_artifact_verified": true,
+      "kind": "app"
+    },
+    {
+      "node": 3,
+      "signed_artifact_verified": true,
+      "kind": "app"
+    }
+  ],
+  "signed_backup_artifacts": [
+    {
+      "node": 1,
+      "signed_artifact_verified": true,
+      "kind": "backup"
+    },
+    {
+      "node": 2,
+      "signed_artifact_verified": true,
+      "kind": "backup"
+    },
+    {
+      "node": 3,
+      "signed_artifact_verified": true,
+      "kind": "backup"
+    }
+  ],
+  "functional_cloud_checks": {
+    "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+    "marker": "async-cache-history-7d05354f-d090-4fc7-b939-bc351c892e61",
+    "event_id": "e43ce95d-5483-42cd-a5cc-60fa3db82688",
+    "delivery_id": "c07dbf43-0a0a-4d8c-8db2-c2a44b516f90",
+    "cross_instance_duplicates": [
+      false,
+      true,
+      true
+    ],
+    "conflict_http": 409,
+    "attempt_count": 1,
+    "http_status": 204,
+    "external_capture_id": "cb17f0e2-091b-4af9-ac78-cbf9a1281e67",
+    "external_hmac_verified": true,
+    "external_capture_count": 1,
+    "cache_ttl_remaining_seconds": [
+      589,
+      589
+    ],
+    "synthetic_cache_expired": true,
+    "postgres_dedup_after_cache_expiry": true,
+    "history_status_and_attempts_verified": true,
+    "subscription_cache_count": 1,
+    "subscription_cache_cap": 1,
+    "subscription_generation": 6,
+    "subscription_changes_and_cleanup_verified": true,
+    "read_source": "replica",
+    "local_cache_and_archive_metrics": [
+      {
+        "node": 1,
+        "cache.hits": 0,
+        "cache.misses": 2,
+        "cache.errors": 0,
+        "delivery.archived": 0
+      },
+      {
+        "node": 2,
+        "cache.hits": 2,
+        "cache.misses": 0,
+        "cache.errors": 0,
+        "delivery.archived": 15
+      },
+      {
+        "node": 3,
+        "cache.hits": 4,
+        "cache.misses": 3,
+        "cache.errors": 0,
+        "delivery.archived": 0
+      }
+    ]
+  },
+  "public_https_checks": {
+    "public_https_ingest": 202,
+    "public_duplicate_same_event": true,
+    "public_conflict": 409,
+    "unauthorized": 401,
+    "public_read_source": "replica",
+    "event_id": "0fcaf129-122c-4f9c-afae-5b17e6a9cabf"
+  },
+  "final_nodes": [
+    {
+      "node": 1,
+      "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "ready": 200,
+      "drained": false,
+      "events": 10140,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    },
+    {
+      "node": 2,
+      "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "ready": 200,
+      "drained": false,
+      "events": 10140,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    },
+    {
+      "node": 3,
+      "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "ready": 200,
+      "drained": false,
+      "events": 10140,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10
+    }
+  ],
+  "backup_tools": [
+    {
+      "node": 1,
+      "backup_only_tools_updated": true,
+      "restore_helpers_synchronized": true,
+      "snapshot_table_count": 13,
+      "postgres_not_restarted": true
+    },
+    {
+      "node": 2,
+      "backup_only_tools_updated": true,
+      "restore_helpers_synchronized": true,
+      "snapshot_table_count": 13,
+      "postgres_not_restarted": true
+    },
+    {
+      "node": 3,
+      "backup_only_tools_updated": true,
+      "restore_helpers_synchronized": true,
+      "snapshot_table_count": 13,
+      "postgres_not_restarted": true
+    }
+  ],
+  "backup_timers_resumed": true,
+  "automatic_deploy_gate_restored": true,
+  "new_thirteen_table_actual_spaces_restore_executed": false
+}
