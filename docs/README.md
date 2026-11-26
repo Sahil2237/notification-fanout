@@ -1,8 +1,8 @@
 # Visual design guide
 
-**Revised target:** [1,000 events/second profile and shared 66,000/minute tenant quota](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
+**Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Read this in order for an interview explanation. Diagrams describe the implemented 6474 ad 3 runtime and verified 25 November LB settings, not hypothetical microservices. [Current evidence](submission-status.md) separates current checks from historical failure drills. Markdown/Mermaid diagrams render directly in GitHub.
 

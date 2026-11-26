@@ -1,6 +1,6 @@
 {
   "target_events_per_second": 1000,
-  "identity_ttl_seconds": 600,
+  "identity_ttl_seconds": 300,
   "application": {
     "CACHE_MAX_BYTES": 1879048192,
     "CACHE_MAX_ENTRIES": 1500000,

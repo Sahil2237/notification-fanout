@@ -1,15 +1,15 @@
 # Asynchronous matching, bounded caches and delivery history
 
-**Revised target:** [1,000 events/second profile and shared 66,000/minute tenant quota](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
+**Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
-This is the implementation contract for the November 26 redesign, deployed as f0c4d33 on all three existing hosts. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
+This is the current source implementation contract for the November 26 redesign. The original redesign was deployed as f0c4d33; subsequent expiry and quota changes require their own release validation. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
 
 ## Requirements and boundaries
 
 | Requirement | Implementation | Important boundary |
 | --- | --- | --- |
 | Immediate duplicate decision | Tenant/key and tenant/producer-ID PostgreSQL unique constraints; committed identity cache | Identical repeat returns original event with duplicate=true, changed content/identity returns 409; no new publication |
-| Ten-minute Redis identities | Canonical internal ID, acceptance timestamp, content hash and configured identity; 600-second TTL | No payload/credentials cached; event identities are not LRU-evicted before expiry; PostgreSQL retains authoritative identity |
+| Five-minute Redis identities | Canonical internal ID, acceptance timestamp, content hash and configured identity; 300-second TTL | No payload/credentials cached; event identities are not LRU-evicted before expiry; PostgreSQL retains authoritative identity |
 | Match after Kafka | Consumer transaction locks outbox row, reads current subscription generation, creates jobs and marks matching complete | API acknowledges before recipients are selected; Kafka-disabled development mode matches inline |
 | Same Redis for subscriptions | Versioned per-tenant subscription records, candidate IDs from primary, batch fetch of cache misses | At most floor(active tenant subscriptions * 20/100) records in the current generation; fewer than five means zero cached records |
 | Safe subscription changes | Increment persistent tenant generation in create/delete transaction; best-effort post-commit warm | Old generation is unreachable immediately, even if Redis update fails; no new PUT/PATCH endpoint |
@@ -26,7 +26,7 @@ flowchart TB
     HIT -->|Conflicting content| CONFLICT[409]
     HIT -->|Miss or cache failure| TX[PostgreSQL event plus outbox transaction]
     TX --> ACK[202 after durable commit]
-    TX --> FILL[Cache identities for at most 600 seconds]
+    TX --> FILL[Cache identities for at most 300 seconds]
     TX --> PUB[Bounded outbox publisher batches]
     PUB --> K[Kafka: replicated UUID-keyed events]
     K --> M[Matcher consumer]
@@ -49,7 +49,7 @@ flowchart TB
 
 The event insert and outbox insert commit together. A Redis hit is used only for an identity populated after successful acceptance commit. Redis misses, expiry, eviction, malformed cache replies and connection failures fall back to PostgreSQL. The event cache does not replace a unique constraint or use Redis SET NX as a publication lock.
 
-The explicit key is tenant-scoped. A supplied producer UUID is now unique within its tenant, not only within a configured user/compartment. Configured identity is still checked for conflicts and included in generated keys. Clients must reuse identities on retries. Distinct legitimate occurrences need distinct producer IDs or keys. PostgreSQL identity lifetime is the retained event lifetime, not ten minutes. Restoring the database to an older point requires clearing only the optional cache namespace before reopening traffic, so Redis cannot replay acceptance identities absent from the restored database.
+The explicit key is tenant-scoped. A supplied producer UUID is now unique within its tenant, not only within a configured user/compartment. Configured identity is still checked for conflicts and included in generated keys. Clients must reuse identities on retries. Distinct legitimate occurrences need distinct producer IDs or keys. PostgreSQL identity lifetime is the retained event lifetime, not five minutes. Restoring the database to an older point requires clearing only the optional cache namespace before reopening traffic, so Redis cannot replay acceptance identities absent from the restored database.
 
 ```mermaid
 sequenceDiagram
@@ -106,7 +106,7 @@ Cache keys use notification:cache:v2:*; quota keys retain notification:limits:v1
 
 Cache traffic uses its own fair two-connection pool with 200 ms connection/socket/pool-wait limits; quota traffic retains its independent pool. There are no unbounded cache tasks or background retry queues. Cache failure falls back to PostgreSQL; **rate-limit Redis failure still rejects admission** under the existing fail-closed policy. Both logical roles share the same physical Redis failure domain.
 
-At 10,000 unique events/second, ten minutes contains six million event identities, possibly two alias entries each. The low-cost deployment cannot hold all of these. Identity entries retain their original ten-minute expiry and are never chosen for LRU eviction. Subscription entries can be evicted to make room. If the bounded cache cannot admit another identity, that write is counted in cache.capacity_rejected and PostgreSQL remains authoritative; the full-window working set therefore still requires adequate memory. Provisioning a larger dedicated cache requires actual entry-size/traffic measurements and a budget change.
+At 10,000 unique events/second, five minutes contains three million event identities, possibly two alias entries each. The low-cost deployment cannot hold all of these. Identity entries retain their original five-minute expiry and are never chosen for LRU eviction. Subscription entries can be evicted to make room. If the bounded cache cannot admit another identity, that write is counted in cache.capacity_rejected and PostgreSQL remains authoritative; the full-window working set therefore still requires adequate memory. Provisioning a larger dedicated cache requires actual entry-size/traffic measurements and a budget change.
 
 ## History, audit and deduplication
 
@@ -141,10 +141,10 @@ Deployment requires a coordinated cutover: obtain passing signed application/run
 
 Release closure: [cloud evidence](evidence/cloud-async-cache-history-f0c4d33.json) confirms the functional checks and current public service. Capacity benchmarking and a new thirteen-table actual Spaces restore remain explicitly unexecuted.
 
-## Ten-minute identity-retention policy and measured acceptance
+## Five-minute identity-retention policy and measured acceptance
 
 The event-identity path is TTL-only: reads do not extend expiry, subscription pressure cannot evict unexpired event identities, and legacy identity entries are removed from the LRU index without deleting their values during rolling upgrades. Only subscription records participate in LRU. Cache writes that cannot fit the bounded byte/entry budgets fall back to PostgreSQL and increment cache.capacity_rejected. Pipeline responses are inspected so rejected/failed batched fills are observable.
 
-The default cache budget is raised to 32 MiB accounted bytes / 50,000 aliases using the existing Redis allocation; no paid resize is performed. These are admission limits, not preallocated RAM. A full ten-minute window at 10,000 events/second still cannot fit the current small Redis process. Full-window retention is a memory-sizing requirement, not a consequence of setting TTL: existing entries are protected, but new entries can be refused when capacity is exhausted. PostgreSQL deduplication continues on every miss, including Redis outages.
+The default cache budget is raised to 32 MiB accounted bytes / 50,000 aliases using the existing Redis allocation; no paid resize is performed. These are admission limits, not preallocated RAM. A full five-minute window at 10,000 events/second still cannot fit the current small Redis process. Full-window retention is a memory-sizing requirement, not a consequence of setting TTL: existing entries are protected, but new entries can be refused when capacity is exhausted. PostgreSQL deduplication continues on every miss, including Redis outages.
 
 The [paced public test](evidence/load-1000-per-minute-2026-11-26.json) on f0c4d33 submitted 1,000 unique events in 59.993 seconds: all 1,000 returned 202 without retries, all persisted and completed matching, and zero delivery jobs were created. Acceptance p95 was 77.63 ms and p99 121.16 ms. That historical test does not certify the retention follow-up or 10,000 events/second. Its 2,000 aliases occupied approximately 1.79 MB across measured cache structures; current representation extrapolates to roughly 10 GiB/member for twelve million aliases before headroom. Removing identity LRU reduces overhead, so final large-window sizing requires a new measurement.

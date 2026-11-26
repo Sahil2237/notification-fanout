@@ -1,6 +1,6 @@
 # Ingress, authentication, networking and failure behavior
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Checked against application `6474ad3`, effective node configuration and the DigitalOcean load-balancer overview during the 25 November 2026 IST documentation review. This is a description of actual deployment, not a proposed tighter firewall. No infrastructure rules were changed by this documentation task.
 

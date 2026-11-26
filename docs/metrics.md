@@ -1,6 +1,6 @@
 # Metrics emission
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 See the [source-derived concepts/metrics catalogue](concepts-and-metrics.md) for every explicit local-to-OTLP mapping, the local-only instruments and component-specific monitoring gaps.
 

@@ -1,6 +1,6 @@
 # PostgreSQL and Patroni low-level design
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [etcd coordination](etcd.md) | [Operations](../operations.md). Three self-managed PostgreSQL 17/Patroni members on existing BLR 1 hosts. Logical roles move; do not hard-code node 3 as permanent primary. Runtime read/write configuration is f0c4d33; running database infrastructure was not replaced by that app rollout.
 

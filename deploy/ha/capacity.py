@@ -7,7 +7,7 @@ def validate(profile):
     if set(profile)!={'target_events_per_second','identity_ttl_seconds','application','redis','minimum_remaining_available_mib'}:
         raise ValueError('Unexpected capacity profile fields')
     rate=profile['target_events_per_second'];ttl=profile['identity_ttl_seconds']
-    if type(rate) is not int or not 1<=rate<=1000 or ttl!=600:raise ValueError('Reviewed target is at most 1000/s with ten-minute expiry')
+    if type(rate) is not int or not 1<=rate<=1000 or ttl!=300:raise ValueError('Reviewed target is at most 1000/s with five-minute expiry')
     app=profile['application'];redis=profile['redis']
     if set(app)!={'CACHE_MAX_BYTES','CACHE_MAX_ENTRIES','REQUESTS_PER_MINUTE'}:raise ValueError('Only reviewed application settings may change')
     for key,low,high in [('CACHE_MAX_BYTES',65536,2*1024**3),('CACHE_MAX_ENTRIES',10,2000000),('REQUESTS_PER_MINUTE',rate*60,rate*90)]:

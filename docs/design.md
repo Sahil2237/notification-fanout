@@ -1,6 +1,6 @@
 # System design: actual implementation and trade-offs
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](hld.md), [separate component LLDs](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md) provide the diagram-led companion to these decisions.
 
@@ -65,7 +65,7 @@ Unique constraints arbitrate concurrent ingestion; indexed due times and lease f
 
 The writer pool maximum is 8/app and reader pool 4/app: up to24 writer plus 12 reader connections across three apps, excluding proxy/migration/backup/operator clients. PostgreSQL max_connections is 100 per server. Increasing the Droplet shape does not automatically change this self-managed setting; active-query memory/CPU and operational headroom determine a safe budget.
 
-Read APIs check standby roles and return replica/eventual headers. A recent create can briefly be absent; clients can use the committed write response and retry reads. There is no general API-response cache. Identity entries expire after ten minutes; subscription records use database generations and cache-only LRU as described in the redesign contract. Search engines and table sharding are not applicable to the implemented scope; introduce them only after retention/query evidence warrants them. Application data retention is not automated because the business expiry/audit contract is unspecified. Backup retention does not expire events or idempotency identities.
+Read APIs check standby roles and return replica/eventual headers. A recent create can briefly be absent; clients can use the committed write response and retry reads. There is no general API-response cache. Identity entries expire after five minutes; subscription records use database generations and cache-only LRU as described in the redesign contract. Search engines and table sharding are not applicable to the implemented scope; introduce them only after retention/query evidence warrants them. Application data retention is not automated because the business expiry/audit contract is unspecified. Backup retention does not expire events or idempotency identities.
 
 ## F. Failure handling and delivery semantics
 

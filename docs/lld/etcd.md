@@ -1,6 +1,6 @@
 # etcd and PostgreSQL leadership low-level design
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [PostgreSQL/Patroni LLD](postgresql.md). Three etcd voters coordinate Patroni's PostgreSQL leadership. etcd does not store event payloads, schedule webhook jobs, elect Kafka controllers or replace Redis Sentinel. Infrastructure renderer is the source of these settings.
 

@@ -1,6 +1,6 @@
 # Redis and Sentinel low-level design
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [Controls contract](../reliability-controls.md) | [Redis operations](../../deploy/ha/redis.md). This is one Redis primary/two replicas plus three Sentinel processes on the existing hosts, not sharded Redis Cluster and not a general application-response cache. Source/runtime f0c4d33.
 
@@ -93,4 +93,4 @@ redis.replicas is an app gauge of observed primary replica count. http.rate.limi
 
 ## Targeted caches added in this redesign
 
-Committed event identities expire after 600 seconds and fall back to PostgreSQL. Current-generation subscription records have a per-tenant 20% ceiling and explicit LRU. Cache-only Lua eviction retains server noeviction and cannot remove quota keys. Separate two-connection/200 ms cache pool limits interference with limiter traffic. Global defaults cap estimated cache bytes at 32 MiB and entries at 50,000. Only subscriptions participate in LRU; unexpired event identities are protected, and new cache writes can be refused at capacity. No strict full-ten-minute working-set or 10,000/s capability is claimed. See the [cache contract and failure diagrams](../async-cache-history.md).
+Committed event identities expire after 300 seconds and fall back to PostgreSQL. Current-generation subscription records have a per-tenant 20% ceiling and explicit LRU. Cache-only Lua eviction retains server noeviction and cannot remove quota keys. Separate two-connection/200 ms cache pool limits interference with limiter traffic. Global defaults cap estimated cache bytes at 32 MiB and entries at 50,000. Only subscriptions participate in LRU; unexpired event identities are protected, and new cache writes can be refused at capacity. No strict full-five-minute working-set or 10,000/s capability is claimed. See the [cache contract and failure diagrams](../async-cache-history.md).

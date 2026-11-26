@@ -1,8 +1,8 @@
 # Assessment requirements and acceptance evidence
 
-**Revised target:** [1,000 events/second profile and shared 66,000/minute tenant quota](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
+**Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 This is the requirement-to-implementation map for the deployed assessment system, not a promise that every production failure has been tested. Runtime evidence is pinned to `6474ad3` on 24 November 2026; documentation-only commits can advance Git HEAD separately. [Current deployment](submission-status.md), [architecture](architecture.md), [design](design.md), [tests](validation.md).
 

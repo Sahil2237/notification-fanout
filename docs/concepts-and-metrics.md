@@ -1,6 +1,6 @@
 # Implemented system-design concepts and metrics catalogue
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](hld.md) | [Component LLDs](README.md#separate-low-level-design-documents) | [Metrics operations](metrics.md). This inventory is tied to the f0c4d33 source contract and later read-only LB settings, not a claim that all possible observability is deployed. Local declared instrumentation, exporter allowlist, provider-native telemetry and proposed/missing signals are explicitly different categories.
 

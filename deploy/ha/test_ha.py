@@ -36,6 +36,14 @@ class ClusterConfigurationTest(unittest.TestCase):
         self.assertEqual('https',pg['etcd3']['protocol']);self.assertEqual(3,len(pg['etcd3']['hosts'].split(',')))
         command=compose['services']['etcd']['command'];self.assertIn('--client-cert-auth=true',command);self.assertIn('--peer-client-cert-auth=true',command)
 class ApplicationBudgetTest(unittest.TestCase):
+    def test_per_second_quota_and_optional_tenant_credentials(self):
+        secret=secrets();secret['tenant_credentials']={'service':secret['api_token'],'tenant-2':'b'*32}
+        compose,_=render.render(inventory(),secret,1);env=compose['services']['app']['environment']
+        self.assertEqual('1000',env['REQUESTS_PER_SECOND']);self.assertEqual(secret['tenant_credentials'],json.loads(env['TENANT_CREDENTIALS']))
+        self.assertEqual(env['TENANT_CREDENTIALS'],compose['services']['migrate']['environment']['TENANT_CREDENTIALS'])
+        for invalid in ({'tenant-2':'b'*32},{'service':secret['api_token'],'other':secret['api_token']},{'service':secret['api_token'],'__admin':'b'*32}):
+            secret['tenant_credentials']=invalid
+            with self.assertRaises(ValueError):render.render(inventory(),secret,1)
     def test_defaults_and_bounded_pool_overrides_are_rendered(self):
         compose,_=render.render(inventory(),secrets(),1)
         env=compose['services']['app']['environment']

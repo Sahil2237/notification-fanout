@@ -35,6 +35,31 @@ class RedisIT {
             assertFalse(a.allow(tenant,20));
         }
     }
+    @Test void fiveTenantsHaveIndependentThousandPerSecondQuotaAcrossInstances() throws Exception {
+        var config=settings();var prefix="five-"+UUID.randomUUID();
+        try(var a=new RedisRateLimiter(config);var b=new RedisRateLimiter(config);var admin=RedisClient.create(config.host,config.port)) {
+            // Disposable fixture: pin the clock-rollback window ahead to prevent second-boundary flakiness.
+            var now=((Number)admin.eval("return tonumber(redis.call('TIME')[1])",List.of(),List.of())).longValue();
+            for(var tenant=0;tenant<5;tenant++)admin.hset(RedisRateLimiter.secondKey(prefix+tenant),java.util.Map.of("window",Long.toString(now+60),"count","0"));
+            var executor=new ThreadPoolExecutor(8,8,0,TimeUnit.SECONDS,new ArrayBlockingQueue<Runnable>(16),new ThreadPoolExecutor.CallerRunsPolicy());
+            var accepted=new AtomicInteger();
+            try(executor) {
+                var tasks=new java.util.ArrayList<Future<?>>();
+                for(var i=0;i<5000;i++){var tenant=prefix+(i%5);var limiter=i%2==0?a:b;tasks.add(executor.submit(()->{if(limiter.allowPerSecond(tenant,1000))accepted.incrementAndGet();}));}
+                for(var task:tasks)task.get(20,TimeUnit.SECONDS);
+            }
+            assertEquals(5000,accepted.get());
+            for(var tenant=0;tenant<5;tenant++) {
+                assertFalse(b.allowPerSecond(prefix+tenant,1000));
+                assertTrue(a.allow(prefix+tenant,1),"Minute/retry budgets use separate namespaces");
+                var key=RedisRateLimiter.secondKey(prefix+tenant);
+                admin.hset(key,java.util.Map.of("window",Long.toString(now-1),"count","1000"));
+                assertTrue(a.allowPerSecond(prefix+tenant,1000));assertEquals("1",admin.hget(key,"count"));
+                assertTrue(admin.ttl(key)>=0 && admin.ttl(key)<=1);
+                admin.del(key);admin.del(RedisRateLimiter.requestKey(prefix+tenant));
+            }
+        }
+    }
     @Test void retryBudgetsReserveTenantAndSubscriberAtomically() {
         var config=settings();var tenant="retry-"+UUID.randomUUID();var a=UUID.randomUUID();var b=UUID.randomUUID();
         try(var limiter=new RedisRateLimiter(config)) {

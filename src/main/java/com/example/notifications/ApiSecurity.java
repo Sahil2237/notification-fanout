@@ -79,6 +79,8 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
             reject(request, 401, "unauthorized", "A valid bearer token is required");
             return;
         }
+        request.setProperty("rateWindowSeconds",config.requestsPerSecond>0?1:60);
+        request.setProperty("rateLimit",config.requestsPerSecond>0?config.requestsPerSecond:config.requestsPerMinute);
         if (!allow(tenant)) {
             reject(request, 429, "rate_limited", "Per-tenant request limit exceeded");
             return;
@@ -113,12 +115,12 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
     }
 
     boolean allow(String tenant) {
-        if (limiter != null) return limiter.allow(tenant, config.requestsPerMinute);
+        if (limiter != null) return config.requestsPerSecond>0?limiter.allowPerSecond(tenant,config.requestsPerSecond):limiter.allow(tenant,config.requestsPerMinute);
         synchronized (windows) {
-        var minute = clock.millis() / 60000;
+        var minute = clock.millis() / (config.requestsPerSecond>0?1000:60000);
         var previous = windows.get(tenant);
         var count = previous == null || previous.minute() != minute ? 0 : previous.count();
-        if (count >= config.requestsPerMinute) return false;
+        if (count >= (config.requestsPerSecond>0?config.requestsPerSecond:config.requestsPerMinute)) return false;
         windows.put(tenant, new Window(minute, count + 1));
         return true;
         }
@@ -138,7 +140,7 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
                                         "requestId",
                                         request.getProperty("requestId")));
         if (status == 401) response.header("WWW-Authenticate", "Bearer");
-        if (status == 429) response.header("Retry-After", "60");
+        if (status == 429) response.header("Retry-After",String.valueOf(request.getProperty("rateWindowSeconds")));
         request.abortWith(response.build());
     }
 
@@ -150,6 +152,10 @@ public final class ApiSecurity implements ContainerRequestFilter, ContainerRespo
             if (status == 429) metrics.counter("http.rate.limited").inc();
         }
         response.getHeaders().putSingle("X-Request-ID", request.getProperty("requestId"));
+        if(request.getProperty("rateLimit")!=null) {
+            response.getHeaders().putSingle("X-RateLimit-Limit",request.getProperty("rateLimit"));
+            response.getHeaders().putSingle("X-RateLimit-Window-Seconds",request.getProperty("rateWindowSeconds"));
+        }
         response.getHeaders().putSingle("Cache-Control", "no-store");
         var eventId = request.getProperty("eventId");
         if (eventId != null) response.getHeaders().putSingle("X-Event-ID", eventId.toString());

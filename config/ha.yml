@@ -74,6 +74,8 @@ requestTimeoutSeconds: 5
 retryBaseMillis: 1000
 retryCapMillis: 60000
 requestsPerMinute: ${REQUESTS_PER_MINUTE:-6000}
+requestsPerSecond: ${REQUESTS_PER_SECOND:-1000}
+tenantCredentialsEnvironment: TENANT_CREDENTIALS
 kafka:
   enabled: true
   publisherEnabled: ${KAFKA_PUBLISHER_ENABLED:-true}
@@ -116,7 +118,7 @@ telemetry:
 
 cache:
   enabled: ${CACHE_ENABLED:-true}
-  eventTtlSeconds: 600
+  eventTtlSeconds: 300
   subscriptionPercent: 20
   maxBytes: ${CACHE_MAX_BYTES:-33554432}
   maxEntries: ${CACHE_MAX_ENTRIES:-50000}

@@ -1,6 +1,6 @@
 # Notification application low-level design
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [Design guide](../README.md) | [Concepts/metrics](../concepts-and-metrics.md). This is business logic inside the [Dropwizard JVM](dropwizard.md), deployed three times. Source reference f0c4d33. No separate notification microservice is implied for each internal class.
 

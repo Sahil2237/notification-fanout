@@ -1,6 +1,6 @@
 # Deployed architecture and request flows
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 For a diagram-led presentation, start with [visual HLD](hld.md), [component LLD guide](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md). This document retains the detailed canonical request/state diagrams.
 

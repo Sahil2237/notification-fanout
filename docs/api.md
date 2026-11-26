@@ -1,6 +1,6 @@
 # REST API contract
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 All /v1 requests require `Authorization: Bearer <token>`. Tenant comes from that token, never a supplied tenant ID. Responses include X-Request-ID and Cache-Control:no-store. Optional X-Request-ID accepts 1..64 letters/digits/period/underscore/hyphen. UUID path parameters; JSON Content-Type for bodies. No version negotiation: /v1 and webhook schemaVersion=1 are explicit.
 
@@ -67,4 +67,4 @@ Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8
 
 ## Matching and history semantics after redesign
 
-202 acknowledges the event/outbox commit. A delivery list can initially be empty because matching has not completed; it is not proof of no matching recipients. Subscription eligibility is selected by the successful Kafka consumer transaction, not acceptance time. After matching, deletion does not cancel existing work and replay does not rematch. Identical event retries still return original accepted event/duplicate=true; conflicts return 409. Redis expiry is ten minutes and does not expire PostgreSQL identity. Delivery endpoints read one logical active/history view; after terminal archival, IDs and attempt audit remain queryable without a new endpoint.
+202 acknowledges the event/outbox commit. A delivery list can initially be empty because matching has not completed; it is not proof of no matching recipients. Subscription eligibility is selected by the successful Kafka consumer transaction, not acceptance time. After matching, deletion does not cancel existing work and replay does not rematch. Identical event retries still return original accepted event/duplicate=true; conflicts return 409. Redis expiry is five minutes and does not expire PostgreSQL identity. Delivery endpoints read one logical active/history view; after terminal archival, IDs and attempt audit remain queryable without a new endpoint.

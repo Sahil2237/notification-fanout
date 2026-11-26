@@ -40,13 +40,20 @@ def render(inventory,secrets,node_id):
     db_url='jdbc:postgresql://'+','.join(n['private_ip']+':5432' for n in nodes)+'/notifications'
     env={'DB_URL':db_url,'DB_USER':'notification_runtime','DB_PASSWORD':secrets['db_password'],'API_TOKEN':secrets['api_token'],'ADMIN_TOKEN':secrets['admin_token'],'WEBHOOK_SIGNING_SECRET':secrets['signing_secret'],'WEBHOOK_ORIGINS':json.dumps(secrets['webhook_origins']),
        'KAFKA_BOOTSTRAP_SERVERS':','.join(n['private_ip']+':9092' for n in nodes),'JAVA_TOOL_OPTIONS':'-Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError'}
+    tenants=secrets.get('tenant_credentials')
+    if tenants is not None:
+        if not isinstance(tenants,dict) or not 1<=len(tenants)<=1000 or tenants.get('service')!=secrets['api_token']:
+            raise ValueError('Tenant credentials must preserve existing service identity')
+        if any(not isinstance(k,str) or k.startswith('__') or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',k) or not isinstance(v,str) or not 32<=len(v)<=256 or any(ord(c)<33 or ord(c)>126 for c in v) for k,v in tenants.items()) or len(set(tenants.values()))!=len(tenants):
+            raise ValueError('Invalid tenant credential map')
+        env['TENANT_CREDENTIALS']=json.dumps(tenants)
     rate=inventory.get('redis',{})
     if rate.get('enabled',False):
         for field in ('limiter','discovery'):
             if not re.fullmatch(r'[A-Za-z0-9_-]{32,128}',secrets.get('redis_'+field,'')):raise ValueError('Missing Redis application credential')
         env.update(REDIS_SENTINELS=json.dumps([n['private_ip']+':26379' for n in nodes]),REDIS_PASSWORD=secrets['redis_limiter'],REDIS_SENTINEL_PASSWORD=secrets['redis_discovery'])
     settings=inventory.get('application',{})
-    for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000),('CACHE_MAX_BYTES',33554432,34359738368),('CACHE_MAX_ENTRIES',50000,20000000)]:
+    for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000),('REQUESTS_PER_SECOND',1000,100000),('CACHE_MAX_BYTES',33554432,34359738368),('CACHE_MAX_ENTRIES',50000,20000000)]:
         value=settings.get(setting_name,default)
         if type(value) is not int or value<1 or value>maximum:raise ValueError('Invalid bounded application setting: '+setting_name)
         env[setting_name]=str(value)

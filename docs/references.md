@@ -1,6 +1,6 @@
 # Primary references
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 - Dropwizard 5 requirements: https://www.dropwizard.io/en/stable/getting-started.html
 - Exact Dropwizard dependency alignment: https://github.com/dropwizard/dropwizard/blob/v5.0.2/dropwizard-dependencies/pom.xml

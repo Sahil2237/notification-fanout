@@ -101,11 +101,40 @@ public class ServiceConfiguration extends Configuration {
     @JsonProperty
     public long retryCapMillis = 60000;
 
+    @Min(0) @Max(100000) @JsonProperty public int requestsPerSecond = 0;
+    @JsonProperty public String tenantCredentialsEnvironment = "";
+
+    void applyTenantCredentials(String value) {
+        if(value==null || value.isBlank())return;
+        if(value.length()>65536)throw new IllegalArgumentException("Tenant credential configuration is too large");
+        try {
+            var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+            var node=mapper.readTree(value);
+            if(!node.isObject() || node.size()==0 || node.size()>1000)throw new IllegalArgumentException();
+            var parsed=new java.util.LinkedHashMap<String,String>();
+            var fields=node.fields();
+            while(fields.hasNext()) {
+                var field=fields.next();
+                if(!field.getValue().isTextual() || field.getKey().startsWith("__") || !field.getKey().matches("[A-Za-z0-9_-]{1,100}"))throw new IllegalArgumentException();
+                parsed.put(field.getKey(),field.getValue().textValue());
+            }
+            credentials=Map.copyOf(parsed);
+        } catch(Exception invalid) {
+            // Never include credential JSON or parser source snippets in startup exceptions.
+            throw new IllegalArgumentException("Invalid tenant credential configuration");
+        }
+    }
+
     @Min(1)
     @JsonProperty
     public int requestsPerMinute = 600;
 
     public void validateSettings() {
+        if(!tenantCredentialsEnvironment.isEmpty()) {
+            if(!tenantCredentialsEnvironment.matches("[A-Z][A-Z0-9_]{0,63}"))throw new IllegalArgumentException("Invalid tenant credential environment name");
+            applyTenantCredentials(System.getenv(tenantCredentialsEnvironment));
+        }
         telemetry.validate();
         redis.validate(production,singleHostDeployment);
         if (requireReplicaReads && readDatabase == null)

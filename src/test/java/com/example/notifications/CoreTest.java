@@ -25,6 +25,16 @@ class CoreTest {
         return new Rules(null, null, List.of(new Condition(path, "eq", json.readTree(value))));
     }
 
+    @Test void tenantCredentialParsingIsStrictAndDoesNotExposeSecrets() {
+        var config=new ServiceConfiguration();
+        config.applyTenantCredentials("{\"tenant-1\":\"a-long-secret-value\",\"tenant-2\":\"another-secret-value\"}");
+        assertEquals(2,config.credentials.size());
+        for(var invalid:java.util.List.of("{\"tenant-1\":\"secret\",\"tenant-1\":\"other\"}","{\"__admin\":\"secret\"}","{\"tenant-1\":12}","[]")) {
+            var error=assertThrows(IllegalArgumentException.class,()->config.applyTenantCredentials(invalid));
+            assertEquals("Invalid tenant credential configuration",error.getMessage());assertNull(error.getCause());
+        }
+    }
+
     @Test
     void filtersCombineTypeSourceAndNestedConditions() throws Exception {
         var rules =

@@ -88,12 +88,13 @@ class AsyncCacheHistoryIT {
         assertFalse(store.ingest(tenant+"other",input,key).duplicate());
         assertFalse(store.ingest(tenant,input(UUID.randomUUID()),"separate-occurrence").duplicate());
     }
-    @Test void expiryAfterTenMinutesDoesNotExpirePostgresDeduplication() throws Exception {
+    @Test void expiryAfterFiveMinutesDoesNotExpirePostgresDeduplication() throws Exception {
         var event=input(UUID.randomUUID());var key=UUID.randomUUID().toString();var first=store.ingest(tenant,event,key);
         var fields=admin.hgetAll(RedisApplicationCache.PREFIX+"data");
         for(var field:fields.entrySet()) if(field.getKey().startsWith("event:"+RedisRateLimiter.tenantHash(tenant))) {
             var value=JSON.readTree(field.getValue());var expires=value.path("expires").asLong();
-            assertTrue(expires-Instant.now().getEpochSecond()<=600);
+            assertTrue(expires-Instant.now().getEpochSecond()<=300);
+            assertTrue(expires-Instant.now().getEpochSecond()>290);
             ((com.fasterxml.jackson.databind.node.ObjectNode)value).put("expires",Instant.now().getEpochSecond()-1);
             admin.hset(RedisApplicationCache.PREFIX+"data",field.getKey(),value.toString());
         }

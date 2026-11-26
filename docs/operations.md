@@ -1,6 +1,6 @@
 # Operations and recovery
 
-**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 The live API is https://174.138.121.225 in team Blitz_team13_Hyd. Three Ubuntu 24.04 / 4-GB Bangalore Droplets run the application, Kafka, PostgreSQL/Patroni, etcd, Redis/Sentinel and Caddy. The two-node regional load balancer removes unready backends. Encrypted daily backups use the private Singapore Spaces bucket. See [verified release evidence](submission-status.md) and [HA configuration](../deploy/ha/README.md).
 

@@ -24,7 +24,8 @@ public final class RedisRateLimiter implements RequestLimiter, Managed, AutoClos
     static final String PREFIX = "notification:limits:v1:";
     static final String SCRIPT = """
             local now = tonumber(redis.call('TIME')[1])
-            local window = math.floor(now / 60)
+            local seconds = tonumber(ARGV[#KEYS+1])
+            local window = math.floor(now / seconds)
             local windows = {}
             local counts = {}
             for i,key in ipairs(KEYS) do
@@ -35,7 +36,7 @@ public final class RedisRateLimiter implements RequestLimiter, Managed, AutoClos
             end
             for i,key in ipairs(KEYS) do
               redis.call('HSET',key,'window',windows[i],'count',counts[i]+1)
-              redis.call('EXPIREAT',key,(windows[i]+1)*60)
+              redis.call('EXPIREAT',key,(windows[i]+1)*seconds)
             end
             return 1
             """;
@@ -88,15 +89,18 @@ public final class RedisRateLimiter implements RequestLimiter, Managed, AutoClos
         catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
     }
     static String requestKey(String tenant) {return PREFIX+"{"+tenantHash(tenant)+"}:requests";}
-    @Override public boolean allow(String tenant,int limit) {return reserve(List.of(requestKey(tenant)),List.of(Integer.toString(limit)));}
+    @Override public boolean allow(String tenant,int limit) {return reserve(List.of(requestKey(tenant)),List.of(Integer.toString(limit)),60);}
+    static String secondKey(String tenant) {return requestKey(tenant)+":second";}
+    @Override public boolean allowPerSecond(String tenant,int limit) {return reserve(List.of(secondKey(tenant)),List.of(Integer.toString(limit)),1);}
     @Override public boolean allowRetry(String tenant,UUID subscription,int tenantLimit,int subscriptionLimit) {
         var prefix=PREFIX+"{"+tenantHash(tenant)+"}:retry:";
-        return reserve(List.of(prefix+"tenant",prefix+subscription),List.of(Integer.toString(tenantLimit),Integer.toString(subscriptionLimit)));
+        return reserve(List.of(prefix+"tenant",prefix+subscription),List.of(Integer.toString(tenantLimit),Integer.toString(subscriptionLimit)),60);
     }
-    private boolean reserve(List<String> keys,List<String> limits) {
+    private boolean reserve(List<String> keys,List<String> limits,int seconds) {
+        var arguments=new java.util.ArrayList<>(limits);arguments.add(Integer.toString(seconds));
         try(var pipeline=pipelines.get()) {
             // EVAL and WAIT share the same borrowed connection. WAIT on another pool connection would not protect this write.
-            var allowed=pipeline.eval(SCRIPT,keys,limits);
+            var allowed=pipeline.eval(SCRIPT,keys,arguments);
             var replicated=pipeline.waitReplicas(settings.requiredReplicas,settings.replicationWaitMillis);
             pipeline.sync();
             if(((Number)allowed.get()).longValue()==0) return false;

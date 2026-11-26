@@ -3,8 +3,8 @@ ROOT=pathlib.Path(__file__).parent
 spec=importlib.util.spec_from_file_location('capacity',ROOT/'capacity.py');capacity=importlib.util.module_from_spec(spec);spec.loader.exec_module(capacity)
 class CapacityProfileTest(unittest.TestCase):
     def profile(self):return json.loads((ROOT/'capacity-1000-rps.json').read_text())
-    def test_profile_covers_ten_minutes_and_two_identity_aliases(self):
-        p=capacity.validate(self.profile());self.assertGreaterEqual(p['application']['CACHE_MAX_ENTRIES'],1000*600*2)
+    def test_profile_covers_five_minutes_and_two_identity_aliases(self):
+        p=capacity.validate(self.profile());self.assertGreaterEqual(p['application']['CACHE_MAX_ENTRIES'],1000*300*2)
     def test_refuses_insufficient_host_memory(self):
         p=self.profile()
         with self.assertRaises(ValueError):capacity.memory_guard(p,1024*capacity.MIB,8*capacity.MIB)
