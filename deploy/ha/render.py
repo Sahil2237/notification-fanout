@@ -46,7 +46,7 @@ def render(inventory,secrets,node_id):
             if not re.fullmatch(r'[A-Za-z0-9_-]{32,128}',secrets.get('redis_'+field,'')):raise ValueError('Missing Redis application credential')
         env.update(REDIS_SENTINELS=json.dumps([n['private_ip']+':26379' for n in nodes]),REDIS_PASSWORD=secrets['redis_limiter'],REDIS_SENTINEL_PASSWORD=secrets['redis_discovery'])
     settings=inventory.get('application',{})
-    for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000)]:
+    for setting_name,default,maximum in [('DB_WRITE_POOL_MAX',8,16),('DB_READ_POOL_MAX',4,16),('SUBSCRIBER_CONCURRENCY',1,128),('REQUESTS_PER_MINUTE',6000,10000000),('CACHE_MAX_BYTES',33554432,34359738368),('CACHE_MAX_ENTRIES',50000,20000000)]:
         value=settings.get(setting_name,default)
         if type(value) is not int or value<1 or value>maximum:raise ValueError('Invalid bounded application setting: '+setting_name)
         env[setting_name]=str(value)

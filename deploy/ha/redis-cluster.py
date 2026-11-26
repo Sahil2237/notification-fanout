@@ -27,9 +27,13 @@ def render(inventory,passwords,node_id,image):
     nodes=nodes_of(inventory);passwords=credentials(passwords);node=next(n for n in nodes if n['id']==node_id)
     if not re.fullmatch(r'[A-Za-z0-9./:_@-]+',image):raise ValueError('Invalid Redis image')
     ip=node['private_ip'];primary=nodes[0]['private_ip']
+    resources=inventory.get('redis',{}).get('resources',{})
+    data_mib=resources.get('maxmemory_mib',64);container_mib=resources.get('container_memory_mib',128);cpu=resources.get('cpus',0.5)
+    if type(data_mib) is not int or not 16<=data_mib<=1152 or type(container_mib) is not int or not data_mib+64<=container_mib<=1792 or not isinstance(cpu,(int,float)) or isinstance(cpu,bool) or not 0.1<=cpu<=1:
+        raise ValueError('Invalid bounded Redis resources')
     common=['bind '+ip+' 127.0.0.1','protected-mode yes','daemonize no','logfile ""','maxclients 128']
     data=tls_settings(6379)+common+['dir /data','aclfile /config/users.acl','save ""','appendonly yes','appendfsync always',
-        'maxmemory 64mb','maxmemory-policy noeviction','repl-backlog-size 1mb','repl-diskless-sync yes','repl-diskless-sync-delay 1',
+        'maxmemory '+str(data_mib)+'mb','maxmemory-policy noeviction','repl-backlog-size 1mb','repl-diskless-sync yes','repl-diskless-sync-delay 1',
         'min-replicas-to-write 1','min-replicas-max-lag 2','masteruser replication','masterauth '+passwords['replication'],
         'replica-announce-ip '+ip,'replica-announce-port 6379']
     if node_id!=1:data+=['replicaof '+primary+' 6379']
@@ -48,7 +52,7 @@ def render(inventory,passwords,node_id,image):
     service={'image':image,'user':'999:999','network_mode':'host','restart':'unless-stopped','read_only':True,
         'cap_drop':['ALL'],'security_opt':['no-new-privileges:true'],'pids_limit':64,
         'logging':{'driver':'json-file','options':{'max-size':'5m','max-file':'2'}}}
-    redis=dict(service,cpus=0.5,mem_limit='128m',entrypoint=['redis-server'],command=['/config/redis.conf'],
+    redis=dict(service,cpus=cpu,mem_limit=str(container_mib)+'m',entrypoint=['redis-server'],command=['/config/redis.conf'],
         volumes=['./redis:/config','./tls:/tls:ro','redis-data:/data'])
     monitor=dict(service,cpus=0.15,mem_limit='64m',entrypoint=['redis-server'],command=['/config/sentinel.conf','--sentinel'],
         volumes=['./sentinel:/config','./tls:/tls:ro','sentinel-data:/data'])

@@ -1,5 +1,7 @@
 # Event Notification Fanout
 
+**Revised target:** [1,000 events/second profile and shared 66,000/minute tenant quota](docs/capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
+
 **November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](docs/async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Java 25 / Dropwizard 5 event ingestion and webhook fanout service for DigitalOcean Bangalore. PostgreSQL durably accepts events and outbox records; Kafka consumers match subscriptions and create delivery jobs transactionally. Redis accelerates committed identity and subscription lookups; terminal deliveries move to history after 24 hours. [Deployment and current evidence](docs/submission-status.md), [visual HLD](docs/hld.md), [component LLDs](docs/README.md#separate-low-level-design-documents), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).

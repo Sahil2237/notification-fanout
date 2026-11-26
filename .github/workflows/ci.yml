@@ -171,6 +171,10 @@ jobs:
         with:
           name: verification-application
           path: target
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
+        with:
+          distribution: temurin
+          java-version: '25'
       - name: Build HA database and backup tools
         run: docker build --platform linux/amd64 -t "$HA_TOOLS_IMAGE" -f deploy/ha/Dockerfile deploy/ha
       - name: Verify real three-node synchronous PostgreSQL failover

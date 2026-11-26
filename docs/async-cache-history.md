@@ -1,5 +1,7 @@
 # Asynchronous matching, bounded caches and delivery history
 
+**Revised target:** [1,000 events/second profile and shared 66,000/minute tenant quota](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
+
 This is the implementation contract for the November 26 redesign, deployed as f0c4d33 on all three existing hosts. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
 
 ## Requirements and boundaries

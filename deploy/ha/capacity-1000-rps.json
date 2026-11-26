@@ -1,0 +1,15 @@
+{
+  "target_events_per_second": 1000,
+  "identity_ttl_seconds": 600,
+  "application": {
+    "CACHE_MAX_BYTES": 1879048192,
+    "CACHE_MAX_ENTRIES": 1500000,
+    "REQUESTS_PER_MINUTE": 66000
+  },
+  "redis": {
+    "maxmemory_mib": 1088,
+    "container_memory_mib": 1664,
+    "cpus": 1.0
+  },
+  "minimum_remaining_available_mib": 384
+}
