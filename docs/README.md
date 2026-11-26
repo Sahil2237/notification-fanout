@@ -1,5 +1,7 @@
 # Visual design guide
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 Read this in order for an interview explanation. Diagrams describe the implemented 6474 ad 3 runtime and verified 25 November LB settings, not hypothetical microservices. [Current evidence](submission-status.md) separates current checks from historical failure drills. Markdown/Mermaid diagrams render directly in GitHub.
 
 ```mermaid
@@ -12,6 +14,7 @@ flowchart LR
 
 | Document | Use it to explain |
 | --- | --- |
+| [Current redesign](async-cache-history.md) | Asynchronous matching, cache correctness, archival and 10,000/s validation boundaries |
 | [Requirements and scope](requirements.md) | Mandatory journeys, acceptance checks, exclusions and handoff |
 | [Visual high-level design](hld.md) | System boundary, end-to-end flow, topology, failure domains and capacity |
 | [Architecture detail](architecture.md) | Precise transaction/sequence/state/deployment diagrams |
@@ -35,4 +38,4 @@ flowchart LR
 | Caddy | [Caddy](lld/caddy.md) | TLS termination/reverse proxy, shared certificate storage and drain route |
 | DigitalOcean load balancer | [Load balancer](lld/load-balancer.md) | Provider-managed routing, health thresholds, affinity and native telemetry |
 
-Each LLD has component-specific low-level requirements, diagrams, configuration, state/failure behavior, security, metrics, tests and limits. Source/configuration links let a reviewer trace diagrams back to runnable code. No new service or paid infrastructure is implied by adding a document.
+Each LLD has component-specific low-level requirements, diagrams, configuration, state/failure behavior, security, metrics, tests and limits. Source/configuration links let a reviewer trace diagrams back to runnable code. The redesign reuses existing services and nodes; its throughput target still requires capacity validation.

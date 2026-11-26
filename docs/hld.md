@@ -1,5 +1,7 @@
 # Visual high-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 Start with [requirements](requirements.md). Explain diagrams 1 through 7 in order, then open the relevant [component LLD](README.md#separate-low-level-design-documents). Values describe the 6474ad3 runtime and 25 November 2026 read-only LB inspection. Runtime was not redeployed to publish these diagrams.
 
 ## 1. System boundary: who uses it?
@@ -37,7 +39,7 @@ flowchart TB
     PG --> O
     O --> B[Kafka event topic]
     B --> K
-    K -->|Activate existing jobs| PG
+    K -->|Match subscriptions and create jobs| PG
     PG --> W
     W -->|Retry budget only for retries| R
     W --> H[HTTPS webhook receiver]
@@ -46,7 +48,7 @@ flowchart TB
     DL --> KD[Kafka delivery DLQ]
 ```
 
-**Dropwizard is the runtime inside the Notification app, not an additional application replica.** Matching and job creation happen in the ingestion transaction before Kafka. Kafka activates those jobs, avoiding a second independent fanout. Network delivery holds no database connection/transaction. One codebase keeps assessment complexity low; role separation into services is future work if independent scaling/ownership requires it.
+**Dropwizard is the runtime inside the Notification app, not an additional application replica.** Ingestion commits event and outbox; Kafka consumers match subscriptions and create jobs in a second atomic transaction. Completed matching is not repeated on replay. Network delivery holds no database connection/transaction. One codebase keeps assessment complexity low; role separation into services is future work if independent scaling/ownership requires it.
 
 ## 3. Follow one event and its identifiers
 
@@ -63,13 +65,13 @@ sequenceDiagram
     participant H as Receiver
     P->>A: Event with optional producer ID and idempotency key
     A->>R: Tenant window reservation and replica acknowledgement
-    A->>D: Deduplicate and commit event plus matching jobs plus outbox
+    A->>D: Deduplicate and commit event plus outbox
     D-->>A: Synchronous commit
     A-->>P: 202 with canonical Event ID
     O->>D: Claim outbox work
     O->>K: Publish keyed by Event ID
     K->>C: Deliver event envelope
-    C->>D: Activate existing jobs and commit
+    C->>D: Match subscriptions and create jobs and commit
     C->>K: Commit offset after DB commit
     W->>D: Reserve subscription and lease Delivery ID
     W->>H: Signed POST with Event ID and Delivery ID

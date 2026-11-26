@@ -15,4 +15,32 @@
     ]]></sql>
   </changeSet>
   <changeSet id="007-redis-rate-limit" author="notification-fanout"><sqlFile path="migrations/007_redis_rate_limit.sql"/></changeSet>
+  <changeSet id="008-async-cache-history" author="notification-fanout"><sqlFile path="migrations/008_async_cache_history.sql"/></changeSet>
+  <changeSet id="009-delivery-identity-trigger" author="notification-fanout">
+    <sql splitStatements="false"><![CDATA[
+CREATE FUNCTION register_delivery_identity() RETURNS trigger LANGUAGE plpgsql AS $body$
+BEGIN
+ INSERT INTO delivery_identities(id,tenant_id,event_id,subscription_id)
+ VALUES(NEW.id,NEW.tenant_id,NEW.event_id,NEW.subscription_id) ON CONFLICT DO NOTHING;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ RETURN NEW;
+END $body$;
+    ]]></sql>
+    <sql>CREATE TRIGGER deliveries_identity BEFORE INSERT ON deliveries FOR EACH ROW EXECUTE FUNCTION register_delivery_identity();</sql>
+    <sql splitStatements="false"><![CDATA[
+DO $grant$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='notification_runtime') THEN
+  GRANT SELECT,INSERT,UPDATE,DELETE ON subscription_versions,delivery_identities,delivery_history TO notification_runtime;
+  GRANT SELECT ON all_deliveries TO notification_runtime;
+ END IF;
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='notification_backup') THEN
+  GRANT SELECT ON subscription_versions,delivery_identities,delivery_history TO notification_backup;
+ END IF;
+END $grant$;
+    ]]></sql>
+  </changeSet>
+  <changeSet id="010-matching-indexes" author="notification-fanout">
+    <sql>CREATE INDEX subscriptions_match_candidates ON subscriptions(tenant_id,(filter-&gt;&gt;'type'),(filter-&gt;&gt;'source'),id) WHERE deleted_at IS NULL;</sql>
+    <sql>CREATE INDEX outbox_undispatched ON event_outbox(event_id) WHERE dispatched_at IS NULL;</sql>
+  </changeSet>
 </databaseChangeLog>

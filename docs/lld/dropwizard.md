@@ -1,5 +1,7 @@
 # Dropwizard runtime low-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](../hld.md) | [Business application LLD](notification-app.md). Dropwizard 5/Java 25 runs inside each Notification application JVM. It is a framework/runtime, not a fourth service or an additional set of three app replicas. Source/config reference 6474ad3.
 
 ## Low-level requirements

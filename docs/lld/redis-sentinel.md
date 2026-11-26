@@ -1,5 +1,7 @@
 # Redis and Sentinel low-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](../hld.md) | [Controls contract](../reliability-controls.md) | [Redis operations](../../deploy/ha/redis.md). This is one Redis primary/two replicas plus three Sentinel processes on the existing hosts, not sharded Redis Cluster and not a general application-response cache. Source/runtime 6474ad3.
 
 ## Low-level requirements

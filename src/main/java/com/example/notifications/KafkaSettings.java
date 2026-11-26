@@ -21,6 +21,7 @@ public class KafkaSettings {
     @JsonProperty public String clientPrivateKey = "";
     @JsonProperty public String clientCertificateEnvironment = "KAFKA_CLIENT_CERT";
     @JsonProperty public String clientPrivateKeyEnvironment = "KAFKA_CLIENT_KEY";
+    @Min(1) @Max(32) @JsonProperty public int publishBatchSize = 32;
     @Min(1) @Max(8) @JsonProperty public int publisherThreads = 2;
 
     public Properties properties(String clientId) {

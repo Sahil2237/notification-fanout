@@ -5,3 +5,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON events, subscriptions, deliveries,
     delivery_attempts, event_outbox, kafka_dead_letters, delivery_dead_letters TO notification_runtime;
 GRANT SELECT, INSERT, UPDATE ON approved_webhook_origins TO notification_runtime;
 GRANT INSERT ON webhook_origin_audit TO notification_runtime;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON subscription_versions, delivery_identities, delivery_history TO notification_runtime;
+GRANT SELECT ON all_deliveries TO notification_runtime;

@@ -1,12 +1,14 @@
 # Notification application low-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](../hld.md) | [Design guide](../README.md) | [Concepts/metrics](../concepts-and-metrics.md). This is business logic inside the [Dropwizard JVM](dropwizard.md), deployed three times. Source reference 6474ad3. No separate notification microservice is implied for each internal class.
 
 ## Low-level requirements
 
 | ID | Implemented requirement | Acceptance check |
 | --- | --- | --- |
-| APP-01 | Persist event, matching jobs and outbox atomically before 202 | A failed transaction returns failure and leaves no partial accepted event/fanout |
+| APP-01 | Persist event and outbox before 202; match and create jobs atomically in the consumer | A failed transaction returns failure and leaves no partial accepted event/fanout |
 | APP-02 | Derive tenant from credentials and scope every tenant resource | Foreign resource returns 404; user/body cannot select another tenant |
 | APP-03 | Deduplicate explicit/generated event identity across app instances | Concurrent matching repeats return the same event, conflict 409; one job/event/subscription |
 | APP-04 | Apply current subscription snapshot without restart | Type/source/JSON Pointer equality conditions match; deleted registrations affect future matching only |
@@ -35,7 +37,7 @@ flowchart TB
     LOG -.-> WORK
 ```
 
-The API creates jobs during acceptance; KafkaPipeline later activates them. Store owns database decisions, not HTTP. The sender owns network deadlines/policy enforcement, not database retries. Redis is shared admission/budget state, not the source of event identity or audit.
+The API commits event/outbox only; KafkaPipeline matches current subscriptions and creates jobs once. Store owns database decisions, not HTTP. The sender owns network deadlines/policy enforcement, not database retries. Redis is shared admission/budget state, not the source of event identity or audit.
 
 ## Identity and fanout transaction
 
@@ -49,9 +51,9 @@ flowchart LR
     INSERT --> CONFLICT{Existing identity?}
     CONFLICT -->|Same content and permitted identity| ORIGINAL[Return original event with duplicate true]
     CONFLICT -->|Changed content or identity| R409[409 and rollback]
-    CONFLICT -->|New| MATCH[Read active subscriptions and match filters]
-    MATCH --> JOBS[Insert event-subscription jobs and outbox]
-    JOBS --> COMMIT[Commit then202]
+    CONFLICT -->|New| OUTBOX[Insert durable outbox record]
+    OUTBOX --> COMMIT[Commit then 202]
+    COMMIT --> KAFKA[Kafka consumer matches and creates jobs once]
 ```
 
 The service's canonical event UUID is generated once for the accepted event, never randomly inserted into the fallback key on every retry. Caller-supplied producer eventId is optional and distinct. Canonical object key order is stable; array order/types/numeric representation remain meaningful. Retained database identities determine the deduplication lifetime, not Redis TTL. Separate identical occurrences need new producer IDs or explicit keys.

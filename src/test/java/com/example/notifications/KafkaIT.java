@@ -79,7 +79,7 @@ class KafkaIT {
         var worker=new DeliveryWorker(STORE,new WebhookSender(JSON,new WebhookPolicy(APP.getConfiguration()),APP.getConfiguration()),APP.getConfiguration(),new MetricRegistry(),new TestLimiter());
         pipeline.start();worker.start();
         try {
-            await(()->"delivered".equals(STORE.deliveries("demo",event.id(),true,10,0).getFirst().status()),20);
+            await(()->{var jobs=STORE.deliveries("demo",event.id(),true,10,0);return !jobs.isEmpty() && "delivered".equals(jobs.getFirst().status());},20);
             assertEquals(1,received.get());assertEquals(204,STORE.deliveries("demo",event.id(),true,10,0).getFirst().attempts().getFirst().httpStatus());
             await(()->STORE.outboxPending()==0,10);
         }finally{worker.stop();pipeline.stop();receiver.stop(0);}

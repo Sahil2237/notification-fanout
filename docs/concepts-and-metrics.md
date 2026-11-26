@@ -1,14 +1,16 @@
 # Implemented system-design concepts and metrics catalogue
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](hld.md) | [Component LLDs](README.md#separate-low-level-design-documents) | [Metrics operations](metrics.md). This inventory is tied to the 6474ad3 source contract and later read-only LB settings, not a claim that all possible observability is deployed. Local declared instrumentation, exporter allowlist, provider-native telemetry and proposed/missing signals are explicitly different categories.
 
 ## Concepts map
 
 ```mermaid
 flowchart TB
-    ACCEPT[Durable acceptance] --> TX[Primary transaction plus outbox]
+    ACCEPT[Durable acceptance] --> TX[Primary event transaction plus outbox]
     TX --> DISPATCH[Kafka replicated dispatch and manual offsets]
-    DISPATCH --> JOB[Idempotent activation and SQL jobs]
+    DISPATCH --> JOB[Idempotent matching completion and SQL jobs]
     JOB --> DELIVERY[Bounded workers and subscriber reservations]
     DELIVERY --> RETRY[Persistent retry, budget and terminal DLQ]
     ID[Identity, deduplication and correlation] -.-> ACCEPT
@@ -23,8 +25,8 @@ flowchart TB
 
 | Concept | Actual mechanism/value | Verification signal and important limit |
 | --- | --- | --- |
-| Durable ingestion and transactions |Event, matches and outbox in one PostgreSQL commit with synchronous standby apply |Transaction rollback/storage tests and preserved cloud data; no universal regional RPO 0 |
-| Asynchronous fanout |Kafka activates jobs created in acceptance transaction; HTTP outside DB transaction |KafkaIT journey and audit/receiver capture; matching itself is synchronous |
+| Durable ingestion and transactions |Event and outbox in one PostgreSQL commit; jobs and matching completion in the consumer transaction with synchronous standby apply |Transaction rollback/storage tests and preserved cloud data; no universal regional RPO 0 |
+| Asynchronous fanout |Kafka consumers create jobs after acceptance; HTTP outside DB transaction |KafkaIT journey and audit/receiver capture; matching is asynchronous |
 | Idempotency |Explicit key or generated content/identity key plus producer ID constraints |events.duplicates, same original event, 409 on conflict; POST subscription lacks this contract |
 | Deduplication |Unique event/subscription job and idempotent Kafka activation |Database constraints/replay tests; external receiver must deduplicate Delivery ID |
 | Shared request rate limit |Redis atomic fixed-minute 6,000/tenant across all apps |http.rate.limited and shared cloud fixture; no independent per-user quota or strict failover accounting |
@@ -45,7 +47,7 @@ flowchart TB
 | CI/CD and safe release |Real-service tests, scans, signed artifacts, portable image verification, drain/promote |Version-specific CI and runtime evidence; app rollback must retain contracts and schema is not reversed |
 | Configuration/least privilege |Protected secrets, separate DB/Redis/control identities, bounded config and private ports |Configuration/role/ACL/gateway tests; active-data at-rest encryption not established |
 
-General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover are not implemented concepts to mark green. No alarms/tickets were requested. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
+General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover remain absent. Committed-identity and subscription caches are now distinct implemented caches; see the redesign contract. No alarms/tickets were requested. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
 
 ## How observations leave each component
 
@@ -135,3 +137,7 @@ Adding these to a future export is a code/compatibility change, not something th
 - Event/tenant/user IDs, payloads, receiver URLs and credentials are excluded from custom metric labels. Use Event ID/Delivery ID in protected logs/audit for individual investigations.
 
 Readiness, failed probes, backlog age, error rates, ISR/lag, quorum, disk runway, certificate/backup age and connection saturation are useful operating signals, not an agreed SLO or a set of alarms already created. Full production dashboards, representative soak/capacity measurements and external notification policy remain explicit future work.
+
+## New local instruments and operational checks
+
+The redesign adds local counters `cache.hits`, `cache.misses`, `cache.errors` and `delivery.archived`. They are deliberately not silently added to the existing OTLP bridge allowlist: its deployed revision and provider visibility must be validated separately. The existing 29 mappings above remain the export contract. Inspect cache errors/hit ratio, Redis memory, generation churn, matching completion/backlog, active/history counts and archive throughput alongside prior delivery/DB signals. Shared physical Redis remains a failure boundary even though the cache pool is separate from limiter traffic.

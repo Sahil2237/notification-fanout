@@ -1,5 +1,7 @@
 # Caddy reverse-proxy low-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](../hld.md) | [Load balancer LLD](load-balancer.md) | [Dropwizard runtime](dropwizard.md). One Caddy proxy runs on each of the three application/data hosts. It terminates public TLS and shares certificate state through a separate PostgreSQL database. It is not a dedicated API gateway or user identity provider.
 
 ## Low-level requirements

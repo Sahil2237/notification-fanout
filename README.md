@@ -1,6 +1,8 @@
 # Event Notification Fanout
 
-Java 25 / Dropwizard 5 event ingestion and webhook fanout service for DigitalOcean Bangalore. PostgreSQL durably accepts events and matching delivery jobs in one transaction; an outbox publisher sends them to Kafka, and consumers activate retryable webhook deliveries. [Deployment and current evidence](docs/submission-status.md), [visual HLD](docs/hld.md), [component LLDs](docs/README.md#separate-low-level-design-documents), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](docs/async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
+Java 25 / Dropwizard 5 event ingestion and webhook fanout service for DigitalOcean Bangalore. PostgreSQL durably accepts events and outbox records; Kafka consumers match subscriptions and create delivery jobs transactionally. Redis accelerates committed identity and subscription lookups; terminal deliveries move to history after 24 hours. [Deployment and current evidence](docs/submission-status.md), [visual HLD](docs/hld.md), [component LLDs](docs/README.md#separate-low-level-design-documents), [architecture](docs/architecture.md), [API](docs/api.md), [design](docs/design.md), [operations](docs/operations.md), [requirements-to-tests](docs/validation.md).
 
 The deployed runtime is **6474ad3** on three existing 4-GB Ubuntu 24.04 Droplets in BLR1: three application replicas, self-managed Kafka, synchronous PostgreSQL/Patroni/etcd, and shared Redis with Sentinel failover. A managed regional load balancer fronts Caddy. Encrypted daily backups use private Spaces in SGP1 with 24-hour retention. [Requirements coverage](docs/requirements.md), [network/authentication](docs/network-security.md) and [current evidence](docs/submission-status.md) distinguish verified implementation, historical drills and remaining gaps.
 
@@ -56,7 +58,7 @@ Send that body to `POST /v1/subscriptions`. Send the following to `POST /v1/even
 {"type":"order.created","source":"checkout","payload":{"orderId":"123","customer":{"tier":"gold"}}}
 ```
 
-Ingestion returns `202` and `event.id` after the database commit. It does not wait for webhook receipt. Query `/v1/events/{id}/deliveries`, `/v1/subscriptions/{id}/deliveries` or `/v1/deliveries/{id}` for status and attempts. List/delete subscriptions through `/v1/subscriptions`; changes apply without restart. Existing queued jobs retain their original destination after subscription deletion. New subscriptions do not receive past events. Repeating POST /v1/subscriptions can create a second registration for the same URL: event idempotency does not deduplicate separate subscriptions.
+Ingestion returns `202` and `event.id` after the database commit. It does not wait for webhook receipt. Query `/v1/events/{id}/deliveries`, `/v1/subscriptions/{id}/deliveries` or `/v1/deliveries/{id}` for status and attempts. List/delete subscriptions through `/v1/subscriptions`; changes apply without restart. Existing queued jobs retain their original destination after subscription deletion. New subscriptions can receive accepted events not yet matched; completed events are not rematched. Repeating POST /v1/subscriptions can create a second registration for the same URL: event idempotency does not deduplicate separate subscriptions.
 
 ### Filter syntax
 
@@ -76,13 +78,13 @@ PostgreSQL stores approvals, revocations and their audit. All instances consult 
 
 ## Architecture
 
-See [the complete diagrams](docs/architecture.md) and [reliability controls](docs/reliability-controls.md). Matching happens in the ingestion transaction; PostgreSQL holds event, jobs and outbox. Kafka uses event UUID keys so one event type is spread over partitions. Consumers commit offsets after their dispatch database transaction. Delivery workers claim due jobs using expiring leases, send signed requests outside the database transaction, and atomically save attempt history and the next state/schedule.
+See [the complete diagrams](docs/architecture.md) and [reliability controls](docs/reliability-controls.md). Acceptance commits event and outbox. Matching and job creation happen in the Kafka consumer transaction. Kafka uses event UUID keys so one event type is spread over partitions. Consumers commit offsets after their dispatch database transaction. Delivery workers claim due jobs using expiring leases, send signed requests outside the database transaction, and atomically save attempt history and the next state/schedule.
 
 ## Delivery contract and failure conditions
 
 |Property|Contract|
 |---|---|
-|Acceptance|202 only after event + matching jobs + outbox commit; storage errors return a failure|
+|Acceptance|202 only after event + outbox commit; matching and jobs follow asynchronously; storage errors return a failure|
 |Processing|Durable, duplicate-tolerant processing while PostgreSQL storage survives|
 |Webhook delivery|Up to six total attempts (initial attempt plus five retries) with possible duplicates; permanent failures and exhausted retries become queryable `failed`|
 |At-most-once?|No: uncertain outcomes can cause repeated requests|
@@ -108,7 +110,7 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 |Current choice|Benefit|Limit and next hardening trigger|
 |---|---|---|
 |Application and data roles colocated on three Droplets|Limits HA infrastructure cost while surviving one tested Droplet failure|CPU/memory and regional failures are shared; separate roles or regions when measured load or failure targets justify the cost|
-|Match inside ingestion transaction|Atomic membership snapshot and fanout jobs|O(subscriptions + matches); move matching async with versioned membership if measured latency requires it|
+|Match after Kafka with database subscription generations|Shorter ingestion transaction and reproducible completed matching|Candidate lookup and fanout still load PostgreSQL; generation locks delay concurrent subscription changes|
 |Kafka dispatch, DB retry scheduler|Durable queue and queryable delayed attempts|Shared DB load; tune publisher/consumer counts using representative measurements|
 |Runtime administrator origin approvals|Immediate controlled onboarding/revocation|Origin-level permission, not per-path or tenant-specific approval; outbound network enforcement remains useful|
 |Static tenant credentials|Small, explicit authorization model with shared tenant quotas|Operator provisioning/rotation; add verified end-user claims, fine-grained permissions and per-user quotas when required|
@@ -116,7 +118,7 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 |Five retries and transactional delivery DLQ|Terminal failures are queryable and published to a separate Kafka DLQ without losing audit|Permanent failures go directly to DLQ; publication may repeat, so DLQ consumers deduplicate deliveryId; automatic redrive, ordering and replay remain optional|
 |Shared fixed-window request limit|Atomic Redis Lua counters coordinate application replicas before event persistence; retry budgets share the same store|Redis availability is required; asynchronous replication can lose counters on failover, and fixed windows permit a boundary burst. Redis cloud rollout and existing-client failover were verified; no strict zero-overshoot quota claim|
 |Daily encrypted Spaces backup and strict 24-hour retention|Independent storage and an authenticated restore procedure|A usable latest daily backup has roughly 24-hour disaster exposure; no continuous WAL/PITR. Missing/expired backups can mean greater loss or no recovery|
-|Application history retained without automatic deletion|Avoids unapproved data removal|Implement bounded retention after business/audit and idempotency-key expiry requirements are agreed|
+|Archive terminal deliveries after 24 hours|Smaller active scheduling table with transparent status queries|History and identity records are retained; movement does not reduce total storage|
 |Logs, metrics and health checks|Inspect requests, backlog and errors locally|Last observed Insights provider 404 blocks Explorer confirmation; alarms/tickets excluded; no measured SLO claim|
 
 ## Submission

@@ -34,7 +34,7 @@ def render(inventory,passwords,node_id,image):
         'replica-announce-ip '+ip,'replica-announce-port 6379']
     if node_id!=1:data+=['replicaof '+primary+' 6379']
     acl=['user default off','user admin on >'+passwords['admin']+' ~* &* +@all',
-        'user limiter on >'+passwords['limiter']+' ~notification:limits:v1:* resetchannels -@all +auth +hello +ping +eval +time +hget +hset +expireat +wait +role +client|setname +client|setinfo',
+        'user limiter on >'+passwords['limiter']+' ~notification:limits:v1:* ~notification:cache:v2:* resetchannels -@all +auth +hello +ping +eval +time +hget +hset +hdel +hlen +get +incr +incrby +zadd +zrem +zcard +zrange +zrangebyscore +del +expire +expireat +wait +role +client|setname +client|setinfo',
         'user replication on >'+passwords['replication']+' resetchannels -@all +auth +ping +psync +replconf',
         'user control on >'+passwords['control']+' &__sentinel__:hello -@all +auth +multi +slaveof +replicaof +ping +exec +subscribe +config|rewrite +role +publish +info +client|setname +client|setinfo +client|kill +script|kill']
     sentinel=tls_settings(26379)+common+['dir /data','aclfile /config/users.acl',

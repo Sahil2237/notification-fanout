@@ -1,18 +1,20 @@
 # PostgreSQL and Patroni low-level design
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](../hld.md) | [etcd coordination](etcd.md) | [Operations](../operations.md). Three self-managed PostgreSQL 17/Patroni members on existing BLR 1 hosts. Logical roles move; do not hard-code node 3 as permanent primary. Runtime read/write configuration is 6474ad3; running database infrastructure was not replaced by that app rollout.
 
 ## Low-level requirements
 
 | ID | Implemented requirement | Acceptance check |
 | --- | --- | --- |
-| PG-01 | Commit event, jobs and outbox together before 202 | Partial writes roll back on constraint/storage errors |
+| PG-01 | Commit event/outbox before 202 and jobs/matching-completion atomically after Kafka | Partial writes roll back on constraint/storage errors |
 | PG-02 | Enforce identity and tenant/job relationships in SQL | Unique tenant/key, producer identity and event/subscription job pair; composite tenant foreign keys |
 | PG-03 | Preserve acknowledged event writes through safe single-host loss | remote_apply and required synchronous standby, Patroni safe promotion, etcd quorum and watchdog |
 | PG-04 | Serve history through standbys only | Role-checked read-only repeatable-read transaction; reject primary/unavailable standby |
 | PG-05 | Bound connections/queries and short-lock job claims | Writer 8/read 4 max per app, pool wait 3 s, statement 5 s/lock 3 s, server max_connections 100 |
 | PG-06 | Make completion, retries and DLQ atomic | Attempt audit/final state/DLQ commit together with ownership checks |
-| PG-07 | Provide low-cost off-host restore | Daily consistent encrypted/authenticated Spaces dump; current metadata ten tables; support historical formats |
+| PG-07 | Provide low-cost off-host restore | Daily consistent encrypted/authenticated Spaces dump; current metadata thirteen tables; support historical formats |
 
 ## Logical data relationships
 
@@ -58,7 +60,7 @@ erDiagram
     }
 ```
 
-This is a selected-column logical diagram, not replacement DDL. Additional durable tables hold event_outbox, delivery_dead_letters, malformed Kafka quarantine, approved origins and origin-policy audit; Liquibase maintains history/lock tables. [Versioned migrations](../../src/main/resources/migrations) are authoritative. Current backup metadata checks nine application tables plus databasechangelog; it is not a statement that the database has only ten physical tables. Intermediate SQL quota counters were removed by migration 007; Redis owns admission counters.
+This is a selected-column logical diagram, not replacement DDL. Additional durable tables hold event_outbox, delivery_dead_letters, malformed Kafka quarantine, approved origins and origin-policy audit; Liquibase maintains history/lock tables. [Versioned migrations](../../src/main/resources/migrations) are authoritative. Current backup metadata checks twelve application tables plus databasechangelog (13); historical snapshot formats remain supported. Intermediate SQL quota counters were removed by migration 007; Redis owns admission counters.
 
 ## Connection routing and transaction boundaries
 

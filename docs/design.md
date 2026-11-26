@@ -1,5 +1,7 @@
 # System design: actual implementation and trade-offs
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 [Visual HLD](hld.md), [separate component LLDs](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md) provide the diagram-led companion to these decisions.
 
 Runtime reference: `6474ad3`, verified 24 November 2026. Documentation refresh: 25 November2026 IST. [Assessment coverage](requirements.md), [architecture](architecture.md), [deployment evidence](submission-status.md), [API](api.md), [network/authentication](network-security.md).
@@ -8,15 +10,15 @@ Runtime reference: `6474ad3`, verified 24 November 2026. Documentation refresh: 
 
 Java 25/Dropwizard 5 exposes a tenant-authenticated REST API. PostgreSQL 17 is the authoritative event/job/audit store, Kafka 4.3.2 activates delivery work, Redis coordinates admission/retry budgets, and HTTPS receivers perform subscriber business actions. Operators approve webhook origins separately. Development lives under `/workspaces/notification-fanout` in Rancher Ubuntu 24.04, using IntelliJ at the user's request; the original VS Code/Cursor requirement and checked-in Dev Container alternative are recorded in requirements.md.
 
-Four mandatory journeys are implemented: durable structured ingestion; dynamic filtered subscriptions; asynchronous fanout/retries with queryable state; event/subscription delivery audit. Matching uses type/source plus up to20 JSON Pointer equality conditions combined with AND. New subscriptions do not receive old events; deletion does not cancel previously snapshotted jobs. Unsupported filters return validation errors. There is no subscription update API, per-source ordering or replay API.
+Four mandatory journeys are implemented: durable structured ingestion; dynamic filtered subscriptions; asynchronous fanout/retries with queryable state; event/subscription delivery audit. Matching uses type/source plus up to20 JSON Pointer equality conditions combined with AND. Subscriptions created before delayed matching may receive earlier accepted events; deletion does not cancel previously snapshotted jobs. Unsupported filters return validation errors. There is no subscription update API, per-source ordering or replay API.
 
-Acceptance criteria and their evidence are in requirements.md. Examples:202 follows the committed event/jobs/outbox transaction; identical concurrent event identities produce one event and one job per matching subscription; retryable failures allow one initial attempt plus five retries; ordinary read APIs cannot use a primary; all three application instances share the tenant quota. These are correctness/resource bounds, not a measured availability or latency SLA. Full-fanout throughput and p95/p99 production targets remain unagreed.
+Acceptance criteria and their evidence are in requirements.md. Examples:202 follows the committed event/outbox acceptance transaction followed by asynchronous matching; identical concurrent event identities produce one event and one job per matching subscription; retryable failures allow one initial attempt plus five retries; ordinary read APIs cannot use a primary; all three application instances share the tenant quota. These are correctness/resource bounds, not a measured availability or latency SLA. Full-fanout throughput and p95/p99 production targets remain unagreed.
 
 ## B. Boundaries and processing model
 
 This is one deployable Java application per host, not independently deployed API/consumer/worker microservices. The API, outbox publisher, Kafka consumer, delivery workers and DLQ publisher have separate responsibilities/executors inside that process. Three copies run behind a regional managed load balancer and Caddy reverse proxies. Split services only when independent scaling, release cadence or ownership justifies the operational cost.
 
-Synchronous ingestion: authenticate tenant, shared Redis admission, validate body, check identity, read subscription membership, match filters, commit event/jobs/outbox, return202. Asynchronous work: outbox publication, Kafka job activation, delivery claims, HTTP attempts, recovery, retry scheduling and DLQ publication. HTTP network work holds no database transaction/connection. History/list reads use standbys; identity, matching, policy and job-state decisions use the primary.
+Synchronous ingestion: authenticate tenant, shared Redis admission, validate body, check committed identity cache/database, commit event/outbox, return 202. Asynchronous work: outbox publication, Kafka subscription matching and job creation, delivery claims, HTTP attempts, recovery, retry scheduling and DLQ publication. HTTP network work holds no database transaction/connection. History/list reads use standbys; identity, matching, policy and job-state decisions use the primary.
 
 PostgreSQL, etcd, Kafka and Redis quorum/replication are separate failure boundaries even though colocated on the same three 4-GB/2-vCPU/80-GB Droplets. The load balancer and Spaces are managed dependencies. All compute is BLR1, not a multi-region design. Private encrypted backup storage is SGP1 because new Bangalore Spaces creation was unavailable in the account.
 
@@ -26,7 +28,7 @@ PostgreSQL, etcd, Kafka and Redis quorum/replication are separate failure bounda
 | --- | --- | --- | --- |
 | One Java application with bounded internal roles | Small assessment codebase and one delivery contract | Roles share process/host resources | API, Kafka activation or HTTP delivery needs independent scale/ownership |
 | PostgreSQL transaction plus outbox | Eliminates an unsafe independent DB-save/Kafka-publish dual write | Extra storage, updates and scans | Measured DB/outbox pressure exceeds agreed latency/backlog targets |
-| Match subscriptions inside ingestion | Atomic membership snapshot and complete fanout jobs before acknowledgement | Work grows with subscriptions and matches | High fanout requires asynchronous matching with versioned membership/progress |
+| Match subscriptions after Kafka | Removes matching/fanout from request latency; database generation stabilizes successful matching | Subscription eligibility is processing-time and matching still writes PostgreSQL | Lift the 1,000-subscription cap only with resumable versioned fanout |
 | Internal event UUID Kafka key | Single event type spreads across six partitions | No per-source ordering | Business requires ordered delivery, including a policy for failed predecessors |
 | Self-managed Kafka RF3/min ISR2 | Real durable backbone on existing hosts; managed Kafka was deferred | Operator owns upgrades, capacity and recovery | Managed-service budget and operational requirements change |
 | Redis fixed-minute shared counters | One atomic tenant allowance across app instances; no DB connection per admission | Redis availability is required; asynchronous failover can lose counters; boundary bursts | Exact entitlement accounting or different burst semantics are required |
@@ -57,7 +59,7 @@ Receivers must tolerate additive envelope fields and transactionally deduplicate
 | kafka_dead_letters | Malformed-record quarantine by Kafka coordinates; different from delivery exhaustion |
 | approved_webhook_origins / webhook_origin_audit | Active/revoked origin policy and append-only operator action audit |
 
-Liquibase also maintains schema history/lock tables. Current backup snapshot metadata verifies nine application tables plus databasechangelog, not every physical database table. Migration005 introduced delivery controls,006 grants runtime rights, and007 removes the unused intermediate PostgreSQL counter table. Redis, not SQL counters, performs production admission.
+Liquibase also maintains schema history/lock tables. Current backup snapshot metadata verifies twelve application tables plus databasechangelog (13), not every physical database table. Migration005 introduced delivery controls,006 grants runtime rights, and007 removes the unused intermediate PostgreSQL counter table. Redis, not SQL counters, performs production admission.
 
 Unique constraints arbitrate concurrent ingestion; indexed due times and lease fields support short claims/recovery; subscription row locks enforce the shared concurrency cap. Acceptance, attempt completion and terminal DLQ insertion use explicit transaction boundaries. If any required operation fails, its transaction rolls back. Terminal status and DLQ insertion cannot partially commit. Kafka offset commits follow durable activation. No transaction spans PostgreSQL, Kafka, Redis and receiver HTTP.
 

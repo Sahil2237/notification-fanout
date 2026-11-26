@@ -14,6 +14,7 @@ import java.util.Map;
 public class ServiceConfiguration extends Configuration {
     @Valid @NotNull @JsonProperty public DataSourceFactory database = new DataSourceFactory();
     @Valid @NotNull @JsonProperty public MetricsSettings telemetry = new MetricsSettings();
+    @Valid @NotNull @JsonProperty public CacheSettings cache = new CacheSettings();
     @Valid @NotNull @JsonProperty public RedisSettings redis = new RedisSettings();
     @Min(1) @JsonProperty public int tenantRetryBudgetPerMinute = 300;
     @Min(1) @JsonProperty public int subscriberRetryBudgetPerMinute = 30;
@@ -66,6 +67,8 @@ public class ServiceConfiguration extends Configuration {
     // Explicit budget deployment: plaintext is confined to one private Docker bridge.
     @JsonProperty public boolean singleHostDeployment = false;
     @Min(1) @Max(10000000) @JsonProperty public int maxQueuedEvents = 100000;
+    @Min(1) @Max(720) @JsonProperty public int deliveryHotRetentionHours = 24;
+    @Min(1) @Max(1000) @JsonProperty public int archiveBatchSize = 100;
     @JsonProperty public boolean workerEnabled = true;
 
     @Min(1)

@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/** Durable DB outbox -> Kafka -> idempotent delivery activation. */
+/** Durable DB outbox -> Kafka -> idempotent subscription matching and delivery creation. */
 public final class KafkaPipeline implements Managed {
     private static final Logger LOG=LoggerFactory.getLogger(KafkaPipeline.class);
     private final Store store;
@@ -71,29 +71,31 @@ public final class KafkaPipeline implements Managed {
     }
     private void publishLoop() {
         while(running && !Thread.currentThread().isInterrupted()) {
-            Store.Outbox outbox=null;
+            List<Store.Outbox> batch=List.of();
             try {
-                outbox=store.claimOutbox();
-                if(outbox==null) {pause(100);continue;}
-                try (var context = new EventLog(outbox.eventId(), outbox.tenant())) {
-                var envelope=json.createObjectNode().put("schemaVersion",1).put("tenantId",outbox.tenant());
-                envelope.set("event",json.valueToTree(outbox.event()));
-                var record = new ProducerRecord<String,String>(config.topic,outbox.eventId().toString(),json.writeValueAsString(envelope));
-                record.headers().add("X-Event-ID",outbox.eventId().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                producer.send(record).get(10,TimeUnit.SECONDS);
-                store.finishPublish(outbox,true);
-                metrics.counter("kafka.published").inc();
-                LOG.info("event_id={} kafka_published topic={}",outbox.eventId(),config.topic);
+                batch=store.claimOutboxBatch(config.publishBatchSize);
+                if(batch.isEmpty()){pause(100);continue;}
+                var deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);
+                var acknowledgements=new java.util.ArrayList<java.util.concurrent.CompletableFuture<Void>>();
+                for(var outbox:batch) {
+                    if(System.nanoTime()>=deadline)throw new java.util.concurrent.TimeoutException("Publish batch deadline");
+                    var envelope=json.createObjectNode().put("schemaVersion",1).put("tenantId",outbox.tenant());
+                    envelope.set("event",json.valueToTree(outbox.event()));
+                    var record=new ProducerRecord<String,String>(config.topic,outbox.eventId().toString(),json.writeValueAsString(envelope));
+                    record.headers().add("X-Event-ID",outbox.eventId().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    var acknowledgement=new java.util.concurrent.CompletableFuture<Void>();
+                    producer.send(record,(metadata,error)->{if(error==null)acknowledgement.complete(null);else acknowledgement.completeExceptionally(error);});
+                    acknowledgements.add(acknowledgement);
                 }
-            } catch(InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch(Exception e) {
+                java.util.concurrent.CompletableFuture.allOf(acknowledgements.toArray(java.util.concurrent.CompletableFuture[]::new)).get(Math.max(1,deadline-System.nanoTime()),TimeUnit.NANOSECONDS);
+                store.finishPublishBatch(batch,true);
+                metrics.counter("kafka.published").inc(batch.size());
+                for(var item:batch)LOG.debug("event_id={} kafka_published topic={}",item.eventId(),config.topic);
+            } catch(InterruptedException interrupted) {Thread.currentThread().interrupt();}
+            catch(Exception error) {
                 metrics.counter("kafka.publish_errors").inc();
-                LOG.warn("event_id={} kafka_publish_failed error_type={}",outbox==null?null:outbox.eventId(),e.getClass().getSimpleName());
-                if(outbox!=null) {
-                    try {store.finishPublish(outbox,false);}
-                    catch(RuntimeException dbError) {LOG.warn("outbox_release_failed; lease recovery will retry");}
-                }
+                LOG.warn("kafka_publish_batch_failed count={} error_type={}",batch.size(),error.getClass().getSimpleName());
+                if(!batch.isEmpty())try{store.finishPublishBatch(batch,false);}catch(RuntimeException unavailable){LOG.warn("outbox_release_failed; lease recovery will retry");}
                 pause(1000);
             }
         }
@@ -144,6 +146,7 @@ public final class KafkaPipeline implements Managed {
                     // Handle every partition separately. On failure rewind only that partition;
                     // never skip unprocessed records from another partition in the same poll.
                     for(var partition:records.partitions()) {
+                        long completedOffset=-1;
                         for(var record:records.records(partition)) {
                             try {
                                 String tenant=null;
@@ -167,7 +170,7 @@ public final class KafkaPipeline implements Managed {
                                     }
                                 }
                                 // DB commit precedes the offset commit. Redelivery is harmless.
-                                consumer.commitSync(Map.of(partition,new OffsetAndMetadata(record.offset()+1)));
+                                completedOffset=record.offset()+1;
                             } catch(RuntimeException e) {
                                 if(!running) break;
                                 metrics.counter("kafka.dispatch_errors").inc();
@@ -177,6 +180,8 @@ public final class KafkaPipeline implements Managed {
                                 break;
                             }
                         }
+                        // Commit only the contiguous durably processed prefix of this partition.
+                        if(completedOffset>=0)consumer.commitSync(Map.of(partition,new OffsetAndMetadata(completedOffset)));
                     }
                 } catch(WakeupException e) {if(running)throw e;}
                 catch(RuntimeException e) {

@@ -1,17 +1,19 @@
 # Assessment requirements and acceptance evidence
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 This is the requirement-to-implementation map for the deployed assessment system, not a promise that every production failure has been tested. Runtime evidence is pinned to `6474ad3` on 24 November 2026; documentation-only commits can advance Git HEAD separately. [Current deployment](submission-status.md), [architecture](architecture.md), [design](design.md), [tests](validation.md).
 
 ## Mandatory functional scope
 
 | ID | Requirement and acceptance condition | Actual implementation | Verification and limits |
 | --- | --- | --- | --- |
-| FR1 | Accept type, source and arbitrary JSON; never return202 before durable acceptance | `POST /v1/events`; transaction commits event, matching jobs and Kafka outbox; synchronous PostgreSQL commit | REST/transaction rollback, storage-failure and Kafka-outage integrations; latest public cloud202 and replay check. Loss of every DB copy plus usable backups is outside zero-loss scope |
+| FR1 | Accept type, source and arbitrary JSON; never return202 before durable acceptance | `POST /v1/events`; transaction commits event and Kafka outbox; consumer transaction creates matching jobs; synchronous PostgreSQL commit | REST/transaction rollback, storage-failure and Kafka-outage integrations; latest public cloud202 and replay check. Loss of every DB copy plus usable backups is outside zero-loss scope |
 | FR2 | Create/list/delete webhook subscriptions and type/source/payload filters without restart | `/v1/subscriptions`; JSON Pointer equality conditions combined with AND; tenant-scoped storage | Lifecycle, filter, ownership and deletion-boundary tests. Operator approves public HTTPS origin before subscriber registration; no subscription update endpoint requested |
-| FR3 | Deliver to every matching subscription, retry failures with backoff, expose pending/delivered/failed | Matching snapshots jobs in ingestion; Kafka activates jobs; bounded workers persist attempts and jittered retry schedules; transient failures allow six total attempts then DLQ | Real HTTP retry/timeout/exhaustion tests and real Kafka journey; latest cloud duplicate submissions yielded one delivered job/one capture. Permanent failures stop earlier; uncertain receipt can cause repeat HTTP requests |
+| FR3 | Deliver to every matching subscription, retry failures with backoff, expose pending/delivered/failed | Kafka consumer snapshots current subscription membership and creates jobs; bounded workers persist attempts and jittered retry schedules; transient failures allow six total attempts then DLQ | Real HTTP retry/timeout/exhaustion tests and real Kafka journey; latest cloud duplicate submissions yielded one delivered job/one capture. Permanent failures stop earlier; uncertain receipt can cause repeat HTTP requests |
 | FR4 | Query event/subscription history with attempt timestamps, response codes and final status | Event, subscription and delivery history APIs; tenant-scoped DLQ history | Integration tests plus latest cloud audit/receiver comparison. HTTP code can be null after no response or uncertain crash outcome; reads can briefly lag on replicas |
 
-Accepted events with no matching subscriptions are still stored and dispatched through Kafka. Deleting a subscription stops future matches; it does not cancel jobs already snapshotted. New subscriptions do not receive historical events automatically.
+Accepted events with no matching subscriptions are still stored and dispatched through Kafka. Deleting a subscription stops future matches; it does not cancel jobs already snapshotted. New subscriptions can match not-yet-processed events; completed events are not replayed automatically.
 
 ## Mandatory engineering scope
 

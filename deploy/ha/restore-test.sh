@@ -25,7 +25,7 @@ python3 - "$work/data/snapshot.json" "$name" <<'PYCODE'
 import json,pathlib,subprocess,sys
 snapshot=json.loads(pathlib.Path(sys.argv[1]).read_text());container=sys.argv[2]
 allowed={'events','subscriptions','deliveries','delivery_attempts','event_outbox','approved_webhook_origins','webhook_origin_audit','kafka_dead_letters','databasechangelog'}
-assert set(snapshot['row_counts']) in (allowed, allowed | {'delivery_dead_letters'}, allowed | {'fixed_window_limits','delivery_dead_letters'})
+assert set(snapshot['row_counts']) in (allowed, allowed | {'delivery_dead_letters'}, allowed | {'fixed_window_limits','delivery_dead_letters'}, allowed | {'delivery_dead_letters','subscription_versions','delivery_identities','delivery_history'})
 for table,expected in snapshot['row_counts'].items():
     actual=int(subprocess.check_output(['docker','exec',container,'psql','-U','postgres','-d','notification_restore','-Atc','SELECT count(*) FROM '+table],text=True).strip());assert actual==expected,(table,expected,actual)
 print(json.dumps({'restored_and_verified':True,'snapshot_created_at':snapshot['created_at'],'row_counts':snapshot['row_counts'],'network_isolated_restore':True},indent=2))

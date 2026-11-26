@@ -1,5 +1,7 @@
 # Shared limits, identity, isolation and replica reads
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 This contract is deployed in application revision 6474ad3 on all three existing Droplets. Exact rollout and verification evidence is in [submission-status.md](submission-status.md); source capability and cloud evidence remain distinct.
 
 ## Fixed-window shared request limit
@@ -20,7 +22,7 @@ Without Idempotency-Key, the versioned SHA-256 key includes authenticated tenant
 
 Tenant comes from the bearer credential. In this service-to-service authentication model, userIds and compartmentIds are configured by the operator for each credential's tenant. Defaults are the tenant name and default compartment. Body fields or arbitrary X-User-ID/X-Compartment-ID headers cannot impersonate another identity. Multiple users in one tenant need a future verified identity-provider/token-claims integration; this change does not invent an IAM service.
 
-If neither a producer eventId nor an explicit key is supplied, identical type/source/payload and identity are deliberately the same occurrence for as long as the event is retained. Separate identical occurrences require distinct producer IDs or explicit keys. Keys and their deduplication records are not held in a short-lived cache.
+If neither a producer eventId nor an explicit key is supplied, identical type/source/payload and identity are deliberately the same occurrence for as long as the event is retained. Separate identical occurrences require distinct producer IDs or explicit keys. Redis caches committed identities for at most 600 seconds; PostgreSQL retains authoritative keys independently of cache expiry.
 
 ## Correlation and fencing
 

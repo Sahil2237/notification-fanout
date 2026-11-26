@@ -53,6 +53,7 @@ public final class DeliveryWorker implements Managed {
                     try {
                         metrics.counter("delivery.recovered")
                                 .inc(store.recover(config.maxAttempts));
+                        metrics.counter("delivery.archived").inc(store.archiveCompleted(config.deliveryHotRetentionHours,config.archiveBatchSize));
                     } catch (RuntimeException e) {
                         LOG.warn("recovery_failed error_type={}", e.getClass().getSimpleName());
                     }

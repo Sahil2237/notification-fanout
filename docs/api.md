@@ -1,5 +1,7 @@
 # REST API contract
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 All /v1 requests require `Authorization: Bearer <token>`. Tenant comes from that token, never a supplied tenant ID. Responses include X-Request-ID and Cache-Control:no-store. Optional X-Request-ID accepts 1..64 letters/digits/period/underscore/hyphen. UUID path parameters; JSON Content-Type for bodies. No version negotiation: /v1 and webhook schemaVersion=1 are explicit.
 
 |Method/path|Request|Success|

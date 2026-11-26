@@ -1,5 +1,7 @@
 # Requirements-to-verification matrix
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 Runtime release `6474ad3` passed [CI45447905686](https://github.com/Sahil2237/notification-fanout/actions/runs/45447905686) and [image publication45450924076](https://github.com/Sahil2237/notification-fanout/actions/runs/45450924076). Counts below were checked against that run's JUnit XML, not stale documentation. Documentation-only changes use diagram/link/contract checks rather than claiming a new application test/deployment run.
 
 ## Executed release checks
@@ -55,8 +57,14 @@ python3 -m unittest discover -s deploy/ha -p 'test_*.py' -v
 
 Use dedicated disposable test services/database only. Tests migrate/truncate test data; never set TEST_DB_URL or test Kafka/Redis endpoints to shared production resources. The CI workflow documents actual ephemeral-service/image dependencies and guards for destructive local HA fixtures. See README and deploy/ha/redis.md for local setup rather than copying cloud credentials.
 
-For cloud release acceptance, verify signed revision/image identity, all three app/proxy readiness states, expected replication/quorum, authenticated public HTTPS, synthetic matching/nonmatching behavior as appropriate, history, receiver capture/HMAC and original-event idempotency. Record which failure drills were actually repeated. Do not manipulate a live request quota; the latest fixture ran only while every backend was drained and removed its synthetic state before opening ingress.
+For cloud release acceptance, verify signed revision/image identity, all three app/proxy readiness states, expected replication/quorum, authenticated public HTTPS, synthetic matching/nonmatching behavior as appropriate, history, receiver capture/HMAC and original-event idempotency. Record which failure drills were actually repeated. AsyncCacheHistoryIT adds cache expiry/failure/LRU, consumer-time membership, concurrent replay and terminal-history/deduplication checks. Do not manipulate a live request quota; the latest fixture ran only while every backend was drained and removed its synthetic state before opening ingress.
 
 ## Remaining validation gaps
 
 No suite covers every possible failure. Full-region recovery, full-service disaster RTO, elapsed certificate-renewal/backup-expiry cycles, sustained representative fanout/slow-receiver saturation, endpoint-wide fairness and a negotiated production availability/latency SLO remain open. No separate per-user quota, autoscaler, ETag update, managed queue, ordering or replay tests can pass as implemented features because those capabilities do not exist. Alarms/tickets were excluded. A subsequent read-only control-panel inspection verified live health/affinity values; [evidence](evidence/load-balancer-2026-11-25.json) distinguishes those fields from the provider-documented managed distribution algorithm. No equal-distribution load benchmark or precise failover RTO was run.
+
+## November 26 redesign validation
+
+Local validation runs in the existing Rancher Ubuntu container under /workspaces/notification-fanout. The new AsyncCacheHistoryIT exercises database-backed concurrent duplicate handling, consumer replay and matching rollback, processing-time subscription membership, Redis expiry/failure/LRU limits, bounded publication claims, terminal archive/status, attempt/DLQ foreign keys and permanent delivery-pair identity. Existing KafkaIT polling now tolerates the legitimate pre-matching empty delivery list. Backup policy tests include the new durable tables and cache ACL namespace restrictions.
+
+The 10,000/s k6 scenario is a reproducible capacity gate, not an executed or passing production benchmark. Existing tenant quota and worker bounds are not automatically raised. No claim of exhaustive testing or new whole-host chaos evidence follows from this release. Final executed results and cloud revision belong in submission-status.md.

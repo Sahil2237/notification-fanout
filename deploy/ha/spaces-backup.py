@@ -5,7 +5,7 @@ UTC=datetime.timezone.utc
 PREFIX='postgres/daily/v1/'
 RETENTION=datetime.timedelta(days=1)
 NAME=re.compile(r'^postgres/daily/v1/[0-9]{8}T[0-9]{6}Z-[0-9a-f]{32}\.(?:tar\.age|json)$')
-TABLES=('events','subscriptions','deliveries','delivery_attempts','event_outbox','approved_webhook_origins','webhook_origin_audit','kafka_dead_letters','databasechangelog','delivery_dead_letters')
+TABLES=('events','subscriptions','deliveries','delivery_attempts','event_outbox','approved_webhook_origins','webhook_origin_audit','kafka_dead_letters','databasechangelog','delivery_dead_letters','subscription_versions','delivery_identities','delivery_history')
 
 def candidates(client,bucket):
     return [obj for page in client.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=PREFIX) for obj in page.get('Contents',[]) if NAME.fullmatch(obj['Key'])]

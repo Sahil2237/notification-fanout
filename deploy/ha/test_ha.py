@@ -96,7 +96,8 @@ class BackupPolicyTest(unittest.TestCase):
     def obj(self,suffix='json',age_hours=0):return {'Key':self.base+'.'+suffix,'LastModified':self.now-datetime.timedelta(hours=age_hours)}
     def test_durable_delivery_controls_are_in_snapshot_verification(self):
         self.assertIn('delivery_dead_letters',backup.TABLES);self.assertNotIn('fixed_window_limits',backup.TABLES)
-        self.assertEqual(10,len(backup.TABLES))
+        self.assertTrue({'subscription_versions','delivery_identities','delivery_history'}.issubset(backup.TABLES))
+        self.assertEqual(13,len(backup.TABLES))
     def test_first_backup_and_incomplete_upload_are_due(self):
         self.assertTrue(backup.due([],self.now));self.assertTrue(backup.due([self.obj('tar.age')],self.now))
     def test_does_not_repeat_a_successful_daily_backup(self):self.assertFalse(backup.due([self.obj()],self.now))
@@ -126,3 +127,13 @@ class BackupPolicyTest(unittest.TestCase):
             with self.assertRaises(OSError):backup.backup(client,'bucket',connection,self.now,'public-recipient')
         client.put_object.assert_not_called()
 if __name__=='__main__':unittest.main()
+
+class CacheContractTest(unittest.TestCase):
+    def test_cache_acl_is_namespaced_without_eviction_configuration_privilege(self):
+        source=(pathlib.Path(__file__).parent/'redis-cluster.py').read_text()
+        line=next(line for line in source.splitlines() if "'user limiter on >'" in line)
+        self.assertIn('~notification:cache:v2:*',line)
+        self.assertIn('~notification:limits:v1:*',line)
+        self.assertNotIn('+config',line)
+        self.assertNotIn('+flush',line)
+        self.assertNotIn('+@all',line)

@@ -1,5 +1,7 @@
 # Verified deployment and submission status
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 Documentation refreshed25 November 2026 IST. Runtime evidence below is pinned to the 24 November rollout of **6474ad3b0c043677066c539f3523c075b7358af0**; a documentation-only Git commit does not establish a new runtime deployment. No service, firewall or credential change is part of this documentation refresh.
 
 ## Current deployed system
@@ -19,7 +21,7 @@ Documentation refreshed25 November 2026 IST. Runtime evidence below is pinned to
 
 | Requirement | Implemented and deployed behavior | Evidence boundary |
 | --- | --- | --- |
-| Durable structured ingestion |202 follows synchronous PostgreSQL event/jobs/outbox transaction; Kafka outbox retries publication | Latest public HTTPS ingestion/replay and transaction/Kafka recovery integrations; no universal zero-loss disaster claim |
+| Durable structured ingestion |202 follows synchronous PostgreSQL event/outbox acceptance transaction followed by asynchronous matching; Kafka outbox retries publication | Latest public HTTPS ingestion/replay and transaction/Kafka recovery integrations; no universal zero-loss disaster claim |
 | Dynamic subscriptions | Tenant create/list/delete and type/source/JSON Pointer equality filters without restart; separate durable origin policy | Lifecycle/filter/ownership/deletion tests; historical public cloud registration. POST subscription is not key-idempotent |
 | Fanout/retry/state | Synchronous membership snapshot, Kafka activation, bounded/fair workers, persisted backoff, pending/delivered/failed, transient six-total-attempt limit and delivery DLQ | Real dependency integrations; latest cloud one successful webhook attempt. Exhaustion tests are automated; no new live six-failure webhook probe in this rollout |
 | Delivery audit | Event/subscription/delivery history and tenant DLQ query endpoints with attempt times/codes/outcomes | Latest external capture/HMAC agrees with delivery audit; unavailable response codes can be null; standby reads can lag |
@@ -39,7 +41,7 @@ Documentation refreshed25 November 2026 IST. Runtime evidence below is pinned to
 | Public HTTPS and replica reads | Normal certificate validation passed; health200; event replay202; history reported replica/eventual |
 | External delivery | Event `c9264b6f-1e5a-4a9c-8eea-f6ee519edf94`, delivery `7a403f50-4aa8-44d9-9e82-6ec26ff7e7e5`: one attempt, HTTP 204; one external capture `8a1455e7-f451-4aa9-872c-62beba2e490d`, matching IDs and valid HMAC, checked again after failover |
 | Redis primary/Sentinel failure | Stopped node1's Redis/Sentinel pair; existing clients observed503,503,200; node3 promoted; all three application clients recovered; restarted member rejoined and primary again had two replicas |
-| Backup compatibility | Backup-only tools updated on all three hosts; backup role can read delivery_dead_letters. Current metadata verifies ten tables; no new ten-table Spaces restore was executed |
+| Backup compatibility | Backup-only tools updated on all three hosts; backup role can read delivery_dead_letters. The previous release verified ten-table metadata; this redesign extends it to thirteen; no new ten-table Spaces restore was executed |
 
 Local Redis real-client results are in the release CI drill and workspace log; the current JSON evidence contains the cloud checks. Old single-host containers/volumes remain stopped/stale and are not a rollback database.
 

@@ -29,6 +29,33 @@ public final class Store {
     private final ObjectMapper json;
     private final boolean kafkaRequired;
     private final int maxQueuedEvents;
+    private volatile long backlogCheckedNanos;
+    private volatile boolean backlogFull;
+    private int backlogCount;
+    private synchronized void acceptedIntoBacklog() { backlogFull=++backlogCount>=maxQueuedEvents; }
+    private synchronized boolean backlogFull(Handle h) {
+        if(System.nanoTime()-backlogCheckedNanos>1_000_000_000L) {
+            backlogCount=h.createQuery("SELECT count(*) FROM (SELECT 1 FROM event_outbox WHERE dispatched_at IS NULL LIMIT :cap) q")
+                    .bind("cap",maxQueuedEvents).mapTo(Integer.class).one();
+            backlogFull=backlogCount>=maxQueuedEvents;
+            backlogCheckedNanos=System.nanoTime();
+        }
+        return backlogFull;
+    }
+
+    private ApplicationCache cache=ApplicationCache.NONE;
+    private CacheSettings cacheSettings=new CacheSettings();
+    public void configureCache(ApplicationCache cache,CacheSettings settings) {
+        this.cache=cache;this.cacheSettings=settings;
+    }
+    public record CachedIdentity(UUID id,Instant acceptedAt,String hash,String user,String compartment) { }
+    private List<String> identityKeys(Identity identity,EventInput input,String key) {
+        var prefix="event:"+RedisRateLimiter.tenantHash(identity.tenant())+":";
+        var keys=new ArrayList<String>();keys.add(prefix+"key:"+RedisRateLimiter.tenantHash(key));
+        if(input.eventId()!=null) keys.add(prefix+"producer:"+input.eventId());
+        return keys;
+    }
+
 
     public Store(Jdbi db, ObjectMapper json) {
         this(db, json, false);
@@ -85,7 +112,7 @@ public final class Store {
     }
 
     public Subscription createSubscription(String tenant, SubscriptionInput input) {
-        return db.inTransaction(
+        var created = db.inTransaction(
                 h -> {
                     h.createQuery("SELECT pg_advisory_xact_lock(hashtextextended(:tenant, 0))")
                             .bind("tenant", tenant)
@@ -100,6 +127,7 @@ public final class Store {
                                     .one();
                     if (count >= 1000)
                         throw new WebApplicationException("Active subscription limit reached", 409);
+                    advanceSubscriptionVersion(h,tenant);
                     var id = UUID.randomUUID();
                     h.createUpdate(
                                     "INSERT INTO subscriptions(id,tenant_id,webhook_url,filter)"
@@ -111,6 +139,8 @@ public final class Store {
                             .execute();
                     return subscription(h, tenant, id);
                 });
+        warmSubscriptionCache(tenant);
+        return created;
     }
 
     public List<Subscription> subscriptions(String tenant, int limit, int offset) {
@@ -141,8 +171,9 @@ public final class Store {
     }
 
     public void deleteSubscription(String tenant, UUID id) {
-        db.useHandle(
+        db.useTransaction(
                 h -> {
+                    advanceSubscriptionVersion(h,tenant);
                     var count =
                             h.createUpdate(
                                             "UPDATE subscriptions SET"
@@ -153,6 +184,7 @@ public final class Store {
                                     .execute();
                     if (count == 0) throw new NotFoundException();
                 });
+        warmSubscriptionCache(tenant);
     }
 
     public Accepted ingest(String tenant, EventInput input, String key) {
@@ -162,7 +194,17 @@ public final class Store {
         var tenant = identity.tenant();
         var hash = hash(input);
         var key = suppliedKey == null ? generatedKey(identity, input) : suppliedKey;
-        return db.inTransaction(
+        var identityKeys=identityKeys(identity,input,key);
+        for(var value:cache.get(identityKeys)) {
+            if(value.isEmpty()) continue;
+            try {
+                var original=decode(value,CachedIdentity.class);
+                if(!hash.equals(original.hash()) || !identity.userId().equals(original.user()) || !identity.compartmentId().equals(original.compartment()))
+                    throw new WebApplicationException("Event identity or idempotency key conflicts with original content",409);
+                return new Accepted(new Event(original.id(),input.type(),input.source(),input.payload(),original.acceptedAt()),true);
+            } catch(IllegalStateException corrupt) { /* Treat corrupt optional cache as a miss. */ }
+        }
+        var accepted = db.inTransaction(
                 h -> {
                     var id = UUID.randomUUID();
                     var inserted =
@@ -186,49 +228,108 @@ public final class Store {
                     if (inserted == 0) {
                         var existing = h.createQuery("""
                                 SELECT * FROM events WHERE tenant_id=:tenant AND
-                                (idempotency_key=:key OR (producer_event_id=CAST(:producer AS uuid) AND user_id=:user AND compartment_id=:compartment))
+                                (idempotency_key=:key OR (producer_event_id=CAST(:producer AS uuid)))
                                 ORDER BY (idempotency_key=:key) DESC LIMIT 1
                                 """)
                                 .bind("tenant",tenant).bind("key",key).bind("producer",input.eventId())
-                                .bind("user",identity.userId()).bind("compartment",identity.compartmentId()).mapToMap().one();
+                                .mapToMap().one();
                         if (!hash.equals(existing.get("content_hash"))
                                 || existing.get("user_id") != null && (!identity.userId().equals(existing.get("user_id"))
                                 || !identity.compartmentId().equals(existing.get("compartment_id"))))
                             throw new WebApplicationException("Event identity or idempotency key conflicts with original content", 409);
                         return new Accepted(event(h, tenant, (UUID) existing.get("id")), true);
                     }
-                    if(kafkaRequired && h.createQuery("SELECT count(*) FROM event_outbox WHERE dispatched_at IS NULL")
-                            .mapTo(Long.class).one()>=maxQueuedEvents) {
+                    if(kafkaRequired && backlogFull(h)) {
                         throw new WebApplicationException("Event backlog capacity reached; retry later",503);
                     }
-                    var subscriptions =
-                            h.createQuery(
-                                            "SELECT * FROM subscriptions WHERE tenant_id=:tenant"
-                                                + " AND deleted_at IS NULL")
-                                    .bind("tenant", tenant)
-                                    .map((r, c) -> mapSubscription(r))
-                                    .list();
-                    for (var subscription : subscriptions) {
-                        if (!Filters.matches(subscription.filter(), input)) continue;
-                        h.createUpdate(
-                                        """
-                                        INSERT INTO deliveries(id,tenant_id,event_id,subscription_id,webhook_url,dispatch_ready)
-                                        VALUES(:id,:tenant,:event,:subscription,:url,:ready)
-                                        """)
-                                .bind("id", UUID.randomUUID())
-                                .bind("tenant", tenant)
-                                .bind("event", id)
-                                .bind("subscription", subscription.id())
-                                .bind("ready", !kafkaRequired)
-                                .bind("url", subscription.webhookUrl())
-                                .execute();
-                    }
+                    if (!kafkaRequired) createMatchingDeliveries(h, tenant, id, input);
                     if (kafkaRequired) {
                         h.createUpdate("INSERT INTO event_outbox(event_id,tenant_id) VALUES(:id,:tenant)")
                             .bind("id",id).bind("tenant",tenant).execute();
                     }
                     return new Accepted(event(h, tenant, id), false);
                 });
+        if(!accepted.duplicate()) {
+            if(kafkaRequired) acceptedIntoBacklog();
+            var value=encode(new CachedIdentity(accepted.event().id(),accepted.event().acceptedAt(),hash,identity.userId(),identity.compartmentId()));
+            for(var cacheKey:identityKeys) cache.put(cacheKey,value,cacheSettings.eventTtlSeconds,"",Integer.MAX_VALUE);
+        }
+        return accepted;
+    }
+
+    private void createMatchingDeliveries(Handle h,String tenant,UUID eventId,EventInput input) {
+        var batch=h.prepareBatch("""
+                INSERT INTO deliveries(id,tenant_id,event_id,subscription_id,webhook_url,dispatch_ready)
+                VALUES(:id,:tenant,:event,:subscription,:url,TRUE) ON CONFLICT DO NOTHING
+                """);
+        var count=0;
+        for(var subscription:matchingSubscriptions(h,tenant,input)) {
+            if(!Filters.matches(subscription.filter(),input)) continue;
+            batch.bind("id",UUID.randomUUID()).bind("tenant",tenant).bind("event",eventId)
+                    .bind("subscription",subscription.id()).bind("url",subscription.webhookUrl()).add();
+            count++;
+        }
+        if(count>0)batch.execute();
+    }
+
+    private void advanceSubscriptionVersion(Handle h,String tenant) {
+        h.createUpdate("INSERT INTO subscription_versions(tenant_id,version) VALUES(:tenant,1) ON CONFLICT(tenant_id) DO UPDATE SET version=subscription_versions.version+1")
+                .bind("tenant",tenant).execute();
+    }
+
+    private List<Subscription> matchingSubscriptions(Handle h,String tenant,EventInput input) {
+        // A shared generation lock keeps registration/deletion out until this matching transaction commits.
+        var version=h.createQuery("SELECT version FROM subscription_versions WHERE tenant_id=:tenant FOR SHARE")
+                .bind("tenant",tenant).mapTo(Long.class).findOne().orElse(0L);
+        var ids=h.createQuery("SELECT id FROM subscriptions WHERE tenant_id=:tenant AND deleted_at IS NULL "
+                +"AND (filter->>'type' IS NULL OR filter->>'type'=:type) AND (filter->>'source' IS NULL OR filter->>'source'=:source) ORDER BY id")
+                .bind("tenant",tenant).bind("type",input.type()).bind("source",input.source()).mapTo(UUID.class).list();
+        if(ids.isEmpty()) return List.of();
+        var group=RedisRateLimiter.tenantHash(tenant)+":"+version;
+        var keys=ids.stream().map(id->"subscription:"+group+":"+id).toList();
+        var cached=cache.get(keys);var result=new ArrayList<Subscription>();var missing=new ArrayList<UUID>();
+        for(var i=0;i<ids.size();i++) {
+            if(!cached.get(i).isEmpty()) {
+                try {var value=decode(cached.get(i),Subscription.class);if(value.id().equals(ids.get(i)) && value.deletedAt()==null){result.add(value);continue;}}
+                catch(IllegalStateException corrupt) { /* Refetch optional corrupt entries. */ }
+            }
+            missing.add(ids.get(i));
+        }
+        if(!missing.isEmpty()) {
+            var loaded=h.createQuery("SELECT * FROM subscriptions WHERE tenant_id=:tenant AND id IN (<ids>) AND deleted_at IS NULL")
+                    .bind("tenant",tenant).bindList("ids",missing).map((row,ctx)->mapSubscription(row)).list();
+            result.addAll(loaded);
+            var activeCount=h.createQuery("SELECT count(*) FROM subscriptions WHERE tenant_id=:tenant AND deleted_at IS NULL")
+                    .bind("tenant",tenant).mapTo(Integer.class).one();
+            var cap=activeCount*cacheSettings.subscriptionPercent/100;
+            // Cache at most the most recently used 20% of this tenant's active subscription records.
+            var fills=new java.util.LinkedHashMap<String,String>();
+            for(var value:loaded) {
+                if(fills.size()>=cap) break;
+                fills.put("subscription:"+group+":"+value.id(),encode(value));
+            }
+            cache.putAll(fills,600,group,cap);
+        }
+        return result;
+    }
+
+    private void warmSubscriptionCache(String tenant) {
+        if(cache==ApplicationCache.NONE) return;
+        // Best-effort post-commit refresh. DB generation makes stale entries unreachable even if Redis is down.
+        try {
+            db.useTransaction(h->{
+                var version=h.createQuery("SELECT version FROM subscription_versions WHERE tenant_id=:tenant FOR SHARE").bind("tenant",tenant).mapTo(Long.class).one();
+                var active=h.createQuery("SELECT * FROM subscriptions WHERE tenant_id=:tenant AND deleted_at IS NULL ORDER BY id")
+                        .bind("tenant",tenant).map((row,ctx)->mapSubscription(row)).list();
+                var cap=active.size()*cacheSettings.subscriptionPercent/100;
+                var group=RedisRateLimiter.tenantHash(tenant)+":"+version;
+                var fills=new java.util.LinkedHashMap<String,String>();
+                active.stream().limit(cap).forEach(v->fills.put("subscription:"+group+":"+v.id(),encode(v)));
+                cache.putAll(fills,600,group,cap);
+            });
+        } catch(RuntimeException unavailable) {
+            org.slf4j.LoggerFactory.getLogger(Store.class).warn("subscription_cache_refresh_deferred error_type={}",unavailable.getClass().getSimpleName());
+        }
     }
 
     public Event event(String tenant, UUID id) {
@@ -250,7 +351,7 @@ public final class Store {
 
     private Delivery delivery(Handle h, String tenant, UUID id) {
         var row =
-                h.createQuery("SELECT * FROM deliveries WHERE tenant_id=:tenant AND id=:id")
+                h.createQuery("SELECT * FROM all_deliveries WHERE tenant_id=:tenant AND id=:id")
                         .bind("tenant", tenant)
                         .bind("id", id)
                         .mapToMap()
@@ -291,7 +392,7 @@ public final class Store {
                     var column = byEvent ? "event_id" : "subscription_id";
                     var ids =
                             h.createQuery(
-                                            "SELECT id FROM deliveries WHERE tenant_id=:tenant AND "
+                                            "SELECT id FROM all_deliveries WHERE tenant_id=:tenant AND "
                                                     + column
                                                     + "=:owner ORDER BY created_at,id LIMIT :limit"
                                                     + " OFFSET :offset")
@@ -398,7 +499,8 @@ public final class Store {
                                             """
                                             UPDATE deliveries SET status=:status, lease_token=NULL, lease_expires_at=NULL,
                                             next_attempt_at=clock_timestamp()+:delay * interval '1 millisecond',
-                                            delivered_at=CASE WHEN :success THEN clock_timestamp() ELSE NULL END
+                                            delivered_at=CASE WHEN :success THEN clock_timestamp() ELSE NULL END,
+                                            completed_at=CASE WHEN :status='pending' THEN NULL ELSE clock_timestamp() END
                                             WHERE id=:id AND lease_token=:token AND lease_expires_at>clock_timestamp()
                                             """)
                                     .bind("status", status)
@@ -449,7 +551,8 @@ public final class Store {
                         h.createUpdate(
                                         """
                                         UPDATE deliveries SET lease_token=NULL,lease_expires_at=NULL,next_attempt_at=clock_timestamp(),
-                                        status=CASE WHEN attempts>=:max THEN 'failed' ELSE 'pending' END WHERE id=:id
+                                        status=CASE WHEN attempts>=:max THEN 'failed' ELSE 'pending' END,
+                                        completed_at=CASE WHEN attempts>=:max THEN clock_timestamp() ELSE NULL END WHERE id=:id
                                         """)
                                 .bind("max", maxAttempts)
                                 .bind("id", row.get("id"))
@@ -457,7 +560,7 @@ public final class Store {
                     }
                     // Handles an operator reducing the retry limit between deployments.
                     h.createUpdate(
-                                    "UPDATE deliveries SET status='failed' WHERE status='pending'"
+                                    "UPDATE deliveries SET status='failed',completed_at=clock_timestamp() WHERE status='pending'"
                                         + " AND lease_token IS NULL AND attempts>=:max")
                             .bind("max", maxAttempts)
                             .execute();
@@ -470,26 +573,57 @@ public final class Store {
                 });
     }
 
+    public int archiveCompleted(int retentionHours,int batchSize) {
+        if(retentionHours<0 || batchSize<1 || batchSize>1000) throw new IllegalArgumentException("Invalid archive bounds");
+        return db.inTransaction(h->{
+            // One statement/snapshot moves terminal work atomically; attempts and DLQ retain identity FKs.
+            return h.createQuery("""
+                    WITH selected AS (
+                      SELECT id FROM deliveries WHERE status IN ('delivered','failed') AND lease_token IS NULL
+                      AND completed_at<=clock_timestamp()-:hours*interval '1 hour'
+                      ORDER BY completed_at,id LIMIT :batch FOR UPDATE SKIP LOCKED
+                    ), moved AS (
+                      DELETE FROM deliveries WHERE id IN (SELECT id FROM selected) RETURNING *
+                    ), saved AS (
+                      INSERT INTO delivery_history SELECT * FROM moved RETURNING id
+                    ) SELECT count(*) FROM saved
+                    """).bind("hours",retentionHours).bind("batch",batchSize).mapTo(Integer.class).one();
+        });
+    }
+
     public record Outbox(UUID eventId, String tenant, UUID token, Event event) {}
 
     public Outbox claimOutbox() {
-        return db.inTransaction(h -> {
-            var row = h.createQuery("""
-                SELECT event_id,tenant_id FROM event_outbox WHERE dispatched_at IS NULL
-                AND (published_at IS NULL OR published_at<clock_timestamp()-interval '60 seconds')
-                AND available_at<=clock_timestamp()
-                AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp())
-                ORDER BY available_at,event_id LIMIT 1 FOR UPDATE SKIP LOCKED
-                """).mapToMap().findOne();
-            if(row.isEmpty()) return null;
-            var id=(UUID)row.get().get("event_id");
-            var tenant=(String)row.get().get("tenant_id");
-            var token=UUID.randomUUID();
-            h.createUpdate("""
-                UPDATE event_outbox SET lease_token=:token,lease_expires_at=clock_timestamp()+interval '30 seconds',
-                publish_attempts=publish_attempts+1 WHERE event_id=:id
-                """).bind("token",token).bind("id",id).execute();
-            return new Outbox(id,tenant,token,event(h,tenant,id));
+        var batch=claimOutboxBatch(1);
+        return batch.isEmpty()?null:batch.getFirst();
+    }
+
+    public List<Outbox> claimOutboxBatch(int size) {
+        if(size<1 || size>32) throw new IllegalArgumentException("Outbox batch must contain 1..32 records");
+        return db.inTransaction(h->h.createQuery("""
+                WITH picked AS (
+                  SELECT event_id FROM event_outbox WHERE dispatched_at IS NULL
+                  AND (published_at IS NULL OR published_at<clock_timestamp()-interval '60 seconds')
+                  AND available_at<=clock_timestamp() AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp())
+                  ORDER BY available_at,event_id LIMIT :size FOR UPDATE SKIP LOCKED
+                ), claimed AS (
+                  UPDATE event_outbox SET lease_token=:token,lease_expires_at=clock_timestamp()+interval '30 seconds',
+                  publish_attempts=publish_attempts+1 WHERE event_id IN (SELECT event_id FROM picked)
+                  RETURNING event_id,tenant_id,lease_token
+                ) SELECT e.*,c.lease_token FROM claimed c JOIN events e ON e.id=c.event_id AND e.tenant_id=c.tenant_id
+                """).bind("size",size).bind("token",UUID.randomUUID())
+                .map((row,ctx)->new Outbox(row.getObject("id",UUID.class),row.getString("tenant_id"),row.getObject("lease_token",UUID.class),mapEvent(row))).list());
+    }
+
+    public void finishPublishBatch(List<Outbox> batch,boolean success) {
+        db.useTransaction(h->{
+            var update=h.prepareBatch("""
+                    UPDATE event_outbox SET published_at=CASE WHEN :success THEN clock_timestamp() ELSE published_at END,
+                    lease_token=NULL,lease_expires_at=NULL,available_at=clock_timestamp()+interval '2 seconds'
+                    WHERE event_id=:id AND lease_token=:token
+                    """);
+            for(var item:batch)update.bind("success",success).bind("id",item.eventId()).bind("token",item.token()).add();
+            update.execute();
         });
     }
 
@@ -503,12 +637,15 @@ public final class Store {
 
     public void activateDispatch(String tenant, UUID eventId) {
         db.useTransaction(h -> {
-            var exists=h.createQuery("SELECT event_id FROM event_outbox WHERE event_id=:id AND tenant_id=:tenant FOR UPDATE")
-                .bind("id",eventId).bind("tenant",tenant).mapTo(UUID.class).findOne();
-            if(exists.isEmpty()) throw new IllegalStateException("Accepted event not available; retry without committing Kafka offset");
+            var dispatched=h.createQuery("SELECT dispatched_at IS NOT NULL FROM event_outbox WHERE event_id=:id AND tenant_id=:tenant FOR UPDATE")
+                .bind("id",eventId).bind("tenant",tenant).mapTo(Boolean.class).findOne();
+            if(dispatched.isEmpty()) throw new IllegalStateException("Accepted event not available; retry without committing Kafka offset");
+            if(dispatched.get()) return;
+            var value=event(h,tenant,eventId);
+            createMatchingDeliveries(h,tenant,eventId,new EventInput(value.type(),value.source(),value.payload()));
             h.createUpdate("UPDATE deliveries SET dispatch_ready=TRUE WHERE event_id=:id AND tenant_id=:tenant")
                 .bind("id",eventId).bind("tenant",tenant).execute();
-            h.createUpdate("UPDATE event_outbox SET dispatched_at=COALESCE(dispatched_at,clock_timestamp()) WHERE event_id=:id")
+            h.createUpdate("UPDATE event_outbox SET dispatched_at=clock_timestamp() WHERE event_id=:id")
                 .bind("id",eventId).execute();
         });
     }

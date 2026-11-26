@@ -60,6 +60,13 @@ public final class NotificationApplication extends Application<ServiceConfigurat
         var db = new JdbiFactory().build(environment, config.database, "postgresql");
         var reads = config.readDatabase == null ? db : new JdbiFactory().build(environment, config.readDatabase, "postgresql-replicas");
         var store = new Store(db, reads, environment.getObjectMapper(), config.kafka.enabled, config.maxQueuedEvents, config.subscriberConcurrency);
+        if(config.cache.enabled) {
+            var cacheRedis=environment.getObjectMapper().convertValue(config.redis,RedisSettings.class);
+            cacheRedis.poolSize=2;cacheRedis.timeoutMillis=200;
+            var cache=new RedisApplicationCache(new RedisRateLimiter(cacheRedis),config.cache,environment.metrics());
+            environment.lifecycle().manage(cache);
+            store.configureCache(cache,config.cache);
+        }
         KafkaPipeline pipeline=null;
         if(config.kafka.enabled) {
             pipeline=new KafkaPipeline(store,environment.getObjectMapper(),config.kafka,environment.metrics());

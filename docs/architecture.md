@@ -1,5 +1,7 @@
 # Deployed architecture and request flows
 
+**November 26 redesign:** [Current asynchronous matching, 10-minute caches, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+
 For a diagram-led presentation, start with [visual HLD](hld.md), [component LLD guide](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md). This document retains the detailed canonical request/state diagrams.
 
 This describes application revision `6474ad3b0c043677066c539f3523c075b7358af0`, verified on 24 November 2026. See [deployment evidence](submission-status.md), [requirements coverage](requirements.md) and [design decisions](design.md). Role names below are logical roles: PostgreSQL and Redis primaries can move between hosts.
@@ -14,13 +16,13 @@ flowchart LR
     AUTH --> RL[Redis shared fixed-minute tenant limit]
     RL -->|Allowance exhausted| R429[HTTP 429]
     RL -->|Redis or replication unavailable| R503[HTTP 503]
-    RL -->|Admitted write| TX[Primary transaction: identity check and subscription matching]
+    RL -->|Admitted write| TX[Primary transaction: identity and event plus outbox]
     TX --> DB[(PostgreSQL primary: events, jobs, outbox and audit)]
     TX -->|Commit before response| ACK[HTTP 202 with original or new event ID]
     DB --> O[Leased outbox publisher]
     O -->|Internal event UUID key, acks all| K[Kafka event topic: six partitions, RF3, min ISR2]
     K --> C[Three consumers in one group]
-    C -->|Activate existing jobs and commit DB before offset| DB
+    C -->|Match and create jobs, commit DB before offset| DB
     DB --> CLAIM[Fair subscription reservation and expiring delivery lease]
     CLAIM -->|Initial attempt| W[Bounded webhook worker]
     CLAIM -->|Retry requires shared tenant and subscription budget| RB[Redis retry budgets]
@@ -37,7 +39,7 @@ flowchart LR
     DB -->|Required synchronous standby plus another streaming replica| RD
 ```
 
-Matching happens **before** Kafka publication, inside ingestion's database transaction. The transaction saves the event, one job for each matching subscription and the outbox entry together. Kafka consumption activates those jobs; it does not create a second fanout. Subscription changes require no restart. Existing jobs retain their destination snapshot after a subscription is deleted.
+Matching happens **after** Kafka publication. Ingestion commits event and outbox only. The consumer locks the outbox row, matches the current subscription generation, inserts jobs and marks matching complete in one transaction. Replays skip completed matching. Subscription changes require no restart. Existing jobs retain their destination snapshot after a subscription is deleted.
 
 The tenant allowance is 6,000 authenticated requests per fixed minute across all instances, including reads and writes. Redis stores counters, not authoritative event history. There is no independent per-user quota and no business-data response cache. Administrative destination policy, identity checks, job coordination and other consistency-sensitive reads use the database primary.
 
@@ -145,7 +147,7 @@ There are exactly three compute Droplets, not dedicated machines for every compo
 | Kafka | Three brokers/controllers; six event partitions; RF3, min ISR2; idempotent producer and no unclean election | One broker loss is tolerated when remaining replicas are in sync; quorum loss delays dispatch |
 | Redis | One primary, two replicas; three Sentinels with quorum two; private TLS ports 6379/26379 | Promotion tested with existing application clients; missing safe acknowledgement fails admission closed; recent counters can be lost because replication is asynchronous |
 | Read queries | Standby-only pool, maximum four connections per application; primary/write pool maximum eight | Replica lag is visible as eventual consistency; no primary fallback when replicas are unavailable |
-| Backup | One successful snapshot per UTC day, authenticated and age-encrypted, private Spaces; current snapshot metadata checks ten tables | Total cluster loss can lose roughly a day of data or more if backups fail/expire; no continuous WAL/PITR or regional service failover |
+| Backup | One successful snapshot per UTC day, authenticated and age-encrypted, private Spaces; current snapshot metadata checks thirteen tables | Total cluster loss can lose roughly a day of data or more if backups fail/expire; no continuous WAL/PITR or regional service failover |
 
 Caddy shares public certificate storage/locks in a separate PostgreSQL database. Internal PostgreSQL, Kafka, control-plane and Redis authorities are separate; offline signing keys are not deployed. Cluster firewalls allow only approved private peers; administrator APIs stay private. Root passwords are locked and SSH password authentication is disabled; authorized SSH keys are used.
 

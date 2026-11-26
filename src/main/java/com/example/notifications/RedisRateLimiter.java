@@ -80,6 +80,9 @@ public final class RedisRateLimiter implements RequestLimiter, Managed, AutoClos
         return config.build();
     }
 
+    java.util.function.Supplier<Pipeline> cachePipelines() { return pipelines; }
+    UnifiedJedis cacheClient() { return client; }
+
     static String tenantHash(String tenant) {
         try {return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(tenant.getBytes(StandardCharsets.UTF_8)));}
         catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
