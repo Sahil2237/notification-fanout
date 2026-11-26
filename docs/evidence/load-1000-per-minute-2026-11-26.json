@@ -1,0 +1,58 @@
+{
+  "acceptance_test": {
+    "run_id": "load-1000-1de2da80-0fd0-4dba-a23c-d4625d15ae35",
+    "revision": "f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+    "endpoint": "https://174.138.121.225/v1/events",
+    "started_at": "2026-11-26T15:05:34.689910+00:00",
+    "finished_at": "2026-11-26T15:06:34.683335+00:00",
+    "target_events_per_minute": 1000,
+    "scheduled_events": 1000,
+    "submitted_requests": 1000,
+    "generator_shed": 0,
+    "http_status_counts": {
+      "202": 1000
+    },
+    "unique_returned_event_ids": 1000,
+    "duplicate_responses": 0,
+    "submission_and_response_seconds": 59.993,
+    "request_start_span_seconds": 59.94,
+    "latency_ms": {
+      "p50": 44.56,
+      "p95": 77.63,
+      "p99": 121.16,
+      "max": 272.12
+    },
+    "database": {
+      "persisted_events": 1000,
+      "distinct_producer_ids": 1000,
+      "outbox_rows": 1000,
+      "matching_completed": 1000,
+      "delivery_jobs": 0
+    },
+    "automatic_request_retries": 0,
+    "candidate_subscriptions_before_test": 0,
+    "sample_event_ids": [
+      "94b53336-a2d7-45fa-bd11-d5e9d20d93d3",
+      "3fbf93b5-cf56-4b3f-9396-37cd9ab9a150",
+      "97649531-34f7-4479-96b1-b10be852c37b"
+    ],
+    "errors": [],
+    "passed": true
+  },
+  "cache_memory_observation": {
+    "measured_at_epoch": 1795705731,
+    "cached_alias_entries": 2000,
+    "cache_structure_bytes": {
+      "data": 967485,
+      "lru": 411484,
+      "expiry": 411775,
+      "bytes": 46,
+      "clock": 46
+    },
+    "total_measured_cache_bytes": 1790836,
+    "redis_used_memory": 4403024,
+    "redis_maxmemory": 67108864,
+    "accounted_cache_bytes": 2708994,
+    "estimated_current_bytes_per_alias": 895.42
+  }
+}

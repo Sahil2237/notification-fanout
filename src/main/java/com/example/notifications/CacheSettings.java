@@ -7,7 +7,7 @@ import jakarta.validation.constraints.*;
 public class CacheSettings {
     @JsonProperty public boolean enabled = false;
     @Min(1) @Max(600) @JsonProperty public int eventTtlSeconds = 600;
-    @Min(65536) @Max(16777216) @JsonProperty public int maxBytes = 4194304;
-    @Min(10) @Max(10000) @JsonProperty public int maxEntries = 10000;
+    @Min(65536) @Max(34359738368L) @JsonProperty public long maxBytes = 33554432L;
+    @Min(10) @Max(20000000) @JsonProperty public int maxEntries = 50000;
     @Min(1) @Max(20) @JsonProperty public int subscriptionPercent = 20;
 }

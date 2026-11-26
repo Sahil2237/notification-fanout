@@ -118,7 +118,7 @@ cache:
   enabled: ${CACHE_ENABLED:-true}
   eventTtlSeconds: 600
   subscriptionPercent: 20
-  maxBytes: ${CACHE_MAX_BYTES:-4194304}
-  maxEntries: ${CACHE_MAX_ENTRIES:-10000}
+  maxBytes: ${CACHE_MAX_BYTES:-33554432}
+  maxEntries: ${CACHE_MAX_ENTRIES:-50000}
 deliveryHotRetentionHours: 24
 archiveBatchSize: 100

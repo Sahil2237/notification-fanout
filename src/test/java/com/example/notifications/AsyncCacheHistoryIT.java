@@ -31,6 +31,8 @@ class AsyncCacheHistoryIT {
         settings=new CacheSettings();settings.enabled=true;
         connection=new RedisRateLimiter(redis);cache=new RedisApplicationCache(connection,settings,new MetricRegistry());
         admin=RedisClient.create(redis.host,redis.port);
+        // Guarded disposable fixture only; never touch quota keys or unrelated Redis data.
+        for(var key:admin.keys(RedisApplicationCache.PREFIX+"*"))admin.del(key);
         store=new Store(DB,JSON,true);store.configureCache(cache,settings);
     }
     @AfterEach void close() throws Exception {cache.stop();admin.close();}
@@ -126,6 +128,33 @@ class AsyncCacheHistoryIT {
         assertTrue(admin.hlen(RedisApplicationCache.PREFIX+"data")<=10);
         assertTrue(Long.parseLong(admin.get(RedisApplicationCache.PREFIX+"bytes"))<=65536);
     }
+    @Test void identityEntriesRemainUntilExpiryWhenSubscriptionLruIsUnderPressure() {
+        settings.maxEntries=3;
+        cache.put("identity-a","event-a",600,"",Integer.MAX_VALUE);
+        cache.put("identity-b","event-b",600,"",Integer.MAX_VALUE);
+        cache.put("sub-a","rule-a",600,"rules",2);
+        cache.put("sub-b","rule-b",600,"rules",2);
+        assertEquals(List.of("event-a","event-b","","rule-b"),cache.get(List.of("identity-a","identity-b","sub-a","sub-b")));
+        cache.put("identity-c","event-c",600,"",Integer.MAX_VALUE);
+        cache.put("identity-d","event-d",600,"",Integer.MAX_VALUE);
+        assertEquals(List.of("event-a","event-b","event-c",""),cache.get(List.of("identity-a","identity-b","identity-c","identity-d")));
+    }
+    @Test void identityReadsDoNotExtendTheOriginalExpiryOrJoinLru() throws Exception {
+        var key="identity-fixed-window";cache.put(key,"original",600,"",Integer.MAX_VALUE);
+        var before=JSON.readTree(admin.hget(RedisApplicationCache.PREFIX+"data",key)).path("expires").asLong();
+        cache.get(List.of(key));cache.get(List.of(key));
+        var after=JSON.readTree(admin.hget(RedisApplicationCache.PREFIX+"data",key)).path("expires").asLong();
+        assertEquals(before,after);assertNull(admin.zscore(RedisApplicationCache.PREFIX+"lru",key));
+    }
+    @Test void legacyLruIdentityIsProtectedDuringRollingUpgrade() throws Exception {
+        settings.maxEntries=2;
+        cache.put("legacy-identity","original",600,"",Integer.MAX_VALUE);
+        admin.zadd(RedisApplicationCache.PREFIX+"lru",0,"legacy-identity");
+        cache.put("another-identity","second",600,"",Integer.MAX_VALUE);
+        cache.put("third-identity","third",600,"",Integer.MAX_VALUE);
+        assertEquals(List.of("original","second",""),cache.get(List.of("legacy-identity","another-identity","third-identity")));
+    }
+
     @Test void failedMatchingRollsBackAndCanBeRetried() {
         var sub=subscribe();var event=accept().event();
         DB.useHandle(h->h.createUpdate("UPDATE subscriptions SET filter='{}'::jsonb || '{\"payloadConditions\":\"invalid\"}'::jsonb WHERE id=:id").bind("id",sub.id()).execute());

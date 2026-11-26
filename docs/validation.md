@@ -70,3 +70,9 @@ Local validation runs in the existing Rancher Ubuntu container under /workspaces
 The 10,000/s k6 scenario is a reproducible capacity gate, not an executed or passing production benchmark. Existing tenant quota and worker bounds are not automatically raised. No claim of exhaustive testing or new whole-host chaos evidence follows from this release. Final executed results and cloud revision belong in submission-status.md.
 
 Executed release result: 27 unit + 59 integration Java tests and 42 Python tests passed locally, and the complete hosted verification/tested-release/HA-runtime pipeline passed for f0c4d33. Cloud duplicate/cache/subscription/history/public-HTTPS/HMAC results and their exact limits are recorded in [current evidence](evidence/cloud-async-cache-history-f0c4d33.json).
+
+## Paced 1,000 events/minute public test
+
+[Saved evidence](evidence/load-1000-per-minute-2026-11-26.json): f0c4d33 accepted all 1,000 unique requests in 59.993 seconds with 202, zero request retries/errors/generator drops, 1,000 persisted events/outbox rows and completed Kafka matches. No subscriptions matched and no notifications were sent. p95 acceptance was 77.63 ms and p99 121.16 ms. This is a one-minute, no-fanout observation, not a sustained or 10,000/s capacity certification.
+
+Retention follow-up local result: 27 unit plus 62 integration tests passed (89 Java tests). Three new cases protect identity TTL under subscription/cache pressure, verify non-refreshing expiry and protect legacy LRU identities during rolling upgrades. Hosted CI/deployment evidence is recorded after that revision completes.

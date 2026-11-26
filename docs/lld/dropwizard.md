@@ -81,4 +81,4 @@ No OAuth/OIDC, separate API gateway, public admin port, resource update/ETag end
 
 ## Cache lifecycle and history maintenance
 
-Optional RedisApplicationCache has a separate fair two-connection pool with 200 ms limits and one fixed 60-second maintenance task. It closes before the shared limiter during managed shutdown. Cache errors are optional misses, while quota errors remain fail-closed. Delivery recovery also archives a bounded terminal batch (default 100 per pass, after 24 hours). New local counters cache.hits/misses/errors and delivery.archived are not added to the existing bridge allowlist automatically.
+Optional RedisApplicationCache has a separate fair two-connection pool with 200 ms limits and one fixed 60-second maintenance task. It closes before the shared limiter during managed shutdown. Cache errors are optional misses, while quota errors remain fail-closed. Delivery recovery also archives a bounded terminal batch (default 100 per pass, after 24 hours). New local counters cache.hits/misses/errors/capacity_rejected and delivery.archived are not added to the existing bridge allowlist automatically.

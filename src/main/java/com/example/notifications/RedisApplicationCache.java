@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import redis.clients.jedis.UnifiedJedis;
 
-/** Explicit bounded LRU only for cache entries. Never changes Redis server eviction policy. */
+/** Ten-minute identity retention and bounded subscription-only LRU. PostgreSQL remains authoritative. */
 public final class RedisApplicationCache implements ApplicationCache, Managed {
     static final String PREFIX = "notification:cache:v2:";
     private static final List<String> KEYS = List.of(PREFIX+"data",PREFIX+"lru",PREFIX+"expiry",PREFIX+"bytes",PREFIX+"clock");
@@ -37,8 +37,11 @@ public final class RedisApplicationCache implements ApplicationCache, Managed {
             if raw then
               local entry=cjson.decode(raw)
               if entry.expires>now then
-                redis.call('ZADD',lru,redis.call('INCR',clock),ARGV[i])
-                if entry.group~='' then redis.call('ZADD','notification:cache:v2:group:'..entry.group,redis.call('GET',clock),ARGV[i]) end
+                if entry.group~='' then
+                  local seq=redis.call('INCR',clock)
+                  redis.call('ZADD',lru,seq,ARGV[i])
+                  redis.call('ZADD','notification:cache:v2:group:'..entry.group,seq,ARGV[i])
+                else redis.call('ZREM',lru,ARGV[i]) end
                 table.insert(result,entry.value)
               else remove(ARGV[i]);table.insert(result,'') end
             else table.insert(result,'') end
@@ -59,12 +62,17 @@ public final class RedisApplicationCache implements ApplicationCache, Managed {
         while tonumber(redis.call('GET',bytes) or '0')+size>maxbytes or redis.call('HLEN',data)>=maxentries do
           local oldest=redis.call('ZRANGE',lru,0,0)[1]
           if not oldest or removed>=256 then return 0 end
-          remove(oldest);removed=removed+1
+          local raw=redis.call('HGET',data,oldest)
+          if raw and cjson.decode(raw).group=='' then
+            -- Legacy entries may still appear in LRU during a rolling upgrade. Preserve their TTL.
+            redis.call('ZREM',lru,oldest)
+          else remove(oldest) end
+          removed=removed+1
         end
         local seq=redis.call('INCR',clock)
         redis.call('HSET',data,key,cjson.encode({value=value,expires=now+ttl,group=group,size=size}))
         redis.call('INCRBY',bytes,size)
-        redis.call('ZADD',lru,seq,key)
+        if group~='' then redis.call('ZADD',lru,seq,key) end
         redis.call('ZADD',expiry,now+ttl,key)
         if group~='' then
           local g='notification:cache:v2:group:'..group
@@ -94,15 +102,20 @@ public final class RedisApplicationCache implements ApplicationCache, Managed {
         }
     }
     @Override public void put(String key,String value,int ttl,String group,int cap) {
-        try {client.eval(SCRIPT,KEYS,List.of("put",key,value,Integer.toString(ttl),group,Integer.toString(cap),Integer.toString(settings.maxBytes),Integer.toString(settings.maxEntries)));}
+        try {recordWrite(client.eval(SCRIPT,KEYS,List.of("put",key,value,Integer.toString(ttl),group,Integer.toString(cap),Long.toString(settings.maxBytes),Integer.toString(settings.maxEntries))));}
         catch(RuntimeException unavailable){metrics.counter("cache.errors").inc();}
     }
     @Override public void putAll(java.util.Map<String,String> values,int ttl,String group,int cap) {
         if(values.isEmpty()) return;
         try(var pipe=pipelines.get()) {
-            for(var entry:values.entrySet()) pipe.eval(SCRIPT,KEYS,List.of("put",entry.getKey(),entry.getValue(),Integer.toString(ttl),group,Integer.toString(cap),Integer.toString(settings.maxBytes),Integer.toString(settings.maxEntries)));
+            var responses=new ArrayList<redis.clients.jedis.Response<Object>>();
+            for(var entry:values.entrySet()) responses.add(pipe.eval(SCRIPT,KEYS,List.of("put",entry.getKey(),entry.getValue(),Integer.toString(ttl),group,Integer.toString(cap),Long.toString(settings.maxBytes),Integer.toString(settings.maxEntries))));
             pipe.sync();
+            responses.forEach(response->recordWrite(response.get()));
         } catch(RuntimeException unavailable){metrics.counter("cache.errors").inc();}
+    }
+    private void recordWrite(Object result) {
+        if(((Number)result).longValue()==0) metrics.counter("cache.capacity_rejected").inc();
     }
     @Override public void cleanup() {
         try {client.eval(SCRIPT,KEYS,List.of("clean"));}
