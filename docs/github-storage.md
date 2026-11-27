@@ -7,9 +7,9 @@
 - Actions caches: 10 entries, approximately **4.33 GiB**, billed/limited separately from artifact storage. No cache deletion is part of this plan.
 - Most artifact bytes are image/runtime archives, not Markdown. Removing unique architecture/component documents would not address the artifact limit.
 
-## Proposed cleanup — awaiting explicit confirmation
+## Approved cleanup — completed 27 November 2026
 
-Permanently remove **37 superseded build artifacts**, totaling **8,222,612,851 bytes (7.66 GiB)**. Retain roughly **2.59 GiB**. This is deletion of older distinct build versions, not content deduplication, and cannot be undone through GitHub artifact recovery. The exact artifact IDs are recorded in the protected workspace `.deploy/github-artifact-cleanup-plan.json`.
+After explicit user confirmation, **37 superseded build artifacts were permanently deleted**, freeing **8,222,612,851 bytes (7.66 GiB)**. Remaining inventory: **85 artifacts, 2,783,523,116 bytes (2.59 GiB)**. Every retained artifact ID was checked against the pre-deletion inventory and protected set. This removed older distinct builds, not duplicate documents, and cannot be undone through GitHub artifact recovery. [Exact deletion record and protected runs](evidence/github-artifact-cleanup-2026-11-27.json).
 
 | Superseded artifact category | Count selected | Bytes selected, rounded |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Permanently remove **37 superseded build artifacts**, totaling **8,222,612,851 b
 | local-ha-vendor-arm64 | 2 | 0.48 GiB |
 | verification-application | 9 | 0.46 GiB |
 
-Preserve all artifacts from verification runs [45927971103](https://github.com/Sahil2237/notification-fanout/actions/runs/45927971103) and [45855313505](https://github.com/Sahil2237/notification-fanout/actions/runs/45855313505), plus the `ha-runtime` bundles from runs 45839195205 and 45375169877 for conservative infrastructure/backup recovery coverage. Preserve all small test/security/digest reports, Git history, current documentation, registry images, database backups and Droplet files. Recheck active runs and protected IDs immediately before deletion.
+All artifacts were preserved from verification runs [45927971103](https://github.com/Sahil2237/notification-fanout/actions/runs/45927971103) and [45855313505](https://github.com/Sahil2237/notification-fanout/actions/runs/45855313505), along with the `ha-runtime` bundles from runs 45839195205 and 45375169877 for conservative infrastructure/backup recovery coverage. All small test/security/digest reports, Git history, current documentation, registry images, database backups and Droplet files were preserved. Active runs and protected IDs were rechecked before deletion. No repository, production or registry files were deleted.
 
 No production database or service cleanup is implied. Removing an obsolete Actions archive does not stop an already-running container, but removes that archive as a future download source. Keep signed recovery bundles before further pruning below this conservative plan.
 

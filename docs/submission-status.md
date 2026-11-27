@@ -1,10 +1,12 @@
 # Verified deployment and submission status
 
+**Latest application deployment: 70f0df1, 27 November.** [Verification CI](https://github.com/Sahil2237/notification-fanout/actions/runs/45927971103) and [three-node deployment](https://github.com/Sahil2237/notification-fanout/actions/runs/45929375771) succeeded. Fresh checks confirm all three apps ready/undrained and direct public backend HTTPS still blocked after rolling promotion. [Post-deployment evidence](evidence/current-network-release-70f0df1.json). Documentation-only commits and artifact-retention configuration changes do not require another application rollout. Provider Cloud Firewall, SSH-source and egress follow-up remain pending.
+
 Host network policy deployed on 27 November: direct public backend 80/443 blocked on all three nodes; private proxy/health, SSH, metrics and authenticated LB API checks passed. Provider Cloud Firewall, SSH source narrowing and outbound narrowing are still outstanding. See [scope, tests and evidence](network-hardening.md).
 
 **27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
 
-## Latest validated application release: 27ecd2a (November 26)
+## Previous functional application release: 27ecd2a (November 26)
 
 The five-minute event identity TTL and 1,000 requests/second per-tenant shared Redis quota are deployed on all three existing nodes. All report readiness 200 and are undrained. A fresh synthetic public request returned 202; its identical replay returned the same event. Both cache aliases had 297 seconds remaining when inspected and neither participated in LRU. Replaying the earlier event 94b53336-a2d7-45fa-bd11-d5e9d20d93d3, older than the cache window, returned its original database identity. Events increased by exactly one on every database member; delivery counts remained unchanged.
 

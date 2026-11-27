@@ -1,0 +1,48 @@
+{
+  "verified_at_utc": "2026-11-27T02:46:28.498791+00:00",
+  "application_release": "70f0df10be4847c9ad9844fee4891804df3fc3d9",
+  "ci_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45927971103",
+  "deployment_run": "https://github.com/Sahil2237/notification-fanout/actions/runs/45929375771",
+  "nodes": [
+    {
+      "node": 1,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10,
+      "direct_public_https_blocked": true
+    },
+    {
+      "node": 2,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10,
+      "direct_public_https_blocked": true
+    },
+    {
+      "node": 3,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9",
+      "ready": 200,
+      "drained": false,
+      "events": 11141,
+      "subscriptions": 10,
+      "delivery_identities": 16,
+      "hot_deliveries": 1,
+      "historical_deliveries": 15,
+      "migration_count": 10,
+      "direct_public_https_blocked": true
+    }
+  ],
+  "provider_cloud_firewall_and_ssh_egress_followup_pending": true
+}

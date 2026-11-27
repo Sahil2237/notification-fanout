@@ -1,0 +1,248 @@
+{
+  "approved_count": 37,
+  "started_at_utc": "2026-11-27T02:47:17.361714+00:00",
+  "before_count": 122,
+  "before_bytes": 11006135967,
+  "deleted": [
+    {
+      "id": 15135355542,
+      "name": "verification-application",
+      "bytes": 54963930,
+      "run_id": 45852878983
+    },
+    {
+      "id": 15135153056,
+      "name": "ha-runtime",
+      "bytes": 579713552,
+      "run_id": 45852878983
+    },
+    {
+      "id": 15135106747,
+      "name": "droplet-release",
+      "bytes": 199748419,
+      "run_id": 45852878983
+    },
+    {
+      "id": 15133045322,
+      "name": "droplet-release",
+      "bytes": 199741618,
+      "run_id": 45847303917
+    },
+    {
+      "id": 15132816964,
+      "name": "ha-runtime",
+      "bytes": 579451668,
+      "run_id": 45847303917
+    },
+    {
+      "id": 15130439812,
+      "name": "verification-application",
+      "bytes": 54963930,
+      "run_id": 45847303917
+    },
+    {
+      "id": 15128400219,
+      "name": "droplet-release",
+      "bytes": 199744748,
+      "run_id": 45839195205
+    },
+    {
+      "id": 15127498673,
+      "name": "verification-application",
+      "bytes": 54963565,
+      "run_id": 45839195205
+    },
+    {
+      "id": 14948170792,
+      "name": "droplet-release",
+      "bytes": 199555539,
+      "run_id": 45447905686
+    },
+    {
+      "id": 14947825426,
+      "name": "verification-application",
+      "bytes": 54948491,
+      "run_id": 45447905686
+    },
+    {
+      "id": 14947277532,
+      "name": "ha-runtime",
+      "bytes": 578303106,
+      "run_id": 45447905686
+    },
+    {
+      "id": 14910788949,
+      "name": "droplet-release",
+      "bytes": 199571580,
+      "run_id": 45375169877
+    },
+    {
+      "id": 14910101136,
+      "name": "ha-runtime",
+      "bytes": 523552268,
+      "run_id": 45370272386
+    },
+    {
+      "id": 14909849190,
+      "name": "verification-application",
+      "bytes": 54948367,
+      "run_id": 45375169877
+    },
+    {
+      "id": 14908599130,
+      "name": "droplet-release",
+      "bytes": 199547348,
+      "run_id": 45370272386
+    },
+    {
+      "id": 14908374233,
+      "name": "verification-application",
+      "bytes": 54948367,
+      "run_id": 45370272386
+    },
+    {
+      "id": 14908263394,
+      "name": "droplet-release",
+      "bytes": 199552404,
+      "run_id": 45369243666
+    },
+    {
+      "id": 14907238376,
+      "name": "verification-application",
+      "bytes": 54948391,
+      "run_id": 45368570640
+    },
+    {
+      "id": 14907119532,
+      "name": "verification-application",
+      "bytes": 54948367,
+      "run_id": 45369243666
+    },
+    {
+      "id": 14905745532,
+      "name": "droplet-release",
+      "bytes": 193725287,
+      "run_id": 45361489754
+    },
+    {
+      "id": 14905345696,
+      "name": "verification-application",
+      "bytes": 49122118,
+      "run_id": 45361489754
+    },
+    {
+      "id": 14896244314,
+      "name": "ha-runtime",
+      "bytes": 523587205,
+      "run_id": 45341972631
+    },
+    {
+      "id": 14896203426,
+      "name": "droplet-release",
+      "bytes": 193720316,
+      "run_id": 45341972631
+    },
+    {
+      "id": 14894092572,
+      "name": "ha-runtime",
+      "bytes": 523593672,
+      "run_id": 45335125767
+    },
+    {
+      "id": 14893323825,
+      "name": "droplet-release",
+      "bytes": 193716837,
+      "run_id": 45335125767
+    },
+    {
+      "id": 14892882747,
+      "name": "droplet-release",
+      "bytes": 193503835,
+      "run_id": 45333306893
+    },
+    {
+      "id": 14892864055,
+      "name": "droplet-release",
+      "bytes": 193721441,
+      "run_id": 45334630284
+    },
+    {
+      "id": 14892729022,
+      "name": "droplet-release",
+      "bytes": 193749579,
+      "run_id": 45333699143
+    },
+    {
+      "id": 14892673828,
+      "name": "local-ha-vendor-arm64",
+      "bytes": 255738930,
+      "run_id": 45333701812
+    },
+    {
+      "id": 14891997244,
+      "name": "droplet-release",
+      "bytes": 193502633,
+      "run_id": 45330648491
+    },
+    {
+      "id": 14891789552,
+      "name": "droplet-release",
+      "bytes": 193511698,
+      "run_id": 45332293488
+    },
+    {
+      "id": 14891625700,
+      "name": "local-ha-vendor-arm64",
+      "bytes": 255791512,
+      "run_id": 45329197068
+    },
+    {
+      "id": 14890634551,
+      "name": "droplet-release",
+      "bytes": 193494065,
+      "run_id": 45329126507
+    },
+    {
+      "id": 14890075087,
+      "name": "droplet-release",
+      "bytes": 193509975,
+      "run_id": 45324420322
+    },
+    {
+      "id": 14889025161,
+      "name": "droplet-release",
+      "bytes": 193507491,
+      "run_id": 45322743708
+    },
+    {
+      "id": 14859222177,
+      "name": "droplet-release",
+      "bytes": 193500924,
+      "run_id": 45257513323
+    },
+    {
+      "id": 14857961762,
+      "name": "droplet-release",
+      "bytes": 193499675,
+      "run_id": 45254926902
+    }
+  ],
+  "protected_release_runs": [
+    45855313505,
+    45927971103
+  ],
+  "protected_extra_runtime_runs": [
+    45375169877,
+    45839195205
+  ],
+  "preserve_all_small_test_security_reports": true,
+  "repository_files_deleted": 0,
+  "registry_images_deleted": 0,
+  "production_files_deleted": 0,
+  "finished_at_utc": "2026-11-27T02:47:58.595630+00:00",
+  "deleted_count": 37,
+  "deleted_bytes": 8222612851,
+  "remaining_count": 85,
+  "remaining_bytes": 2783523116,
+  "remaining_protected_artifacts_verified": true
+}
