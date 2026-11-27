@@ -1,10 +1,16 @@
 # Interview demo: one event, two subscribers, verified webhooks
 
-Use this page for a fresh live demonstration. Prepare the two free webhook inboxes before the interview; perform the numbered demo steps on screen. All payloads are synthetic.
+Use this page for a fresh live demonstration, even if you already completed an earlier trial. Prepare the two free webhook inboxes before the interview; perform the numbered demo steps on screen. All payloads are synthetic.
 
 **Public links:** [process health](https://174.138.121.225/health/live) · [service readiness](https://174.138.121.225/health/ready) · [architecture](system-design.md) · [detailed troubleshooting](operations.md#health-and-diagnosis).
 
 Run every Bash block in the **same IntelliJ terminal connected to the Rancher Ubuntu container**. The public load-balancer URL uses HTTPS 443; Droplet application ports and metrics are private. This page creates new identities each time you start preparation. To retry an uncertain operation, preserve its existing files and keys instead of starting over.
+
+## Start a new demo after an earlier trial
+
+Open a **new container Bash terminal**, then repeat preparation below from the beginning. It creates a new run folder, event type, source, producer Event ID, event/subscription keys, order ID and two new webhook inboxes. Do not copy values or request files from your previous run. Prior subscriptions with a previous run-specific type will not match the new event. Existing broad subscriptions can still match; the precheck below detects them.
+
+The registration/event replays within a run intentionally reuse that run’s keys. Step 5 intentionally expects **409** for changed content with the same subscription key; that response proves protection and is not a demo failure. If a POST response is lost, keep the existing run and retry the exact request/key instead of generating fresh identities.
 
 ## Prepare before screen sharing
 
@@ -25,13 +31,13 @@ mkdir -p .deploy/manual-tests
 RUN_DIR=$(mktemp -d "$PWD/.deploy/manual-tests/interviewer.XXXXXX")
 RUN_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
 EVENT_TYPE="interview.order.created.$RUN_ID"
-SOURCE='interview-demo'
+SOURCE="interview-demo-$RUN_ID"
 PRODUCER_EVENT_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
 EVENT_KEY="interview-event-$RUN_ID"
 SUB_KEY_1="interview-sub-1-$RUN_ID"
 SUB_KEY_2="interview-sub-2-$RUN_ID"
 read -r -s -p 'Tenant API token: ' API_TOKEN
-printf '\nRun files: %s\n' "$RUN_DIR"
+printf '\nRun files: %s\nFresh run ID: %s\nEvent type: %s\nSource: %s\nOrder ID: interview-order-%s\n' "$RUN_DIR" "$RUN_ID" "$EVENT_TYPE" "$SOURCE" "$RUN_ID"
 test -n "$API_TOKEN"
 ```
 
@@ -165,7 +171,7 @@ If this check fails, stop and use an appropriately isolated demo tenant; do not 
 ## 3. Send one new structured event
 
 ```bash
-jq -n --arg producer "$PRODUCER_EVENT_ID" --arg type "$EVENT_TYPE" --arg source "$SOURCE" --arg run "$RUN_ID"   '{eventId:$producer,type:$type,source:$source,payload:{synthetic:true,testRun:$run,orderId:"interview-order-001",amount:125,customer:{tier:"gold"},region:"blr1"}}'   > "$RUN_DIR/event-request.json"
+jq -n --arg producer "$PRODUCER_EVENT_ID" --arg type "$EVENT_TYPE" --arg source "$SOURCE" --arg run "$RUN_ID"   '{eventId:$producer,type:$type,source:$source,payload:{synthetic:true,testRun:$run,orderId:("interview-order-"+$run),amount:125,customer:{tier:"gold"},region:"blr1"}}'   > "$RUN_DIR/event-request.json"
 api_request POST /v1/events "$RUN_DIR/event-request.json" "$RUN_DIR/event-response.json" "$EVENT_KEY"
 expect_status 202
 jq -e '.duplicate==false' "$RUN_DIR/event-response.json"
