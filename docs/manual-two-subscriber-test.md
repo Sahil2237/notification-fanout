@@ -1,5 +1,8 @@
 # Manual test: one event, two subscriptions, two webhook deliveries
 
+**Interviewer demo:** [Fresh guided demo with expected results and speaking notes](interviewer-demo.md).
+
+
 **Updated: 27 November 2026 (IST).** Source contracts and deployment evidence are linked below; this is a manual smoke-test guide, not a capacity or failover test.
 
 **Network access:** use the load-balancer URL below. Direct public Droplet application access is blocked; [current network hardening and remaining controls](network-hardening.md). Loopback metrics still require an authorized shell inside each Droplet.

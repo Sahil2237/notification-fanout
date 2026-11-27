@@ -1,5 +1,8 @@
 # Visual design guide
 
+**Interviewer demo:** [Fresh guided demo with expected results and speaking notes](interviewer-demo.md).
+
+
 **Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](onboarding.md).
 
 **27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.

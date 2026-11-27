@@ -1,5 +1,8 @@
 # Event Notification Fanout
 
+**Interviewer demo:** [Fresh guided demo with expected results and speaking notes](docs/interviewer-demo.md).
+
+
 **Current application: d1612d8 (27 November).** Subscription creation now supports a tenant-scoped Idempotency-Key: identical retries replay 201 and changed content returns 409. [Contract](docs/subscription-idempotency.md), [fresh two-subscriber guide](docs/manual-two-subscriber-test.md), [deployed evidence and CI storage limitation](docs/submission-status.md). All three apps are healthy. The latest automatic workflow is blocked by Actions artifact quota; this release used locally verified/scanned, signed sequential deployment. Historical CI/deployment records below describe earlier versions.
 
 
