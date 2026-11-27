@@ -1,5 +1,7 @@
 # Requirements-to-verification matrix
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Runtime release `6474ad3` passed [CI45447905686](https://github.com/Sahil2237/notification-fanout/actions/runs/45447905686) and [image publication45450924076](https://github.com/Sahil2237/notification-fanout/actions/runs/45450924076). Counts below were checked against that run's JUnit XML, not stale documentation. Documentation-only changes use diagram/link/contract checks rather than claiming a new application test/deployment run.

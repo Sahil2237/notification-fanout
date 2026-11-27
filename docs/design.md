@@ -1,5 +1,7 @@
 # System design: actual implementation and trade-offs
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](hld.md), [separate component LLDs](README.md#separate-low-level-design-documents) and [implemented concepts/metrics](concepts-and-metrics.md) provide the diagram-led companion to these decisions.
@@ -79,7 +81,7 @@ One application-container failure uses Docker restart policy on its surviving ho
 
 ## G. Security, privacy and trust boundaries
 
-The service is publicly reachable through HTTPS. Java 8080 and admin/metrics 8081 bind loopback; Caddy fronts the API. There is no dedicated API gateway, WAF or OAuth/OIDC integration. Cloud Firewall plus host UFW/VPC rules protect infrastructure; these are DigitalOcean controls, not OCI NSGs. Public22/80/443 currently accept all sources; this is not a strict load-balancer-only backend design. SSH is key-only with locked root passwords. Outgoing traffic is broadly allowed, while webhook code separately enforces approved public HTTPS origins and connection-time DNS/address checks. Restrict SSH source ranges, backend ingress and network egress as explicit hardening work; see network-security.md.
+The service is publicly reachable through HTTPS. Java 8080 and admin/metrics 8081 bind loopback; Caddy fronts the API. There is no dedicated API gateway, WAF or OAuth/OIDC integration. Cloud Firewall plus host UFW/VPC rules protect infrastructure; these are DigitalOcean controls, not OCI NSGs. Direct public backend 80/443 is blocked by host rules; only VPC sources on eth1 can reach the proxy. SSH22 remains broadly sourced, and provider firewall LB-UID-only source rules are pending. SSH is key-only with locked root passwords. Outgoing traffic is broadly allowed, while webhook code separately enforces approved public HTTPS origins and connection-time DNS/address checks. Complete SSH source restrictions, provider LB-only backend ingress and network egress controls as explicit hardening work; see network-security.md.
 
 Threat boundaries include untrusted producers, malicious destinations/DNS, cross-tenant object access, compromised credentials, unsafe release uploads and failing peers. Mitigations include credential-derived tenant predicates, independent admin credentials, runtime DML/migration-owner separation, HMAC/timestamps, TLS identity checks, separate internal authorities, private cluster ACLs and signed-image promotion. Application containers run with constrained resources/permissions. Offline authority keys remain off cloud hosts; internal certificates require operator renewal before 90 days. Secrets remain in protected configuration and are excluded from Git/logs/metrics labels. Root operators and signing/repository access remain trusted.
 
@@ -112,7 +114,7 @@ These are planning assumptions, not measured supported throughput:10 events/s av
 |10 x86,400 =864,000 events/day; x1,024 bytes =0.885 GB raw event payload/day | Jobs, JSON envelopes, indexes, WAL, three DB copies and backups add substantially;80 GB host disks are shared with Kafka |
 |864,000 x3 =2,592,000 jobs/day | At one attempt/job the same number of attempt rows; a stress case of three attempts/job creates7,776,000/day and90 attempts/s average, above the illustrative current worker capacity |
 | Payload-only bandwidth:10 KiB/s ingest,30 KiB/s webhook average;100/300 KiB/s peak | Excludes HTTP/TLS/envelope overhead, retries and database/Kafka replication; each Kafka record has two additional replica copies |
-|6,000 requests/minute =100 requests/s tenant average within a window | Reads also spend this allowance; a boundary burst is possible. Admission limit is not an end-to-end throughput promise |
+|1,000 requests/second per tenant in a fixed one-second window | Reads also spend this allowance; a boundary burst is possible. Admission limit is not an end-to-end throughput promise |
 |Six partitions and three consumers:two partitions/consumer | At most six active consumers in that group without more partitions; delivery workers scale separately |
 
 The historical10,000-event cloud probe offered50/s with no matching subscriptions. The Kafka10,000-record single-type test checks partition distribution. Neither establishes a300 webhook/s fanout SLO or10,000 events/s capacity. Measure payload size, subscriptions, matching ratio, receiver latency, retries, duration, backlog growth and recovery before making a workload commitment. Add headroom from those measurements, not from an untested sizing formula alone.

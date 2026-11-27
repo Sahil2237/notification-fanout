@@ -1,5 +1,9 @@
 # IntelliJ with Rancher Desktop
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
+**Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](onboarding.md).
+
 The requested setup is IntelliJ as the editor/test interface, with Java/Maven/PostgreSQL running in Rancher-managed containers. Source remains /workspaces/notification-fanout, persisted in notification-workspaces. Do not open a host copy in the PostgreSQL repository.
 
 Installed host IntelliJ Ultimate 2024.1.4 predates Java 25 language support. A verified IntelliJ 2025.3 backend has been downloaded, checksum-verified and started under /workspaces/.tools/idea without replacing the host IDE. JetBrains Gateway can download a matching client for that backend. The matching client is connected, the user completed activation, and the saved Maven Verify configuration was run through IntelliJ. Its UI showed BUILD SUCCESS, with 7 unit and 17 integration tests passing inside Rancher on Java 25. No trial or license terms were accepted by the agent.

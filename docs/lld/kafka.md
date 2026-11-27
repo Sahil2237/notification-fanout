@@ -1,5 +1,7 @@
 # Kafka low-level design
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](../network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [PostgreSQL outbox](postgresql.md) | [Notification workers](notification-app.md). Real self-managed Kafka 4.3.2 runs as three broker/controller members, one per existing Droplet. Managed Kafka was explicitly deferred. The application is f0c4d33; broker infrastructure remains separately versioned.

@@ -1,5 +1,7 @@
 # Notification application low-level design
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](../network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [Design guide](../README.md) | [Concepts/metrics](../concepts-and-metrics.md). This is business logic inside the [Dropwizard JVM](dropwizard.md), deployed three times. Source reference f0c4d33. No separate notification microservice is implied for each internal class.
@@ -87,7 +89,7 @@ Failed permanent policy/HTTP outcomes terminate early. Transient/network failure
 
 ## Interfaces, bounds and security
 
-Public routes and examples are authoritative in [API](../api.md). Body 256 KiB, type/source 128 characters, up to 20 equality conditions, request quota 6,000/tenant/minute, tenant/subscription retry budgets 300/30 per minute. Signed callback body has schemaVersion 1, stable deliveryId, subscriptionId and canonical event. Network calls use neither DB connections nor claim-row locks; global HTTP concurrency is at most 12 with default three apps/four workers.
+Public routes and examples are authoritative in [API](../api.md). Body 256 KiB, type/source 128 characters, up to 20 equality conditions, request quota 1,000/tenant/second, tenant/subscription retry budgets 300/30 per minute. Signed callback body has schemaVersion 1, stable deliveryId, subscriptionId and canonical event. Network calls use neither DB connections nor claim-row locks; global HTTP concurrency is at most 12 with default three apps/four workers.
 
 Tenant predicates and database foreign keys/unique constraints protect ownership/job identity. Administrative destination approval is separate and public admin paths are blocked. Static credentials/configured user/compartment are not an end-user IAM system. Public demo receivers are for synthetic data. No complete active-data at-rest encryption has been established.
 

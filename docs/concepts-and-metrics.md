@@ -1,5 +1,7 @@
 # Implemented system-design concepts and metrics catalogue
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](hld.md) | [Component LLDs](README.md#separate-low-level-design-documents) | [Metrics operations](metrics.md). This inventory is tied to the f0c4d33 source contract and later read-only LB settings, not a claim that all possible observability is deployed. Local declared instrumentation, exporter allowlist, provider-native telemetry and proposed/missing signals are explicitly different categories.
@@ -29,7 +31,7 @@ flowchart TB
 | Asynchronous fanout |Kafka consumers create jobs after acceptance; HTTP outside DB transaction |KafkaIT journey and audit/receiver capture; matching is asynchronous |
 | Idempotency |Explicit key or generated content/identity key plus producer ID constraints |events.duplicates, same original event, 409 on conflict; POST subscription lacks this contract |
 | Deduplication |Unique event/subscription job and idempotent Kafka activation |Database constraints/replay tests; external receiver must deduplicate Delivery ID |
-| Shared request rate limit |Redis atomic fixed-minute 6,000/tenant across all apps |http.rate.limited and shared cloud fixture; no independent per-user quota or strict failover accounting |
+| Shared request rate limit |Redis atomic fixed-second 1,000/tenant across all apps |http.rate.limited and shared cloud fixture; no independent per-user quota or strict failover accounting |
 | Bulkheads and fairness |Four worker loops/app, one live claim/subscription, least-recently-claimed reservation |Reservation/concurrency tests and pending age; not endpoint-wide or weighted fairness |
 | Backpressure and bounded execution |HTTP 32 active/128 waiting, finite pools/deadlines, persistent DB queue and backlog rejection |admission metrics and 503 paths; not every library internal queue is hard bounded |
 | Retry budgets/backoff |Tenant 300/subscription 30 per minute, persistent jitter, six total transient attempts |retry-budget deferred, attempt audit and tests; permanent failures stop early |
@@ -47,7 +49,7 @@ flowchart TB
 | CI/CD and safe release |Real-service tests, scans, signed artifacts, portable image verification, drain/promote |Version-specific CI and runtime evidence; app rollback must retain contracts and schema is not reversed |
 | Configuration/least privilege |Protected secrets, separate DB/Redis/control identities, bounded config and private ports |Configuration/role/ACL/gateway tests; active-data at-rest encryption not established |
 
-General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover remain absent. Committed-identity and subscription caches are now distinct implemented caches; see the redesign contract. No alarms/tickets were requested. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
+General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover remain absent. Committed-identity and subscription caches are now distinct implemented caches; see the redesign contract. No alarms/tickets were requested. Host VPC/interface ingress blocks direct public web traffic; provider LB-UID-only rules remain pending. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
 
 ## How observations leave each component
 
@@ -62,7 +64,7 @@ flowchart LR
     DATA[PG, Kafka, Redis and etcd internal signals] --> CLI[Operator inspection, not a complete installed exporter suite]
 ```
 
-The independent bridge has no database/bearer/Kafka/Redis credentials; it scrapes only loopback metrics. Its deployed JAR is cf92a03 while the app is 6474ad3; the allowlist is the verified shared contract. In-process telemetry is disabled to avoid double export. An application metric missing before its first code path runs is not necessarily a deployment failure; some counters are created lazily. Failed dependency gauge collection can omit a sample. A bridge/export failure does not govern event acceptance.
+The independent bridge has no database/bearer/Kafka/Redis credentials; it scrapes only loopback metrics. Its deployed JAR is cf92a03 while application revisions are tracked separately in submission-status.md; the allowlist is the verified shared contract. In-process telemetry is disabled to avoid double export. An application metric missing before its first code path runs is not necessarily a deployment failure; some counters are created lazily. Failed dependency gauge collection can omit a sample. A bridge/export failure does not govern event acceptance.
 
 ## Exact explicit application/export instruments
 

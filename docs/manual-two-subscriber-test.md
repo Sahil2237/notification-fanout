@@ -17,6 +17,20 @@ This is a repeatable smoke test for the deployed application at **https://174.13
 
 The examples use synthetic data and two distinct Webhook.site inboxes. Both subscriptions belong to one authenticated tenant; they are not two new tenant accounts. The tenant is determined by the bearer token. Keep your token and inbox IDs private; do not commit run output. Only the two subscription POSTs and the single event POST create application resources. Subscription POST is not idempotent: do not rerun it blindly after a lost response; inspect the subscription list first.
 
+## Where to run each check after network hardening
+
+| Your task | Where to execute it | Address to use |
+| --- | --- | --- |
+| Open process/service health | Browser on your computer | The two clickable load-balancer URLs above |
+| Register subscriptions, send an event, query delivery audit | Local Bash in the Rancher development container | `https://174.138.121.225/v1/...` with your tenant bearer token |
+| Inspect a webhook notification | Webhook.site viewer or its history API | Viewer/history address, not the receiving URL |
+| Inspect Java health, admin health or metrics on a specific instance | Authorized console/shell inside that Droplet | `127.0.0.1:8080` / `127.0.0.1:8081` |
+| Check direct public backend access | External client | Expected to fail on Droplet 80/443; use the LB for API traffic |
+
+[Short onboarding page](onboarding.md) | [Host policy, verification and outstanding provider/SSH/egress controls](network-hardening.md).
+
+Do not replace the load-balancer IP with a Droplet IP in the API commands. Direct-backend blocking is intentional. The host firewall permits private VPC/interface traffic; a provider LB-identity-only rule is still pending. SSH access remains key-only with broad source scope, so this is not a claim that all host ports are private. Preserve your existing operator access and never use the restricted CI identity as a general shell.
+
 ## 1. Prepare the local terminal
 
 Use the IntelliJ terminal in the Rancher Ubuntu development container. Keep development/test files under `/workspaces`; do not use the host Desktop or Downloads. The terminal needs Bash, curl, jq and Python 3.
@@ -368,6 +382,7 @@ Expected: **204** for each. Inbox expiry was requested as 24 hours; provider pol
 
 | Symptom | Check |
 | --- | --- |
+| Direct Droplet HTTP/HTTPS timeout | Expected after hardening; use the public LB URL. Do not disable UFW or TLS checks |
 | 401 | Missing/wrong tenant bearer token; a browser alone does not attach it |
 | 403 or destination-policy error on registration | HTTPS hostname/allowlist/DNS policy; use the approved receiving URL, not the viewer URL |
 | 400 / 422 | Exact JSON field names, JSON Pointer path, `eq`, type/source and payload values |

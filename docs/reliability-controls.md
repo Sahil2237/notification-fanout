@@ -1,12 +1,14 @@
 # Shared limits, identity, isolation and replica reads
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-This contract is deployed in application revision 6474ad3 on all three existing Droplets. Exact rollout and verification evidence is in [submission-status.md](submission-status.md); source capability and cloud evidence remain distinct.
+This contract describes the current source controls; application and host network deployment revisions are recorded separately. Exact rollout and verification evidence is in [submission-status.md](submission-status.md); source capability and cloud evidence remain distinct.
 
 ## Fixed-window shared request limit
 
-Every authenticated API instance runs one atomic Redis Lua operation before any event transaction or Kafka publishing. Redis TIME chooses a fixed minute and the operation increments a tenant counter only while under its allowance. Both authenticated reads and writes count; invalid credentials and health probes do not. Redis failures return503 rather than falling back to local or PostgreSQL counters. Exhausted quotas return429 with Retry-After. The deployed allowance is 6,000 authenticated requests per tenant per fixed minute across all three instances. No independent per-user quota is implemented. Keys contain a tenant hash, not a business payload.
+Every authenticated API instance runs one atomic Redis Lua operation before any event transaction or Kafka publishing. Redis TIME chooses a fixed second for API admission and the operation increments a tenant counter only while under its allowance. Both authenticated reads and writes count; invalid credentials and health probes do not. Redis failures return503 rather than falling back to local or PostgreSQL counters. Exhausted quotas return429 with Retry-After. The deployed allowance is 1,000 authenticated requests per tenant per fixed second across all three instances. No independent per-user quota is implemented. Keys contain a tenant hash, not a business payload.
 
 The application supports a TLS-verified three-Sentinel deployment with a primary and two replicas on the existing nodes, bounded fair connection pools and at least one replica acknowledgement via WAIT on the same connection as the write. **The Redis HA infrastructure and application controls are deployed.** The coordinated cutover completed; cloud tests verified shared quotas, automatic promotion, existing-client recovery and replica rejoin. Normal verified rolling application deployment is enabled again. Redis replication is asynchronous: WAIT reduces counter loss but is not a linearizable quota guarantee across failover. Quota overshoot after uncertain acknowledgements or promotion is possible. Durable events and idempotency remain in synchronous PostgreSQL. Fixed windows also permit two windows' allowance around a minute boundary.
 

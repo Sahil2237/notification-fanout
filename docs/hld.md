@@ -26,7 +26,9 @@ Contract: accept type/source/arbitrary JSON durably, match subscriptions, delive
 ```mermaid
 flowchart TB
     I[Internet client] --> LB[Managed regional load balancer]
-    LB --> C[Caddy TLS proxy]
+    LB -->|Private VPC| FW[Host firewall: VPC ingress on eth1]
+    FW --> C[Caddy TLS proxy]
+    DIRECT[Direct public backend access] -.->|Blocked| FW
     subgraph JVM[One Java container: Notification app running on Dropwizard]
         API[Authentication, validation and REST]
         O[Outbox publisher]
@@ -190,7 +192,7 @@ flowchart LR
     BRIDGE --> DO[Insights export attempts: last observed provider404]
 ```
 
-The control-plane arrow represents Patroni coordination and role management, not etcd replicating PostgreSQL data. Kafka and Redis use their own independent mechanisms. Public tenant endpoints require a token, but they are not private-only endpoints. Root SSH is key-only; cloud/UFW still allow public 22/80/443 and broad egress. No dedicated API gateway/WAF/OIDC is deployed. Webhook allowlisting and connection-time DNS checks mitigate SSRF in application code, not a restrictive network egress policy. Active-data disk/TDE/field encryption has not been established; do not claim complete encryption at rest. Backups are encrypted, while local proxy-to-Java traffic is loopback HTTP.
+The control-plane arrow represents Patroni coordination and role management, not etcd replicating PostgreSQL data. Kafka and Redis use their own independent mechanisms. Public tenant endpoints require a token, but they are not private-only endpoints. Root SSH is key-only; host UFW blocks public backend 80/443 while SSH 22 remains broadly sourced and egress remains broadly allowed. Provider LB-UID-only rules are pending. No dedicated API gateway/WAF/OIDC is deployed. Webhook allowlisting and connection-time DNS checks mitigate SSRF in application code, not a restrictive network egress policy. Active-data disk/TDE/field encryption has not been established; do not claim complete encryption at rest. Backups are encrypted, while local proxy-to-Java traffic is loopback HTTP.
 
 Local/custom application instrumentation and native LB metrics are different paths. Metrics Explorer visibility for notification.* remains unverified after provider 404; LB native health signals are provider-supported but current samples were not verified. No alarms/tickets are configured by request. See [the complete concepts/metrics catalogue](concepts-and-metrics.md).
 
@@ -198,7 +200,7 @@ Local/custom application instrumentation and native LB metrics are different pat
 
 | Control | Implemented value | What it does not prove |
 | --- | --- | --- |
-| Tenant window |6,000 authenticated requests/minute shared across apps | No separate user quota or strict no-overshoot accounting through Redis failover |
+| Tenant window |1,000 authenticated requests/second/tenant shared across apps | No separate user quota or strict no-overshoot accounting through Redis failover |
 | HTTP admission/app |32 active, 128 waiting, 1 second wait; Jetty 8-64 threads | Not a full bound on every library-internal queue |
 | JDBC/app |8 write plus 4 standby-read maximum;3 second pool wait | Not 36 connections per DB: app totals are 24 write plus 12 read across cluster; other clients need headroom |
 | PostgreSQL |100 connections/server, remote_apply and required sync standby | No regional RPO 0 or infinite connection capacity |

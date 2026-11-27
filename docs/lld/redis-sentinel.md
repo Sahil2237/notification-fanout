@@ -1,5 +1,7 @@
 # Redis and Sentinel low-level design
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](../network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [Controls contract](../reliability-controls.md) | [Redis operations](../../deploy/ha/redis.md). This is one Redis primary/two replicas plus three Sentinel processes on the existing hosts, not sharded Redis Cluster and not a general application-response cache. Source/runtime f0c4d33.
@@ -8,7 +10,7 @@
 
 | ID | Implemented requirement | Acceptance check |
 | --- | --- | --- |
-| R-01 | Enforce one tenant limit before event persistence across all apps | Atomic Redis TIME minute script, 6,000 requests/tenant/minute, read/write requests both count |
+| R-01 | Enforce one tenant limit before event persistence across all apps | Atomic Redis TIME second script, 1,000 requests/tenant/second, read/write requests both count |
 | R-02 | Fail admission closed without safe Redis service | No local/SQL fallback; allowance exhaustion 429, Redis/acknowledgement failure 503 |
 | R-03 | Atomically apply tenant and subscription retry budgets | Both counters consumed or neither;300/tenant/minute and 30/subscription/minute defaults |
 | R-04 | Follow an elected primary without app restart | Three Sentinel endpoints, quorum 2, verified TLS and separate discovery credentials |
@@ -32,12 +34,12 @@ flowchart TB
 
 Redis/Sentinel do not use etcd or Kafka's controllers. Primaries can move. The application receives only limiter/discovery credentials and public Redis CA, not Redis admin/control/replication/peer credentials or TLS signing keys. The default data/Sentinel users are disabled. Data/control, replication, Sentinel peer administration and discovery roles are separate.
 
-## Atomic fixed-minute reservation
+## Atomic fixed-window reservation
 
 ```mermaid
 flowchart LR
     AUTH[Authenticated tenant] --> KEY[Hash tenant into request key]
-    KEY --> TIME[Use Redis TIME to select minute]
+    KEY --> TIME[Use Redis TIME to select API second]
     TIME --> SCRIPT[Lua checks counters and current window atomically]
     SCRIPT -->|Already at cap| DENY[Return429]
     SCRIPT -->|Below cap| INC[Increment and expire at window end]
@@ -46,7 +48,7 @@ flowchart LR
     WAIT -->|Unavailable or insufficient| CLOSE[503 without bypass]
 ```
 
-Request key is notification:limits:v 1:{tenantSHA 256}:requests. Retry keys share the tenant hash tag and include tenant/subscription identities. One retry script checks both budgets before either increments. Keys hold counts/window numbers, not event payloads or idempotency records. Health/invalid credentials do not spend tenant quota; no independent end-user quota exists. On retry-budget refusal/outage the worker defers its reservation without starting another HTTP attempt.
+API request key is `notification:limits:v1:{tenantSHA256}:requests:second`; the legacy minute key uses `:requests`. Retry budgets still use minute windows. Retry keys share the tenant hash tag and include tenant/subscription identities. One retry script checks both budgets before either increments. Keys hold counts/window numbers, not event payloads or idempotency records. Health/invalid credentials do not spend tenant quota; no independent end-user quota exists. On retry-budget refusal/outage the worker defers its reservation without starting another HTTP attempt.
 
 Redis TIME avoids separate instance clocks. The script does not reset a counter into an earlier observed window. Fixed minute boundaries still allow a burst spanning two windows. Redis replication is asynchronous: WAIT/min-replica guards reduce uncertainty but do not guarantee a linearizable quota or strict zero overshoot after promotion. This store is load/abuse protection, not financial entitlement accounting. PostgreSQL retains accepted events and idempotency.
 

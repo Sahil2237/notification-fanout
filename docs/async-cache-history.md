@@ -1,5 +1,7 @@
 # Asynchronous matching, bounded caches and delivery history
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
 This is the current source implementation contract for the November 26 redesign. The original redesign was deployed as f0c4d33; the five-minute expiry and shared per-second quota follow-up is validated on all three nodes as release 27ecd2a. [Submission status](submission-status.md) identifies the revision actually running and the checks performed. A target of **10,000 events/second is not a measured capacity claim** for the existing three 4-GB Droplets. No additional paid infrastructure is introduced.
@@ -129,7 +131,7 @@ The delivery identity trigger reserves the unique event/subscription pair before
 
 ## Capacity, validation and release
 
-Ten thousand events/second is 864 million events/day. With ten matches it is 100,000 delivery jobs/second before retries. Existing 12 delivery workers, one active attempt/subscription, 6,000 requests/tenant/minute and small shared hosts do not establish this capacity. Those safety limits are retained rather than raised blindly. PostgreSQL acceptance, matching writes, Kafka partitions, webhook workers/receivers, storage and backup duration all require sizing. Sharding is not implemented.
+Ten thousand events/second is 864 million events/day. With ten matches it is 100,000 delivery jobs/second before retries. The 12 delivery workers, one active attempt/subscription and small shared hosts do not establish this capacity. The current quota is 1,000 requests/tenant/second; changing that quota does not prove processing capacity. PostgreSQL acceptance, matching writes, Kafka partitions, webhook workers/receivers, storage and backup duration all require sizing. Sharding is not implemented.
 
 Bounded publisher batches allow up to 32 records to be outstanding per loop, using one leased claim query and batched acknowledgement updates. Kafka offset commits cover only a contiguous successfully processed prefix per partition. Replays remain safe. Delivery insertion uses JDBC batching. These reduce round trips without changing the correctness contract; they are not benchmark results.
 

@@ -1,5 +1,7 @@
 # Capacity target: five tenants at 1,000 events/second each
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 The latest requested target is **5,000 events/second aggregate**, with a **300-second rolling duplicate-identity cache**. That is **1.5 million distinct events**, or **3 million aliases** if each event supplies both a producer event ID and an idempotency key. Expiry does not extend on duplicate reads. PostgreSQL remains authoritative after expiry or a cache miss.
 
 The existing single-tenant operator profile below is **not sufficient for five simultaneous tenants and must not be applied as that capacity**. These figures are sizing targets, not load-test evidence. The existing 32-MiB / 50,000-alias admission budget cannot retain the entire requested working set. Cache saturation falls back to PostgreSQL. No paid infrastructure resize has been performed.

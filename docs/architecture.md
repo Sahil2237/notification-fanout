@@ -13,9 +13,12 @@ This describes application revision `f0c4d332cbe5dbeaa70142edc31f563c576c7b3c`, 
 ```mermaid
 flowchart LR
     P[Producer or subscriber] --> LB[DigitalOcean load balancer]
-    LB --> A[One of three Dropwizard instances]
+    LB -->|Private VPC| FW[Host UFW: eth1 and VPC sources only]
+    FW --> CP[Caddy TLS proxy]
+    CP -->|Loopback 8080| A[One of three Dropwizard instances]
+    DIRECT[Direct public backend HTTP or HTTPS] -.->|Blocked| FW
     A --> AUTH[Authenticate tenant and validate request]
-    AUTH --> RL[Redis shared fixed-minute tenant limit]
+    AUTH --> RL[Redis shared fixed-second tenant limit]
     RL -->|Allowance exhausted| R429[HTTP 429]
     RL -->|Redis or replication unavailable| R503[HTTP 503]
     RL -->|Admitted write| TX[Primary transaction: identity and event plus outbox]
@@ -43,7 +46,7 @@ flowchart LR
 
 Matching happens **after** Kafka publication. Ingestion commits event and outbox only. The consumer locks the outbox row, matches the current subscription generation, inserts jobs and marks matching complete in one transaction. Replays skip completed matching. Subscription changes require no restart. Existing jobs retain their destination snapshot after a subscription is deleted.
 
-The tenant allowance is 6,000 authenticated requests per fixed minute across all instances, including reads and writes. Redis stores counters, not authoritative event history. There is no independent per-user quota and no business-data response cache. Administrative destination policy, identity checks, job coordination and other consistency-sensitive reads use the database primary.
+The tenant allowance is 1,000 authenticated requests per fixed second across all instances, including reads and writes. Redis stores counters, not authoritative event history. There is no independent per-user quota and no business-data response cache. Administrative destination policy, identity checks, job coordination and other consistency-sensitive reads use the database primary.
 
 ## Critical request sequence
 
@@ -65,7 +68,7 @@ sequenceDiagram
     else Counter service or acknowledgement unavailable
         A-->>P: 503
     else Admitted
-        A->>D: Transaction: deduplicate, match subscriptions, save event/jobs/outbox
+        A->>D: Transaction: deduplicate and save event plus outbox
         D-->>A: Commit with synchronous remote_apply
         A-->>P: 202, event ID and duplicate flag
         O->>D: Claim unpublished or undispatched outbox work
@@ -73,7 +76,7 @@ sequenceDiagram
         K-->>O: Acknowledge
         O->>D: Save publication result
         K->>C: Event envelope, possibly repeated
-        C->>D: Idempotent job activation and commit
+        C->>D: Idempotent matching, delivery-job creation and commit
         C->>K: Commit offset after database commit
         W->>D: Reserve subscription slot and lease a due job and commit
         Note over W,D: Retry budget and attempt-start checks precede HTTP and network work holds no DB transaction

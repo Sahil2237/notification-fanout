@@ -1,5 +1,7 @@
 # REST API contract
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 All /v1 requests require `Authorization: Bearer <token>`. Tenant comes from that token, never a supplied tenant ID. Responses include X-Request-ID and Cache-Control:no-store. Optional X-Request-ID accepts 1..64 letters/digits/period/underscore/hyphen. UUID path parameters; JSON Content-Type for bodies. No version negotiation: /v1 and webhook schemaVersion=1 are explicit.
@@ -34,7 +36,7 @@ Delivery: id, eventId, subscriptionId, status (pending/delivered/failed), attemp
 
 Page: `{ "items": [], "limit":20, "offset":0, "hasMore":false }`. limit 1..100, offset 0..100000. Stable ordering by creation time/ID; concurrent inserts/deletes mean offset pages are not a snapshot.
 
-Errors: malformed JSON/business validation 400; bean validation 422; unsupported media type 415; authentication 401 (WWW-Authenticate:Bearer); foreign/missing resource 404; conflicting idempotency/subscription cap 409; oversized 413; shared Redis tenant limit 429 (Retry-After:60); persistence, replica-read or shared Redis unavailable 503; unexpected server failure 500. Application errors have code/message/requestId; Dropwizard's built-in parsing/bean-validation errors can use its standard error envelope. Every matched response still receives the correlation header. Sensitive internal exceptions are not returned.
+Errors: malformed JSON/business validation 400; bean validation 422; unsupported media type 415; authentication 401 (WWW-Authenticate:Bearer); foreign/missing resource 404; conflicting idempotency/subscription cap 409; oversized 413; shared Redis tenant limit 429 (Retry-After:1 for the deployed fixed-second quota; legacy minute configurations use 60); persistence, replica-read or shared Redis unavailable 503; unexpected server failure 500. Application errors have code/message/requestId; Dropwizard's built-in parsing/bean-validation errors can use its standard error envelope. Every matched response still receives the correlation header. Sensitive internal exceptions are not returned.
 
 Webhook POST body:
 ```json
@@ -63,7 +65,7 @@ Event requests also accept optional producer `eventId` (UUID). Missing Idempoten
 
 Only event ingestion has the explicit/generated Idempotency-Key contract. Repeating POST /v1/subscriptions can create another subscription for the same URL; distinct registrations intentionally produce distinct delivery jobs. Origin approval upserts policy state but has no general key-based response-replay contract. DELETE subscription is repeatable with 204. No PUT/PATCH, ETag or If-Match update contract is implemented.
 
-Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Current public Droplet ingress and broad outgoing rules are documented in [network-security.md](network-security.md), including the lack of load-balancer-only backend ingress.
+Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Direct public Droplet HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only restrictions, SSH-source narrowing and outbound narrowing remain pending; see [network hardening](network-hardening.md).
 
 ## Matching and history semantics after redesign
 

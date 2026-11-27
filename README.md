@@ -1,5 +1,7 @@
 # Event Notification Fanout
 
+**Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](docs/onboarding.md).
+
 **27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](docs/network-hardening.md). Earlier network observations below are historical where superseded.
 
 [Hands-on test: one event → two subscribers → webhook verification](docs/manual-two-subscriber-test.md) — copy-and-paste REST requests, health checks, delivery audit and private metrics access.
@@ -14,9 +16,9 @@ The deployed application is **f0c4d33** on three existing 4-GB Ubuntu 24.04 Drop
 
 **Live API:** `https://174.138.121.225`. The November 26 coordinated cutover preserved the original 10,138 events, five subscription records and 15 delivery identities before probes. Cloud checks confirmed cross-instance duplicate responses, 409 conflicts, database deduplication after five-minute cache expiry, versioned subscription-cache changes, terminal-history lookup with attempts, replica reads and one signed external webhook capture with HTTP 204. All three apps are ready, public HTTPS is serving, daily backup timers and normal deployment are restored.
 
-[CI passed](https://github.com/Sahil2237/notification-fanout/actions/runs/45839195205): 86 Java tests, 42 Python tests, runtime privileges/rollback/restore checks, real PostgreSQL/Redis HA drills and fixable HIGH/CRITICAL image gates. The 10,000 events/second capacity target is **not benchmark-certified**, and the existing 6,000 requests/tenant/minute quota and 12 delivery workers remain. Event identities use a 600-second TTL without early LRU eviction; insufficient cache capacity falls back to PostgreSQL; PostgreSQL identity remains authoritative. Earlier whole-Droplet and actual nine-table Spaces restore evidence remains historical; no new thirteen-table actual Spaces restore is claimed.
+[CI passed](https://github.com/Sahil2237/notification-fanout/actions/runs/45839195205): 86 Java tests, 42 Python tests, runtime privileges/rollback/restore checks, real PostgreSQL/Redis HA drills and fixable HIGH/CRITICAL image gates. The current target is five tenants at 1,000 requests/second each; sustained 5,000/second is **not benchmark-certified**. The shared quota is 1,000 authenticated requests/tenant/second, with 12 delivery workers. Event identities use a 300-second TTL without early LRU eviction; insufficient cache capacity falls back to PostgreSQL; PostgreSQL identity remains authoritative. Earlier whole-Droplet and actual nine-table Spaces restore evidence remains historical; no new thirteen-table actual Spaces restore is claimed.
 
-**Important limits:** no managed queue, per-source ordering, replay API, per-user quota, horizontal autoscaler or general API-response cache. Targeted identity/subscription caches are implemented. POST subscription is not key-idempotent; no PUT/PATCH/ETag contract exists. Metrics emission is installed but DigitalOcean Explorer visibility remains unverified after provider 404. No alarms/tickets were requested. Public backend/SSH ingress and broad egress remain documented hardening gaps. Load distribution is provider-managed (the legacy algorithm selector is deprecated); live checks use HTTP 9080 /health/ready every 5 s, timeout 3 s, thresholds 2 failures/2 successes, and sticky sessions off. [Verified LB settings](docs/network-security.md#load-balancing-and-gateway-boundary).
+**Important limits:** no managed queue, per-source ordering, replay API, per-user quota, horizontal autoscaler or general API-response cache. Targeted identity/subscription caches are implemented. POST subscription is not key-idempotent; no PUT/PATCH/ETag contract exists. Metrics emission is installed but DigitalOcean Explorer visibility remains unverified after provider 404. No alarms/tickets were requested. Direct public backend HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only ingress, SSH source restrictions and broad egress remain documented hardening gaps. Load distribution is provider-managed (the legacy algorithm selector is deprecated); live checks use HTTP 9080 /health/ready every 5 s, timeout 3 s, thresholds 2 failures/2 successes, and sticky sessions off. [Verified LB settings](docs/network-security.md#load-balancing-and-gateway-boundary).
 
 ## Diagram-led design documents
 
@@ -43,7 +45,7 @@ For a packaged local run: `docker compose up -d db redis kafka kafka-init`, `doc
 
 ## REST usage
 
-Tenant `/v1` endpoints require a tenant bearer token; the separate administrator endpoints require the administrator token. The current cloud tenant is `service`; authentication tokens and signing master stay in each node's root-only `/opt/notification-fanout/ha/secrets.json`. The deployed REST base is `https://174.138.121.225`, fronted by Caddy with a publicly trusted certificate; the API/admin ports are not published publicly. An SSH tunnel remains available; see [access instructions](deploy/droplet/README.md).
+Tenant `/v1` endpoints require a tenant bearer token; the separate administrator endpoints require the administrator token. The current cloud tenant is `service`; authentication tokens and signing master stay in each node's root-only `/opt/notification-fanout/ha/secrets.json`. The deployed REST base is `https://174.138.121.225`, fronted by Caddy with a publicly trusted certificate; the API/admin ports are not published publicly. For cloud access use the [current onboarding guide](docs/onboarding.md). Private administration and metrics require an entitled operator shell; the restricted CI account is not a general shell or port-forwarding account.
 
 Create a subscription **before** publishing its events:
 
@@ -74,7 +76,7 @@ Omitted type/source/conditions mean no restriction at that level; supplied condi
 
 ### Approve webhook origins without restart
 
-An independent `ADMIN_TOKEN` controls `GET/POST/DELETE /v1/admin/webhook-origins`. Tenant tokens cannot call these endpoints; the administrator token cannot ingest tenant events. Public Caddy routes reject administrator endpoints, so operators use the private SSH tunnel.
+An independent `ADMIN_TOKEN` controls `GET/POST/DELETE /v1/admin/webhook-origins`. Tenant tokens cannot call these endpoints; the administrator token cannot ingest tenant events. Public Caddy routes reject administrator endpoints, so operators use an authorized shell on the Droplet to call loopback 8080 with the separate admin credential.
 
 ```bash
 curl -fsS -X POST "$BASE_URL/v1/admin/webhook-origins" \
@@ -134,3 +136,5 @@ A dedicated SSH user has no Docker membership, cannot read application secrets, 
 Source, Mermaid diagrams, tests, workflows and runbooks are in the personal GitHub repository. Grant interviewer access to the private repository. Sign out of personal accounts used on the assessment workstation before handing it back; this remains a final handoff step. Retain authorized server deployment credentials separately. IntelliJ was used at the user's request; the original VS Code/Cursor requirement and checked-in Dev Container option are recorded in docs/requirements.md. No claim of exhaustive testing, zero data loss after disk destruction, or high availability is made by a green pipeline.
 
 Metrics-only DigitalOcean Insights export, configuration, metric names and verification status: [Metrics emission](docs/metrics.md). Alarms and ticket creation are outside the current requested scope.
+
+GitHub storage: [artifact inventory, conservative cleanup plan and billing limits](docs/github-storage.md).

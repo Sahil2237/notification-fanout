@@ -1,6 +1,8 @@
 # Shared Redis quota deployment
 
-**Current status:** the three-host Redis/Sentinel infrastructure and application 6474ad3 controls are deployed. Shared quota, automatic cloud promotion, existing-client recovery and replica rejoin passed; see [version-pinned evidence](../../docs/submission-status.md). The procedure below describes bootstrap/release safeguards, not a pending rollout.
+**Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](../../docs/onboarding.md).
+
+**Current status:** the three-host Redis/Sentinel infrastructure and shared application controls are deployed; current admission quota is 1,000 requests/tenant/second and the event-identity cache lifetime is five minutes. Shared quota, automatic cloud promotion, existing-client recovery and replica rejoin passed; see [version-pinned evidence](../../docs/submission-status.md). The procedure below describes bootstrap/release safeguards, not a pending rollout.
 
 Three existing Bangalore Droplets host one Redis process and one Sentinel each. The primary has two replicas; three Sentinels use quorum2 to elect a replacement. No additional paid machine or managed database is required. This store controls API admission and retry budgets only. PostgreSQL remains the durable event, idempotency and delivery-audit store.
 

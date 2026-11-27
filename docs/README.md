@@ -1,5 +1,7 @@
 # Visual design guide
 
+**Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](onboarding.md).
+
 **27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
 
 [Hands-on test: one event → two subscribers → webhook verification](manual-two-subscriber-test.md) — copy-and-paste REST requests, health checks, delivery audit and private metrics access.
@@ -8,7 +10,7 @@
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-Read this in order for an interview explanation. Diagrams describe the implemented 6474 ad 3 runtime and verified 25 November LB settings, not hypothetical microservices. [Current evidence](submission-status.md) separates current checks from historical failure drills. Markdown/Mermaid diagrams render directly in GitHub.
+Read this in order for an interview explanation. Diagrams describe the implemented application responsibilities, the 27 November host network restriction and historically verified 25 November LB settings, not hypothetical microservices. [Current evidence](submission-status.md) separates current checks from historical failure drills. Markdown/Mermaid diagrams render directly in GitHub.
 
 ```mermaid
 flowchart LR
@@ -20,7 +22,7 @@ flowchart LR
 
 | Document | Use it to explain |
 | --- | --- |
-| [Current redesign](async-cache-history.md) | Asynchronous matching, cache correctness, archival and 10,000/s validation boundaries |
+| [Current redesign](async-cache-history.md) | Asynchronous matching, cache correctness, archival and five-tenant capacity/validation boundaries |
 | [Requirements and scope](requirements.md) | Mandatory journeys, acceptance checks, exclusions and handoff |
 | [Visual high-level design](hld.md) | System boundary, end-to-end flow, topology, failure domains and capacity |
 | [Architecture detail](architecture.md) | Precise transaction/sequence/state/deployment diagrams |
@@ -45,3 +47,5 @@ flowchart LR
 | DigitalOcean load balancer | [Load balancer](lld/load-balancer.md) | Provider-managed routing, health thresholds, affinity and native telemetry |
 
 Each LLD has component-specific low-level requirements, diagrams, configuration, state/failure behavior, security, metrics, tests and limits. Source/configuration links let a reviewer trace diagrams back to runnable code. The redesign reuses existing services and nodes; its throughput target still requires capacity validation.
+
+GitHub storage: [artifact inventory, conservative cleanup plan and billing limits](github-storage.md).

@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | C-01 | Provide publicly trusted HTTPS to the Java application | Live HTTPS certificate validation and health/API probes pass |
 | C-02 | Keep Java/admin ports off public interfaces | Proxy to 127.0.0.1:8080; app admin/metrics 8081 remains loopback |
-| C-03 | Keep administrator origin-management routes private | Public /v1/admin/* returns 404; operators use SSH tunnel |
+| C-03 | Keep administrator origin-management routes private | Public /v1/admin/* returns 404; operators use an entitled Droplet shell and loopback API |
 | C-04 | Expose independent private drain/readiness routing | Port 9080/health/ready proxies app readiness unless drain file forces 503 |
 | C-05 | Coordinate certificates across three proxies | Shared PostgreSQL certificate/challenge storage and locking |
 | C-06 | Bound ingress and avoid sensitive configuration leakage | Proxy body cap 300 KB, application cap 256 KiB; filtered JSON storage logs |
@@ -21,18 +21,20 @@
 
 ```mermaid
 flowchart LR
-    LB[DigitalOcean load balancer] -->|HTTPS443| TLS[Caddy TLS listener]
-    HTTP[HTTP80] --> REDIRECT[Caddy HTTP challenge or HTTPS redirect handling]
+    LB[DigitalOcean load balancer] -->|Private VPC| FW[Host UFW: eth1 and VPC source]
+    FW -->|HTTPS443| TLS[Caddy TLS listener]
+    DIRECT[Direct public backend traffic] -.->|Blocked| FW
+    HTTP[LB-forwarded private HTTP80] --> REDIRECT[Caddy HTTP challenge or HTTPS redirect handling]
     TLS --> CHECK{Public administrator path?}
     CHECK -->|Yes| NO[404]
     CHECK -->|No| API[Loopback HTTP127.0.0.1:8080]
-    HEALTH[Private LB health probe9080] --> DRAIN{Drain file present?}
+    HEALTH[Private LB health probe9080 through UFW] --> DRAIN{Drain file present?}
     DRAIN -->|Yes| BAD[503]
     DRAIN -->|No| READY[Proxy /health/ready to Java]
-    OP[Authorized SSH operator tunnel] -->|Bypasses public proxy route| API
+    OP[Authorized Droplet operator shell] -->|Bypasses public proxy route| API
 ```
 
-The LB's own HTTP-to-HTTPS redirect setting is off; Caddy owns its redirect/ACME behavior. The public listener forwards approved routes but does not validate bearer tokens; the application does. Public 80/443 currently accept arbitrary network sources on Droplets, not just the LB. Administrator rejection is not a replacement for tenant authorization. No per-user routing, rate-limit plugin, WAF or response cache is configured in Caddy.
+The LB's own HTTP-to-HTTPS redirect setting is off; Caddy owns its redirect/ACME behavior. The public listener forwards approved routes but does not validate bearer tokens; the application does. Direct public 80/443 is blocked by host UFW. Caddy still has wildcard listeners, but ingress is accepted only from VPC sources on eth1. This is not yet a provider LB-UID-only source rule. Administrator rejection is not a replacement for tenant authorization. No per-user routing, rate-limit plugin, WAF or response cache is configured in Caddy.
 
 ## Shared certificate storage and cold-start boundary
 

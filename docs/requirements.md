@@ -1,10 +1,12 @@
 # Assessment requirements and acceptance evidence
 
+**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-This is the requirement-to-implementation map for the deployed assessment system, not a promise that every production failure has been tested. Runtime evidence is pinned to `6474ad3` on 24 November 2026; documentation-only commits can advance Git HEAD separately. [Current deployment](submission-status.md), [architecture](architecture.md), [design](design.md), [tests](validation.md).
+This is the requirement-to-implementation map for the deployed assessment system, not a promise that every production failure has been tested. Runtime checks are version-pinned in submission-status.md; the 27 November host network change has separate evidence, and documentation-only commits can advance Git HEAD separately. [Current deployment](submission-status.md), [architecture](architecture.md), [design](design.md), [tests](validation.md).
 
 ## Mandatory functional scope
 
@@ -35,7 +37,7 @@ These are implemented controls or executed checks. They are not an agreed availa
 | --- | --- | --- |
 | Durability | Acknowledgement follows event/jobs/outbox commit with primary plus synchronous standby apply | Earlier whole-host failover preserved acknowledged probe IDs; latest migration preserved pre-rollout data. Regional loss has daily-backup exposure |
 | Availability | Three application/data hosts; health-based load balancing; quorum replication | Latest three application/proxy readiness responses200 and Redis failover/rejoin; earlier PostgreSQL host-offline test. Temporary503/timeouts are permitted; no measured full-disaster RTO |
-| Shared admission | 6,000 authenticated tenant requests per fixed minute across instances; exhausted429, unavailable Redis503 | Latest cloud fixture with two remaining slots produced200,200,429,429,429 across nodes; synthetic counter removed. No independent per-user quota or strict zero-overshoot failover accounting |
+| Shared admission | 1,000 authenticated tenant requests per fixed second across instances; exhausted429, unavailable Redis503 | Latest cloud fixture with two remaining slots produced200,200,429,429,429 across nodes; synthetic counter removed. No independent per-user quota or strict zero-overshoot failover accounting |
 | Bounded resources | Four HTTP delivery workers/instance; subscription concurrency1 globally; writer pool 8/read pool 4 per app; PG max_connections100/server | Config/code and cloud pool setting checks. Jetty retains its internal I/O queue while application request admission is bounded; no claim that every library-internal queue is finite |
 | Recovery and retries | Five-second HTTP deadline, 30-second claim lease, at most six transient attempts; budget-deferred work does not spend an HTTP attempt | Unit/integration timeout, fencing, concurrent reservation and exhaustion/DLQ rollback tests. Receiver deduplication remains necessary |
 | Read consistency | Tenant history/list reads must use a standby, with no primary fallback | JDBC HA fixture checks role changes/unavailability; cloud headers report replica/eventual. Immediate post-write reads may lag |
@@ -62,3 +64,17 @@ These are implemented controls or executed checks. They are not an agreed availa
 All project development belongs under `/workspaces/notification-fanout` in the Ubuntu 24.04 container; no project code/assets belong on host Desktop/Downloads. Java 25/Dropwizard 5 are used. The existing session used Rancher with IntelliJ at the user's request. The checked-in [Dev Container configuration](../.devcontainer/devcontainer.json) supports the brief's VS Code/Cursor route, but that editor route was not the verified IDE session; obtain assessor acceptance of IntelliJ if the named-editor rule is strict.
 
 Code, diagrams and workflows are pushed to the personal private [GitHub repository](https://github.com/Sahil2237/notification-fanout). Grant interviewer access separately. The user relaxed the original three-hour limit; no claim is made that the historical work finished within three hours. Personal-account sign-out is a final workstation handoff obligation, not an action already completed during active development. Do not commit tokens, private keys, DSNs, backup contents or protected `.deploy` files as submission evidence.
+
+
+## Network security acceptance after host hardening
+
+| Requirement | Actual status and evidence |
+| --- | --- |
+| Direct internet backend HTTP/HTTPS blocked | Implemented on all three hosts; valid-service-identity HTTPS probes fail at the network boundary |
+| LB path and private backend routing preserved | Public ready and authenticated API checks pass; per-node private proxy/health checks pass |
+| Java/admin/metrics not public | Loopback-only; operator access documented in onboarding |
+| Provider firewall allows only LB identity to backend ports | Pending authorized provider session; host currently accepts VPC sources on eth1 |
+| All provider backend memberships/health freshly verified | Pending provider session; local readiness is not provider health evidence |
+| SSH source restriction and restricted egress | Not implemented; key-only/restricted CI and application destination validation remain existing protections |
+
+Source and evidence: [network hardening](network-hardening.md), [onboarding](onboarding.md), [host/network probes](evidence/network-hardening-host-2026-11-27.json). This is not a claim of complete network isolation.
