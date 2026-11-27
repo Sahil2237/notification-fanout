@@ -1,5 +1,7 @@
 # Manual test: one event, two subscriptions, two webhook deliveries
 
+**Network access:** use the load-balancer URL below. Direct public Droplet application access is blocked; [current network hardening and remaining controls](network-hardening.md). Loopback metrics still require an authorized shell inside each Droplet.
+
 ## Open these health URLs directly in your browser
 
 | Check | Full clickable URL | Expected response |

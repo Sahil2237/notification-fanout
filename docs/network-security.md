@@ -1,5 +1,7 @@
 # Ingress, authentication, networking and failure behavior
 
+**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Checked against application `6474ad3`, effective node configuration and the DigitalOcean load-balancer overview during the 25 November 2026 IST documentation review. This is a description of actual deployment, not a proposed tighter firewall. No infrastructure rules were changed by this documentation task.
@@ -34,7 +36,7 @@ There is no separately deployed API gateway product, WAF, service mesh or API-ma
 | Surface | Actual exposure |
 | --- | --- |
 | Tenant REST APIs and health | Public HTTPS through the load balancer; tenant APIs require a valid bearer credential, health does not |
-| Droplet Caddy80/443 | Host/cloud rules permit public sources; backends are not restricted to traffic originating only from the load balancer |
+| Droplet Caddy80/443 | Public host ingress blocked; host accepts VPC sources only on eth1. Provider LB-UID-only source restriction is pending |
 | Java application 8080 | Binds127.0.0.1, reached by local Caddy/operator tunnel, not directly published on public/private interfaces |
 | Dropwizard admin/metrics 8081 | Loopback only; no public metrics listener |
 | `/v1/admin/*` | Public Caddy rejects with 404; use an authorized SSH tunnel and independent admin bearer credential |
@@ -48,7 +50,7 @@ Authentication uses static service-to-service `Authorization: Bearer <token>` cr
 
 Authorization uses tenant predicates/ownership checks in Store and a separate administrator credential/role for origin management. Tenant credentials cannot approve/revoke destinations; the admin credential cannot ingest tenant events. Foreign or missing tenant resources appear as404. There is no fine-grained per-user read/write permission model or PostgreSQL RLS policy. Tenant authentication is shared across app replicas through common protected configuration, not sticky sessions.
 
-The shared Redis request allowance is 6,000 per tenant per fixed minute, including reads and writes. It is not a separate per-user quota. Administrators have a separate internal rate-limit identity. Invalid credentials and health probes do not spend tenant quota. Redis outage/insufficient replication acknowledgement returns503 rather than bypassing the limit.
+The current HA shared Redis request allowance is 1,000 per tenant per fixed second, including reads and writes. It is not a separate per-user quota. Administrators have a separate internal rate-limit identity. Invalid credentials and health probes do not spend tenant quota. Redis outage/insufficient replication acknowledgement returns503 rather than bypassing the limit.
 
 Root passwords are locked; SSH password and keyboard-interactive authentication are disabled on all three nodes. Authorized public keys are enabled, including privileged operator root-key access. CI uses a restricted deployment account and signed promotion gateway. Database/Redis passwords and Kafka/control certificate identities are distinct from Droplet login credentials. None belong in Git, screenshots or examples.
 
@@ -59,13 +61,13 @@ The deployment uses a DigitalOcean VPC and Cloud Firewall plus Ubuntu UFW on eac
 | TCP port | Allowed source | Purpose |
 | --- | --- | --- |
 |22 | Any IPv4/IPv6 | SSH, protected by keys; source CIDRs are not narrowed |
-|80,443 | Any IPv4/IPv6 | Caddy HTTP/HTTPS; not load-balancer-only ingress |
+|80,443 | VPC10.122.0.0/20, eth1 only | Private proxy ingress; provider LB-UID-only source restriction pending |
 |2379-2380 | Three private peer IPs | etcd client/peer quorum with mutual TLS |
 |5432 | Three private peer IPs | PostgreSQL TLS connections/replication |
 |8008 | Three private peer IPs | Patroni control with mutual TLS |
 |9092-9093 | Three private peer IPs | Kafka broker/controller TLS traffic |
 |6379,26379 | Three private peer IPs | Redis data and Sentinel TLS |
-|9080 | Private VPC10.122.0.0/20 | Readiness probes; not internet-open |
+|9080 | Private VPC10.122.0.0/20, eth1 only | Readiness probes; not internet-open |
 
 Approved private peers are 10.122.0.2,10.122.0.6 and10.122.0.5. No public inbound5432/Kafka/Redis/admin ports are allowed. Service bind addresses and TLS/credentials provide additional boundaries behind the firewall.
 

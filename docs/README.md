@@ -1,5 +1,7 @@
 # Visual design guide
 
+**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
+
 [Hands-on test: one event → two subscribers → webhook verification](manual-two-subscriber-test.md) — copy-and-paste REST requests, health checks, delivery audit and private metrics access.
 
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.

@@ -1,5 +1,7 @@
 # Visual high-level design
 
+**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 Start with [requirements](requirements.md). Explain diagrams 1 through 7 in order, then open the relevant [component LLD](README.md#separate-low-level-design-documents). Values describe the f0c4d33 runtime and 25 November 2026 read-only LB inspection. The functional redesign was deployed as f0c4d33; later documentation-only changes do not require another runtime deployment.

@@ -1,0 +1,437 @@
+{
+  "host_policy": {
+    "verified_at_utc": "2026-11-27T02:18:30.501889+00:00",
+    "nodes": [
+      {
+        "node": 1,
+        "public_ip": "64.227.168.29",
+        "private_ip": "10.122.0.2",
+        "applied": {
+          "host_vpc_ingress_applied": true,
+          "rollback_timer_seconds": 180,
+          "ssh_rules_unchanged": true,
+          "cluster_rules_unchanged": true,
+          "cloud_firewall_changed": false
+        },
+        "direct_public_https": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "direct_public_http": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "public_load_balancer": {
+          "exit_code": 0,
+          "http_status": "200"
+        },
+        "private_proxy": 200,
+        "private_health": 200,
+        "fresh_ssh_connection_verified": true,
+        "local_readiness": 200,
+        "local_metrics": 200,
+        "timed_rollback_cancelled_after_verification": true,
+        "ufw_rules": "Added user rules (see 'ufw status' for running firewall):\nufw allow 22/tcp\nufw allow from 10.122.0.2 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.2 to any port 5432 proto tcp\nufw allow from 10.122.0.2 to any port 8008 proto tcp\nufw allow from 10.122.0.2 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.6 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.6 to any port 5432 proto tcp\nufw allow from 10.122.0.6 to any port 8008 proto tcp\nufw allow from 10.122.0.6 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.5 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.5 to any port 5432 proto tcp\nufw allow from 10.122.0.5 to any port 8008 proto tcp\nufw allow from 10.122.0.5 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.2 to any port 6379 proto tcp\nufw allow from 10.122.0.2 to any port 26379 proto tcp\nufw allow from 10.122.0.5 to any port 6379 proto tcp\nufw allow from 10.122.0.5 to any port 26379 proto tcp\nufw allow from 10.122.0.6 to any port 6379 proto tcp\nufw allow from 10.122.0.6 to any port 26379 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.2 port 80 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.2 port 443 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.2 port 9080 proto tcp\n"
+      },
+      {
+        "node": 2,
+        "public_ip": "139.59.13.207",
+        "private_ip": "10.122.0.6",
+        "applied": {
+          "host_vpc_ingress_applied": true,
+          "rollback_timer_seconds": 180,
+          "ssh_rules_unchanged": true,
+          "cluster_rules_unchanged": true,
+          "cloud_firewall_changed": false
+        },
+        "direct_public_https": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "direct_public_http": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "public_load_balancer": {
+          "exit_code": 0,
+          "http_status": "200"
+        },
+        "private_proxy": 200,
+        "private_health": 200,
+        "fresh_ssh_connection_verified": true,
+        "local_readiness": 200,
+        "local_metrics": 200,
+        "timed_rollback_cancelled_after_verification": true,
+        "ufw_rules": "Added user rules (see 'ufw status' for running firewall):\nufw allow 22/tcp\nufw allow from 10.122.0.2 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.2 to any port 5432 proto tcp\nufw allow from 10.122.0.2 to any port 8008 proto tcp\nufw allow from 10.122.0.2 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.6 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.6 to any port 5432 proto tcp\nufw allow from 10.122.0.6 to any port 8008 proto tcp\nufw allow from 10.122.0.6 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.5 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.5 to any port 5432 proto tcp\nufw allow from 10.122.0.5 to any port 8008 proto tcp\nufw allow from 10.122.0.5 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.2 to any port 6379 proto tcp\nufw allow from 10.122.0.2 to any port 26379 proto tcp\nufw allow from 10.122.0.5 to any port 6379 proto tcp\nufw allow from 10.122.0.5 to any port 26379 proto tcp\nufw allow from 10.122.0.6 to any port 6379 proto tcp\nufw allow from 10.122.0.6 to any port 26379 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.6 port 80 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.6 port 443 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.6 port 9080 proto tcp\n"
+      },
+      {
+        "node": 3,
+        "public_ip": "159.65.153.56",
+        "private_ip": "10.122.0.5",
+        "applied": {
+          "host_vpc_ingress_applied": true,
+          "rollback_timer_seconds": 180,
+          "ssh_rules_unchanged": true,
+          "cluster_rules_unchanged": true,
+          "cloud_firewall_changed": false
+        },
+        "direct_public_https": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "direct_public_http": {
+          "exit_code": 28,
+          "http_status": "000"
+        },
+        "public_load_balancer": {
+          "exit_code": 0,
+          "http_status": "200"
+        },
+        "private_proxy": 200,
+        "private_health": 200,
+        "fresh_ssh_connection_verified": true,
+        "local_readiness": 200,
+        "local_metrics": 200,
+        "timed_rollback_cancelled_after_verification": true,
+        "ufw_rules": "Added user rules (see 'ufw status' for running firewall):\nufw allow 22/tcp\nufw allow from 10.122.0.2 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.2 to any port 5432 proto tcp\nufw allow from 10.122.0.2 to any port 8008 proto tcp\nufw allow from 10.122.0.2 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.6 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.6 to any port 5432 proto tcp\nufw allow from 10.122.0.6 to any port 8008 proto tcp\nufw allow from 10.122.0.6 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.5 to any port 2379:2380 proto tcp\nufw allow from 10.122.0.5 to any port 5432 proto tcp\nufw allow from 10.122.0.5 to any port 8008 proto tcp\nufw allow from 10.122.0.5 to any port 9092:9093 proto tcp\nufw allow from 10.122.0.2 to any port 6379 proto tcp\nufw allow from 10.122.0.2 to any port 26379 proto tcp\nufw allow from 10.122.0.5 to any port 6379 proto tcp\nufw allow from 10.122.0.5 to any port 26379 proto tcp\nufw allow from 10.122.0.6 to any port 6379 proto tcp\nufw allow from 10.122.0.6 to any port 26379 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.5 port 80 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.5 port 443 proto tcp\nufw allow in on eth1 from 10.122.0.0/20 to 10.122.0.5 port 9080 proto tcp\n"
+      }
+    ]
+  },
+  "external_verification": {
+    "verified_at_utc": "2026-11-27T02:19:27.169450+00:00",
+    "external_tcp_probes": [
+      {
+        "ip": "64.227.168.29",
+        "port": 80,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 443,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 9080,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 8080,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 8081,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 5432,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 6379,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 26379,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 2379,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 2380,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 8008,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 9092,
+        "reachable": false
+      },
+      {
+        "ip": "64.227.168.29",
+        "port": 9093,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 80,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 443,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 9080,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 8080,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 8081,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 5432,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 6379,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 26379,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 2379,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 2380,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 8008,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 9092,
+        "reachable": false
+      },
+      {
+        "ip": "139.59.13.207",
+        "port": 9093,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 80,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 443,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 9080,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 8080,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 8081,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 5432,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 6379,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 26379,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 2379,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 2380,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 8008,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 9092,
+        "reachable": false
+      },
+      {
+        "ip": "159.65.153.56",
+        "port": 9093,
+        "reachable": false
+      }
+    ],
+    "lb_routing_evidence": [
+      {
+        "node": 1,
+        "observed_public_lb_requests": [
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          }
+        ]
+      },
+      {
+        "node": 2,
+        "observed_public_lb_requests": []
+      },
+      {
+        "node": 3,
+        "observed_public_lb_requests": [
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.8",
+            "status": 200
+          },
+          {
+            "backend_remote_ip": "10.122.0.7",
+            "status": 200
+          }
+        ]
+      }
+    ],
+    "cloud_firewall_update_pending_authentication": true,
+    "ssh_source_cidr_restriction_implemented": false,
+    "outbound_default_allow_unchanged": true
+  },
+  "scope": "Host ingress restriction deployed; provider Cloud Firewall update, SSH source restrictions and outbound narrowing remain outstanding.",
+  "runtime_application_changed": false,
+  "functional_checks_after_hardening": {
+    "authenticated_subscription_list_status": 200,
+    "duplicate_replay_status": 202,
+    "original_event_returned": true,
+    "new_event_created": false,
+    "nodes": [
+      {
+        "node": 1,
+        "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+        "ready": 200,
+        "drained": false,
+        "events": 11141,
+        "subscriptions": 10,
+        "delivery_identities": 16,
+        "hot_deliveries": 1,
+        "historical_deliveries": 15,
+        "migration_count": 10
+      },
+      {
+        "node": 2,
+        "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+        "ready": 200,
+        "drained": false,
+        "events": 11141,
+        "subscriptions": 10,
+        "delivery_identities": 16,
+        "hot_deliveries": 1,
+        "historical_deliveries": 15,
+        "migration_count": 10
+      },
+      {
+        "node": 3,
+        "revision": "27ecd2a7bed9e46c66c976dc13a788be2f6ade22",
+        "ready": 200,
+        "drained": false,
+        "events": 11141,
+        "subscriptions": 10,
+        "delivery_identities": 16,
+        "hot_deliveries": 1,
+        "historical_deliveries": 15,
+        "migration_count": 10
+      }
+    ]
+  }
+}

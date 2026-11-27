@@ -64,13 +64,13 @@ systemctl enable --now notification-watchdog.service
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
+ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 80
+ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 443
 [[ $# -eq 3 ]] || { echo 'Supply exactly three VPC IPv4 peers'; exit 1; }
 for peer in "$@"; do
   [[ "$peer" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || exit 1
   for port in 2379:2380 5432 8008 9092:9093; do ufw allow proto tcp from "$peer" to any port "$port"; done
 done
-ufw allow proto tcp from 10.122.0.0/20 to any port 9080
+ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 9080
 ufw --force enable
 install -d -m 0700 /opt/notification-fanout/ha

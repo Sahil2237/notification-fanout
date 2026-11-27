@@ -1,5 +1,7 @@
 # DigitalOcean load-balancer low-level design
 
+**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](../network-hardening.md). Earlier network observations below are historical where superseded.
+
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
 [Visual HLD](../hld.md) | [Caddy LLD](caddy.md) | [Recorded settings](../evidence/load-balancer-2026-11-25.json). A managed regional external HTTP load balancer named notification-fanout-ha has two managed units and three BLR 1 backend Droplets. It is outside the three application/data compute nodes.
