@@ -2,7 +2,7 @@
 set -euo pipefail
 mkdir -p .ha-runtime
 cp deploy/ha/{redis-cluster.py,metrics-compose.yaml,render.py,create-pki.py,app-entrypoint.sh,Caddyfile,run-backup.sh,notification-backup.service,notification-backup.timer,spaces-backup.py,install-runtime.sh,restore-test.sh,prepare-secrets.py,initialize-databases.py} .ha-runtime/
-cp deploy/ha/capacity.py deploy/ha/capacity-1000-rps.json deploy/ha/network-policy.py .ha-runtime/
+cp deploy/ha/capacity.py deploy/ha/capacity-1000-rps.json deploy/ha/network-policy.py deploy/ha/egress-policy.py .ha-runtime/
 mkdir -p .ha-load-classes
 javac --release 25 -cp target/notification-fanout.jar -d .ha-load-classes deploy/ha/AcceptanceLoad.java
 jar --create --file .ha-runtime/acceptance-load.jar -C .ha-load-classes .

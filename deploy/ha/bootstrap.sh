@@ -62,7 +62,10 @@ systemctl daemon-reload
 systemctl enable --now notification-watchdog.service
 # END persistent watchdog boot dependency
 ufw default deny incoming
-ufw default allow outgoing
+# Explicit outbound allowances preserve the existing cluster and approved HTTPS receivers.
+for port in 53 80 443; do ufw allow out proto tcp to any port "$port"; done
+for port in 53 67 123; do ufw allow out proto udp to any port "$port"; done
+ufw default deny outgoing
 ufw allow 22/tcp
 ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 80
 ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 443
@@ -70,6 +73,7 @@ ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 443
 for peer in "$@"; do
   [[ "$peer" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || exit 1
   for port in 2379:2380 5432 8008 9092:9093; do ufw allow proto tcp from "$peer" to any port "$port"; done
+  for port in 22 2379:2380 5432 6379 8008 9092:9093 26379; do ufw allow out on eth1 proto tcp to "$peer" port "$port"; done
 done
 ufw allow in on eth1 proto tcp from 10.122.0.0/20 to any port 9080
 ufw --force enable

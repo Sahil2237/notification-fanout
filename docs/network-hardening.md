@@ -1,5 +1,7 @@
 # Backend network hardening — deployed scope and remaining work
 
+**Provider follow-up, 27 November:** Cloud Firewall ports 80/443/9080 now accept only the managed load-balancer identity. All three provider backends were verified Active and the LB Healthy. Cloud outbound traffic is restricted to web/DNS, NTP/DHCP, ICMP and private peers; each host now has outbound default-deny with explicit service ports. [Current provider/host evidence](evidence/provider-network-hardening-2026-11-27.json). SSH source narrowing remains pending the [dedicated CI credential and access test](ci-ssh-window.md). The original host-only rollout below is historical where superseded.
+
 ## Current state: 27 November 2026
 
 The direct-public-backend exposure is closed on all three existing Droplets by active, persistent Ubuntu UFW policy. Public requests should use **https://174.138.121.225**. No additional paid resource was created and no application/container restart was required.

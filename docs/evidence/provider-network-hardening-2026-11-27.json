@@ -1,0 +1,173 @@
+{
+  "verified_at_utc": "2026-11-27T03:11:45.784167+00:00",
+  "method": "DigitalOcean Control Panel read/edit/visible-save confirmation plus verified SSH host checks; not a provider API export",
+  "team": "Blitz_team13_Hyd",
+  "firewall_id": "9ebfb734-0687-4487-babd-8853bc73bb97",
+  "attached_droplet_ids": [
+    622664599,
+    622797519,
+    622797520
+  ],
+  "load_balancer_id": "15a568f0-1172-4b6f-9ddb-6a4fad34ee1f",
+  "load_balancer_health": "Healthy",
+  "backend_states": {
+    "64.227.168.29": "Active",
+    "139.59.13.207": "Active",
+    "159.65.153.56": "Active"
+  },
+  "inbound_lb_only_tcp_ports": [
+    80,
+    443,
+    9080
+  ],
+  "inbound_cluster_peer_rules_preserved": true,
+  "cloud_outbound": {
+    "public_tcp_ports": [
+      53,
+      80,
+      443
+    ],
+    "public_udp_ports": [
+      53,
+      67,
+      123
+    ],
+    "icmp": "existing all IPv4/IPv6 retained",
+    "all_tcp_destination_addresses": [
+      "10.122.0.2/32",
+      "10.122.0.5/32",
+      "10.122.0.6/32"
+    ],
+    "all_udp_to_internet_removed": true
+  },
+  "host_egress": [
+    {
+      "node": 1,
+      "policy": {
+        "public_tcp": [
+          53,
+          80,
+          443
+        ],
+        "public_udp": [
+          53,
+          67,
+          123
+        ],
+        "peer_tcp": [
+          "22",
+          "2379:2380",
+          "5432",
+          "6379",
+          "8008",
+          "9092:9093",
+          "26379"
+        ],
+        "peers": [
+          "10.122.0.2",
+          "10.122.0.6",
+          "10.122.0.5"
+        ],
+        "private_interface": "eth1",
+        "rollback_timer_seconds": 180
+      },
+      "checks": {
+        "local_ready": 200,
+        "local_metrics": 200,
+        "github_tls": 200,
+        "webhook_provider_tls": 200,
+        "spaces_tls": 200,
+        "ubuntu_http": 200,
+        "private_cluster_tcp_probes": 27
+      },
+      "rollback_cancelled": true,
+      "fresh_ssh_verified": true
+    },
+    {
+      "node": 2,
+      "policy": {
+        "public_tcp": [
+          53,
+          80,
+          443
+        ],
+        "public_udp": [
+          53,
+          67,
+          123
+        ],
+        "peer_tcp": [
+          "22",
+          "2379:2380",
+          "5432",
+          "6379",
+          "8008",
+          "9092:9093",
+          "26379"
+        ],
+        "peers": [
+          "10.122.0.2",
+          "10.122.0.6",
+          "10.122.0.5"
+        ],
+        "private_interface": "eth1",
+        "rollback_timer_seconds": 180
+      },
+      "checks": {
+        "local_ready": 200,
+        "local_metrics": 200,
+        "github_tls": 200,
+        "webhook_provider_tls": 200,
+        "spaces_tls": 200,
+        "ubuntu_http": 200,
+        "private_cluster_tcp_probes": 27
+      },
+      "rollback_cancelled": true,
+      "fresh_ssh_verified": true
+    },
+    {
+      "node": 3,
+      "policy": {
+        "public_tcp": [
+          53,
+          80,
+          443
+        ],
+        "public_udp": [
+          53,
+          67,
+          123
+        ],
+        "peer_tcp": [
+          "22",
+          "2379:2380",
+          "5432",
+          "6379",
+          "8008",
+          "9092:9093",
+          "26379"
+        ],
+        "peers": [
+          "10.122.0.2",
+          "10.122.0.6",
+          "10.122.0.5"
+        ],
+        "private_interface": "eth1",
+        "rollback_timer_seconds": 180
+      },
+      "checks": {
+        "local_ready": 200,
+        "local_metrics": 200,
+        "github_tls": 200,
+        "webhook_provider_tls": 200,
+        "spaces_tls": 200,
+        "ubuntu_http": 200,
+        "private_cluster_tcp_probes": 27
+      },
+      "rollback_cancelled": true,
+      "fresh_ssh_verified": true
+    }
+  ],
+  "ssh_source_narrowing": "pending dedicated GitHub CI firewall credential approval",
+  "new_resources_created": false
+}
