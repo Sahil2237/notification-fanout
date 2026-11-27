@@ -1,0 +1,68 @@
+{
+  "verified_at_utc": "2026-11-27T03:35:33.059555+00:00",
+  "load_balancer_https_readiness": 200,
+  "direct_backend_protocol_probes": [
+    {
+      "destination": "64.227.168.29",
+      "scheme": "http",
+      "exit": 28,
+      "http_status": "000"
+    },
+    {
+      "destination": "64.227.168.29",
+      "scheme": "https",
+      "exit": 28,
+      "http_status": "000"
+    },
+    {
+      "destination": "139.59.13.207",
+      "scheme": "http",
+      "exit": 28,
+      "http_status": "000"
+    },
+    {
+      "destination": "139.59.13.207",
+      "scheme": "https",
+      "exit": 28,
+      "http_status": "000"
+    },
+    {
+      "destination": "159.65.153.56",
+      "scheme": "http",
+      "exit": 28,
+      "http_status": "000"
+    },
+    {
+      "destination": "159.65.153.56",
+      "scheme": "https",
+      "exit": 28,
+      "http_status": "000"
+    }
+  ],
+  "host_checks": [
+    {
+      "node": 1,
+      "ready": 200,
+      "host_public_web_allow_absent": true,
+      "egress_default_deny": true,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9"
+    },
+    {
+      "node": 2,
+      "ready": 200,
+      "host_public_web_allow_absent": true,
+      "egress_default_deny": true,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9"
+    },
+    {
+      "node": 3,
+      "ready": 200,
+      "host_public_web_allow_absent": true,
+      "egress_default_deny": true,
+      "revision": "70f0df10be4847c9ad9844fee4891804df3fc3d9"
+    }
+  ],
+  "probe_environment_limitation": "Workstation traffic crosses a corporate secure web gateway. TCP handshakes alone do not prove origin reachability. An HTTP request retaining the LB Host header while overriding its destination returned a gateway-mediated redirect; simultaneous backend eth0 capture observed zero port-80 packets. Direct-IP HTTP probes and service-identity-preserving HTTPS probes timed out on all three backends.",
+  "ssh_sources": "unchanged by explicit user decision",
+  "new_digitalocean_token_created": false
+}

@@ -51,7 +51,7 @@ Allowed web traffic preserves package repositories, image/CI access, certificate
 
 ## What passed
 
-- Before/after public probes: direct backend HTTP/HTTPS blocked on all three hosts; 39 public application/cluster port probes blocked in the host rollout.
+- Original host rollout recorded 39 blocked public application/cluster port probes. Final protocol checks found direct-IP HTTP and service-identity-preserving HTTPS timed out on all three backends; LB HTTPS readiness returned 200. TCP handshake results alone are not accepted as proof because this workstation crosses a corporate secure web gateway. An HTTP destination override retaining the LB Host header returned a gateway-mediated redirect while simultaneous backend eth0 capture received zero port-80 packets. See [final checks and test limitation](evidence/network-hardening-final-2026-11-27.json).
 - Provider control panel: one firewall attached/up-to-date on all three Droplets; LB Healthy and all three backends Active after restrictions.
 - Post-provider checks on every host: app readiness 200, loopback metrics 200, GitHub HTTPS200, webhook-provider HTTPS200, Spaces HTTPS200, verified private PostgreSQL query, outbound default-deny and no armed rollback timer.
 - A non-LB VPC peer could not connect to the other backend's private HTTPS443, confirming the narrower provider boundary.
