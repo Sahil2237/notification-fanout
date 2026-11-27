@@ -2,7 +2,7 @@
 
 Use this page for a fresh live demonstration. Prepare the two free webhook inboxes before the interview; perform the numbered demo steps on screen. All payloads are synthetic.
 
-**Public links:** [process health](https://174.138.121.225/health/live) · [service readiness](https://174.138.121.225/health/ready) · [architecture](hld.md) · [detailed troubleshooting](manual-two-subscriber-test.md).
+**Public links:** [process health](https://174.138.121.225/health/live) · [service readiness](https://174.138.121.225/health/ready) · [architecture](system-design.md) · [detailed troubleshooting](operations.md#health-and-diagnosis).
 
 Run every Bash block in the **same IntelliJ terminal connected to the Rancher Ubuntu container**. The public load-balancer URL uses HTTPS 443; Droplet application ports and metrics are private. This page creates new identities each time you start preparation. To retry an uncertain operation, preserve its existing files and keys instead of starting over.
 
@@ -35,7 +35,7 @@ printf '\nRun files: %s\n' "$RUN_DIR"
 test -n "$API_TOKEN"
 ```
 
-Enter the existing notification-service tenant token privately before screen sharing. It is not a GitHub, DigitalOcean or Webhook.site token. An authorized operator can retrieve it from the protected cloud configuration; see [token and environment setup](manual-two-subscriber-test.md#1-prepare-the-local-terminal). Never print the full configuration, enable shell tracing, or commit the run folder.
+Enter the existing notification-service tenant token privately before screen sharing. It is not a GitHub, DigitalOcean or Webhook.site token. An authorized operator can retrieve it from the protected cloud configuration; see [token and environment setup](operations.md#operator-access-and-tenant-token). Never print the full configuration, enable shell tracing, or commit the run folder.
 
 Define three small terminal helpers. They save responses, preserve TLS checks, and stop on unexpected status codes. POSTs are never automatically retried.
 
@@ -264,8 +264,8 @@ This deletes only your two subscriptions. Event/delivery audit remains queryable
 | Event replay | 202, duplicate=true, original Event ID and unchanged Delivery IDs |
 | Changed filter with original subscription key | 409 |
 
-If something fails, preserve RUN_DIR and inspect the saved response/headers. 401 means credentials; 429 means application or provider quota; 503 means an unavailable dependency/admission limit; 400/422 means input/policy validation. A bounded poll timeout is a diagnosis point, not permission to create duplicate resources. Use [the full runbook](manual-two-subscriber-test.md#troubleshooting).
+If something fails, preserve RUN_DIR and inspect the saved response/headers. 401 means credentials; 429 means application or provider quota; 503 means an unavailable dependency/admission limit; 400/422 means input/policy validation. A bounded poll timeout is a diagnosis point, not permission to create duplicate resources. Use [the full runbook](operations.md#health-and-diagnosis).
 
 This page is a repeatable procedure, not a claim that a new demonstration was executed when the document was generated. Previous passing cloud evidence remains separately dated and linked. Documentation changes require no application redeployment.
 
-Documentation validation on 27 November 2026: all 13 Bash blocks parsed; three generated request files and both filter matches passed; 13 positive/negative predicate cases passed; the request/status/read-retry helpers passed with a local curl test double; local links resolved; and 47 repository Mermaid diagrams parsed. These are offline guide checks, not a newly executed cloud demonstration.
+This is the canonical runnable demo; the overlapping manual/onboarding pages were consolidated into README, API and operations. Its command and fixture checks are recorded in validation.md.

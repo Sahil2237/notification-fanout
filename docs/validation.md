@@ -1,88 +1,110 @@
-# Requirements-to-verification matrix
+# Validation, release evidence and open work
 
-## Latest subscription release validation: 27 November
+This is the single requirements/status/evidence document. Historical JSON records are retained unchanged; they do not establish that every old scenario was rerun on the latest application. [Design](system-design.md), [API](api.md), [runbook](operations.md), [demo](interviewer-demo.md).
 
-98 Java and 63 Python tests passed locally; Java/Python/HA-config steps also passed in run 45943599738. Artifact upload failed on account storage quota; downstream hosted image/HA jobs were skipped. The local AMD64 image configuration, tested-JAR equality, current Trivy vulnerability gate, signed three-node promotion, keyed subscription replay/conflicts and two external signed deliveries were verified independently. [Cloud evidence](evidence/subscription-idempotency-cloud-2026-11-27.json). Existing HA/failover drills below remain historical; no new HA drill or Spaces restore was performed.
+## Current deployed state
 
-**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
+Application deployment bundle **d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9** runs on all three nodes. Application JAR source is fa1a0b1ea664ce6136d8e7a1fc6c9c18ed21b917; the later bundle adds the Docker metadata-verification compatibility correction and docs. Java 25/Dropwizard 5 application code is unchanged by subsequent documentation-only commits.
 
-**November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
+The consolidation audit on 27 November 2026 rechecked all nodes: readiness 200, undrained, eleven migrations, same deployed SHA. Public tables were checked: fourteen physical tables, comprising twelve application and two Liquibase tables. Backup metadata verifies thirteen tables, excluding databasechangeloglock. [Dated audit inventory](evidence/documentation-audit-2026-11-27.json).
 
-Runtime release `6474ad3` passed [CI45447905686](https://github.com/Sahil2237/notification-fanout/actions/runs/45447905686) and [image publication45450924076](https://github.com/Sahil2237/notification-fanout/actions/runs/45450924076). Counts below were checked against that run's JUnit XML, not stale documentation. Documentation-only changes use diagram/link/contract checks rather than claiming a new application test/deployment run.
+The latest release used a locally verified JAR, an AMD64 runtime built from the pinned Java base with package upgrades, current Trivy 0.76.2 vulnerability/Java databases, existing release signing and sequential gateway promotion. Signed archive config digest: sha256:13a380d76957e951853a50c208ce386168dbb2d059378a2f351f56f3734dff5e. The JAR hash/portable identity/fleet checks are in [the release record](evidence/subscription-idempotency-cloud-2026-11-27.json). Legacy Config.Image build metadata alone is normalized; filesystem and execution-setting tampering tests remain enforced.
 
 ## Executed release checks
 
-| Suite | Tests | Outcome |
+| Suite | Tests | Result |
 | --- | --- | --- |
-| CoreTest |21|Passed |
-| MetricsExporterTest |4|Passed |
-| MetricsBridgeTest |2|Passed |
-| ServiceIT: real PostgreSQL/HTTP |29|Passed |
-| KafkaIT: real Kafka/PostgreSQL/HTTP |12|Passed |
-| RedisIT: real Redis integration |4|Passed |
-| Java total |72:27 unit+45 integration|Zero failures/errors/skips in CI reports |
-| Python deployment/security |12|Passed |
-| Python HA/configuration/backup |29|Passed |
-| Python total |41|Passed |
+| CoreTest | 22 | Passed |
+| MetricsBridgeTest | 2 | Passed |
+| MetricsExporterTest | 4 | Passed |
+| AsyncCacheHistoryIT | 17 | Passed |
+| KafkaIT | 12 | Passed |
+| RedisIT | 5 | Passed |
+| ServiceIT | 36 | Passed |
+| Java total | **98** | Zero failures/errors/skips in local reports |
+| Deployment Python | 14 | Passed |
+| HA/config/backup Python | 49 | Passed |
+| Python total | **63** | Passed |
+| Local runtime image | Configuration and tested-JAR equality | Passed |
+| Local image vulnerability gate | Fixable HIGH/CRITICAL, Ubuntu and Java | Zero matching findings |
+| Sequential signed cloud promotion | Three nodes and migration 011 | Passed |
+| Latest synthetic cloud flow | Two subscriptions, one event, two signed external captures | Passed |
 
-CI additionally exercised real runtime startup/DB permissions, deliberate failed-release rollback and restore, real three-member synchronous PostgreSQL failure with JDBC standby reads, real TLS Redis/Sentinel promotion with existing Jedis clients, proxy routes/draining, signed packaging and fixable HIGH/CRITICAL image scans. Those drills are not extra Java/Python test-case counts. Scans passed for the app, database/backup tools, proxy, Kafka, etcd and Redis images at build time; they do not prove absence of unfixed, unknown or future vulnerabilities, or that the Rancher host engine was upgraded.
+Source suites: [Java tests](../src/test/java/com/example/notifications), [deployment tests](../deploy/droplet), [HA tests](../deploy/ha). Current feature tests cover concurrent keyed registration, original 201/Location replay, tenant/operation isolation, changed URL/filter409, key validation/authentication, canonical order, cap handling, no reactivation after delete, rollback and one intended recipient after registration retries.
 
-## Material-risk coverage
+[CI 45943599738](https://github.com/Sahil2237/notification-fanout/actions/runs/45943599738) passed Java, both Python suites and HA configuration validation. **Overall CI failed on Actions artifact storage quota.** Hosted release/security/HA-runtime jobs were skipped. Local signed deployment is not equivalent to a passing latest full CI pipeline; do not silently mark the skipped hosted HA drills as executed. The previous [70f0df1 verification](https://github.com/Sahil2237/notification-fanout/actions/runs/45927971103) and [deployment](https://github.com/Sahil2237/notification-fanout/actions/runs/45929375771) succeeded for their own revision.
 
-| Requirement or failure risk | Automated verification | Cloud evidence boundary |
-| --- | --- | --- |
-| Structured/filterable durable acceptance | Filter/null/missing/array/JSON Pointer cases; all JSON kinds; transaction rollback/storage-error responses; atomic outbox rollback | Latest public202/replay and pre-migration preservation of 10,136 events/five subscriptions |
-| Dynamic subscriptions and authorization | REST lifecycle, tenant ownership, deletion boundary, invalid filters and origin approval/revocation | Historical public HTTPS registration; latest normal list/history reads |
-| Destination abuse | Public HTTPS policy, mixed/private DNS answers and connection-time rebinding cases; administrator isolation | Public administrator404 and signed synthetic receiver capture; no exhaustive penetration-test claim |
-| Duplicate event requests | Concurrent explicit/generated canonical identities; producer-ID conflict and identity scoping | Same missing-key body through three apps returned original event; explicit replay/conflict 409 |
-| Kafka duplicate/recovery boundary | Outage/restart, duplicate envelopes, quarantine, partition-specific failure, offset-after-DB-commit and outbox lease recovery | Earlier whole-host broker loss retained ISR2 and delivered a webhook; latest normal pipeline/capture |
-| Single event-type distribution |10,000UUID-keyed records through real six-partition Kafka | Not a10,000 events/s or complete fanout benchmark |
-| Retry/timeout/audit | Real500/500/204, permanent errors, timeout cancellation, backoff, null status and six-total-attempt exhaustion | Latest live event delivered204 in one attempt; no new live six-failure exhaustion probe |
-| Fencing and partial failures | Concurrent claims, lost HTTP-success result, expired/stale worker/DLQ tokens and rollback if terminal DLQ insert fails | Redis failure did not cause a second observed successful-event capture; no universal exactly-once claim |
-| Shared rate limit and retry budgets | Real Redis atomic windows, independent clients, reset/identity behavior and bounded resource configuration | Synthetic two-slot quota produced200,200,429,429,429 across apps; counter removed before reopening ingress |
-| Redis safety/HA | TLS hostname rejection, application ACL denial, existing client follows promotion, no-replica failure closes admission, rejoin | Latest cloud Redis/Sentinel primary-pair stop yielded503,503,200; all app clients recovered; replicas rejoined |
-| Subscriber isolation/fairness | Cross-instance reservation caps and least-recently-claimed scheduling | No representative long-running heterogeneous-receiver fairness/soak claim |
-| Replica-only reads | Reject primary as read pool; actual JDBC standby selection before/after promotion; fail when no standby remains | Latest history/list responses identify replica/eventual |
-| Delivery DLQ | Atomic terminal record, tenant history, real Kafka DLQ publication, publisher ownership and event correlation | Topic/ACL provisioned RF3/min ISR2; backup role can read new DLQ table |
-| Release authenticity and rollback | Bad signature/path/symlink/manifest/digest/config/layer rejection; real failed-startup rollback/restore | Latest app images verified by portable identity and promoted on all hosts; no infrastructure restart during application rollout |
-| PostgreSQL HA/data | Real TLS etcd/PostgreSQL cluster preserves100 acknowledged rows after primary loss and accepts another write | Earlier actual Droplet power-off promoted a different primary; latest data-preservation comparison is separate |
-| Backup integrity/retention | Manifest/checksum/authentication/expiry-prefix tests and isolated restore drills; historical metadata compatibility | Earlier actual Spaces archive restored all nine snapshot counts. New ten-table actual Spaces restore not executed for latest rollout |
-| Metrics/export | Six Java exporter/bridge tests: actual bounded local OTLP HTTP transport, deltas/labels, endpoint rejection, failure/no retry, scrape/restart behavior | Bridges running; last provider 404 means Explorer visibility remains unverified |
+Fresh cloud event be35433b-ebc0-4732-88b9-cca8fdba577a returned 202/duplicate=false; event replay returned the original ID. Both subscription creation replays returned original 201 responses, conflicting filters409. Two distinct Delivery IDs reached delivered with one 204 attempt each, externally captured event/subscription/delivery IDs, exact event body and valid tenant-derived HMAC. The same registration replay passed directly against each app. All nodes returned metrics/readiness 200 and retained default-deny egress; twenty sampled LB readiness requests returned 200 during part of rollout. This is sampled availability, not a continuous zero-interruption proof. Temporary demo subscriptions remained active for the user; receiver expiry was requested as24 hours and those URLs are not permanent test dependencies.
 
-Historical [local HA evidence](evidence/local-ha-507f989.json), [whole-Droplet/Spaces restore evidence](evidence/cloud-ha-bd082b6.json) and [latest controls evidence](evidence/cloud-redis-6474ad3.json) are deliberately separate. The full historical Rancher HA drill preserved 106 acknowledged events and four HTTP 204 deliveries; it was not rerun in full for the Redis rollout. The new dedicated Redis drill was run locally and in CI.
+## Requirements coverage
 
-## Reproduce safely
+| Requirement | Verification and scope |
+| --- | --- |
+| Type/source/arbitrary JSON ingestion | REST validation, transaction and replay integrations; accepted event/cloud GET/callback proof |
+| Accepted events durable | Event/outbox atomicity, publisher recovery/reconciliation, uniqueness and earlier HA acknowledged-row checks |
+| Dynamic subscription management | Create/list/delete/filter/ownership tests; actual two keyed cloud registrations, conflicts and replica-list access |
+| Consumer-time matching | AsyncCacheHistoryIT membership/create/delete/cache-generation and repeated-dispatch scenarios |
+| Retry/backoff/status | RetryPolicy, timeout, reservation/fencing, exhaustion/DLQ and rollback tests; latest cloud success path, not a new six-failure live receiver test |
+| Audit per event/subscription | HTTP integration and transparent active/history reads; real attempt 204 and capture agree |
+| Delivery guarantee | At-least-once HTTP attempts, duplicate-job protection and receiver deduplication responsibility documented |
+| Architecture diagram | End-to-end and component/data/state Mermaid diagrams in system-design.md |
+| Unit/integration testing |98 Java and 63 Python; not a claim of exhaustive scenario coverage |
+| CI on code push | Workflow configured and test steps passed; artifact publication/storage is an unresolved operational blocker |
+| README setup/filters/trade-offs | README, API and design are the only canonical sources for these concerns |
+| DigitalOcean deployment | Three real Droplets, regional LB, private cluster network and Spaces backup |
+| Managed queue extension | Deferred by user; actual Kafka is self-managed |
+| Per-source ordered delivery | Not implemented |
+| Subscriber time-range replay | Not implemented |
 
-Inside the Ubuntu container under `/workspaces/notification-fanout`:
+## Backup and recovery evidence
 
-```sh
-mvn -B -ntp verify
-python3 -m unittest discover -s deploy/droplet -p 'test_*.py' -v
-python3 -m unittest discover -s deploy/ha -p 'test_*.py' -v
-```
+- An actual Spaces snapshot created 24 November 2026 at 06:51:26 UTC was fetched, authenticated/decrypted, restored into disposable network-isolated PostgreSQL 17 and checked against all nine historical snapshot counts. [Historical HA/restore record](evidence/cloud-ha-bd082b6.json).
+- Backup tools were updated to support the current thirteen snapshot tables; both restore-helper paths were synchronized. Migration 011 adds subscription key/hash columns inside an existing backed-up table.
+- A fresh actual thirteen-table Spaces restore and end-to-end service recovery have **not** been verified. Local/CI restore tests and an active timer are separate evidence.
+- Read-only 27 November job inspection found timers active on all three nodes; node 2 recorded backed_up at 02:00:19 UTC/07:30:19 IST and later checks not_due. [Audit inventory](evidence/documentation-audit-2026-11-27.json).
+- Whole-Droplet automated backups, continuous WAL/PITR, automatic disaster restoration and measured full-disaster RTO are not configured/proven. One-day backup retention can leave no valid snapshot if replacement fails after expiry.
 
-Use dedicated disposable test services/database only. Tests migrate/truncate test data; never set TEST_DB_URL or test Kafka/Redis endpoints to shared production resources. The CI workflow documents actual ephemeral-service/image dependencies and guards for destructive local HA fixtures. See README and deploy/ha/redis.md for local setup rather than copying cloud credentials.
+## Capacity and HA boundaries
 
-For cloud release acceptance, verify signed revision/image identity, all three app/proxy readiness states, expected replication/quorum, authenticated public HTTPS, synthetic matching/nonmatching behavior as appropriate, history, receiver capture/HMAC and original-event idempotency. Record which failure drills were actually repeated. AsyncCacheHistoryIT adds cache expiry/failure/LRU, consumer-time membership, concurrent replay and terminal-history/deduplication checks. Do not manipulate a live request quota; the latest fixture ran only while every backend was drained and removed its synthetic state before opening ingress.
+The target is five tenants at 1,000 requests/second each, not an achieved 5,000-event/second capacity rating. Quota also counts non-ingestion requests. Cache admission is 32 MiB/50,000 entries, not a full 1.5 million-event five-minute working set. No infrastructure resize was performed for that target.
 
-## Remaining validation gaps
+The [1,000-event/minute test](evidence/load-1000-per-minute-2026-11-26.json) recorded acceptance at roughly 16.7/second; it is not 1,000/second or representative fanout throughput. [Earlier10,000-event evidence](evidence/release-57b3fbf.json) was a 50/second no-match test. A single Kafka distribution test does not certify end-to-end throughput. Representative bursts, slow/failing receivers, realistic fanout, disk growth, one-host-degraded throughput and agreed p95/p99/SLOs remain open.
 
-No suite covers every possible failure. Full-region recovery, full-service disaster RTO, elapsed certificate-renewal/backup-expiry cycles, sustained representative fanout/slow-receiver saturation, endpoint-wide fairness and a negotiated production availability/latency SLO remain open. No separate per-user quota, autoscaler, ETag update, managed queue, ordering or replay tests can pass as implemented features because those capabilities do not exist. Alarms/tickets were excluded. A subsequent read-only control-panel inspection verified live health/affinity values; [evidence](evidence/load-balancer-2026-11-25.json) distinguishes those fields from the provider-documented managed distribution algorithm. No equal-distribution load benchmark or precise failover RTO was run.
+[Earlier whole-Droplet failover evidence](evidence/cloud-ha-bd082b6.json), [Redis Sentinel failover](evidence/cloud-redis-6474ad3.json) and [asynchronous redesign checks](evidence/cloud-async-cache-history-f0c4d33.json) are revision-pinned. The latest subscription change did not repeat whole-host failure. Configured restart policies were inspected on 27 November, not retested by reboot during the audit. One-host/quorum survival is different from a region-wide zero-loss guarantee.
 
-## November 26 redesign validation
+## Network, security and telemetry evidence
 
-Local validation runs in the existing Rancher Ubuntu container under /workspaces/notification-fanout. The new AsyncCacheHistoryIT exercises database-backed concurrent duplicate handling, consumer replay and matching rollback, processing-time subscription membership, Redis expiry/failure/LRU limits, bounded publication claims, terminal archive/status, attempt/DLQ foreign keys and permanent delivery-pair identity. Existing KafkaIT polling now tolerates the legitimate pre-matching empty delivery list. Backup policy tests include the new durable tables and cache ACL namespace restrictions.
+| Claim | Evidence and boundary |
+| --- | --- |
+| Provider LB settings | [25 November settings](evidence/load-balancer-2026-11-25.json): health timing/affinity; provider-managed distribution, no exact internal scheduler name |
+| LB-only ingress and restricted egress | [27 November provider/host record](evidence/provider-network-hardening-2026-11-27.json) |
+| Direct backend isolation | [Protocol checks](evidence/network-hardening-final-2026-11-27.json); corporate gateway limitation recorded; TCP connect alone is insufficient |
+| Signed external webhook | [Latest two-receiver proof](evidence/subscription-idempotency-cloud-2026-11-27.json); earlier [single callback](evidence/network-webhook-2026-11-27.json) |
+| Local metrics | All three loopback endpoints checked; no public metrics port |
+| DigitalOcean custom metrics | [Last recorded 404/visibility gap](evidence/metrics-cloud-cf92a03.json); no claim of successful Explorer display |
+| SSH | Public source scope retained at user's explicit decision, key-only login and restricted CI identity; not private-only host administration |
+| Secrets/privacy | No tokens, signing keys, production dumps or full environment/ACL data belong in committed evidence |
+| Encryption | HTTPS/private TLS and age-encrypted backup implemented; full active-disk encryption/compliance not established |
 
-The 10,000/s k6 scenario is a reproducible capacity gate, not an executed or passing production benchmark. Existing tenant quota and worker bounds are not automatically raised. No claim of exhaustive testing or new whole-host chaos evidence follows from this release. Final executed results and cloud revision belong in submission-status.md.
+## Remaining work and release acceptance
 
-Executed release result: 27 unit + 59 integration Java tests and 42 Python tests passed locally, and the complete hosted verification/tested-release/HA-runtime pipeline passed for f0c4d33. Cloud duplicate/cache/subscription/history/public-HTTPS/HMAC results and their exact limits are recorded in [current evidence](evidence/cloud-async-cache-history-f0c4d33.json).
+Implemented controls should not be presented as a fully hardened production platform. Required follow-up depends on the interview/production scope:
 
-## Paced 1,000 events/minute public test
+1. Restore a latest-schema actual Spaces backup and exercise recovered application/idempotency/audit; escrow recovery keys/configuration outside both cluster and bucket.
+2. Resolve Actions artifact quota/publication without discarding required recovery bundles; rerun full hosted image/HA gates before calling CI healthy.
+3. Measure sustained/burst ingestion, matching and delivery capacity, including fanout/slow receivers/degraded nodes; set global/backlog/disk thresholds and agreed SLOs from results.
+4. Improve outbox/consumer/DLQ retry backoff, partial acknowledgement tracking and webhook recovery window/Retry-After handling. Those recommendations are not deployed.
+5. Verify custom metrics in Explorer and establish reliable pool/lag/disk/backup/certificate visibility. Alarms/tickets remain explicitly excluded unless requirements change.
+6. Plan certificate/credential renewal, durable secret escrow, retention/partitioning and dedicated/managed service capacity as actual growth justifies.
 
-[Saved evidence](evidence/load-1000-per-minute-2026-11-26.json): f0c4d33 accepted all 1,000 unique requests in 59.993 seconds with 202, zero request retries/errors/generator drops, 1,000 persisted events/outbox rows and completed Kafka matches. No subscriptions matched and no notifications were sent. p95 acceptance was 77.63 ms and p99 121.16 ms. This is a one-minute, no-fanout observation, not a sustained or 10,000/s capacity certification.
+A release acceptance check must cover tests/security, migration compatibility, exact signed image identity, all-node readiness/no drains, public authenticated smoke tests, unchanged idempotency/recipient semantics and independently captured webhooks. Infrastructure/data upgrades require their own safe quorum/restore verification. No failure injection, reboot, resize or new paid resource is part of this documentation consolidation.
 
-Retention follow-up local result: 27 unit plus 62 integration tests passed (89 Java tests). Three new cases protect identity TTL under subscription/cache pressure, verify non-refreshing expiry and protect legacy LRU identities during rolling upgrades. Hosted CI/deployment evidence is recorded after that revision completes.
+## Documentation audit and consolidation
 
-## Subscription creation idempotency
+The previous 37 Markdown pages mixed historical and current narratives. The canonical set is now six: root README, system-design, api, operations, validation and interviewer-demo. Removed pages remain recoverable in Git history; historical JSON evidence stays intact. Component LLDs moved into system-design.md; onboarding/manual test content is split between README, API, interviewer-demo and operations. Network/firewall/storage/backup/metrics are owned by operations; status/test/capacity evidence by this document.
 
-ServiceIT covers keyed HTTP 201/Location replay, conflicting URL/filter 409, invalid/oversized keys 400, unauthenticated 401, tenant and operation scope, unkeyed distinct registrations, canonical object order, generation stability, deletion replay without reactivation, concurrent Store clients producing one recipient/delivery, replay at the 1,000 active cap and complete rollback of failed registration. Migration 011 is additive and preserves existing registrations. Cloud validation is recorded separately after deployment; local tests do not establish a deployed release. [Contract](subscription-idempotency.md), [manual fresh demo](manual-two-subscriber-test.md).
+Corrections include Kafka-consumer-time matching instead of ingestion-time recipient snapshots; targeted Redis caches instead of counters-only claims; current subscription idempotency; current pools/memory/retry caveats; fourteen physical versus thirteen snapshot tables; resolved restore-helper drift; current application/backup-tool revisions; and artifact-blocked latest CI instead of an unqualified green pipeline.
+
+This refresh changes documentation only. It does not clear Actions usage, change service configuration, deploy another image, generate a new event, renew credentials or perform a new failover/restore test. Assessor repository access and personal-account sign-out remain explicit handoff obligations; the original editor requirement and the user-requested IntelliJ alternative are distinguished in README.
+
+Documentation-only verification on 27 November 2026 passed: six canonical Markdown files, eight Mermaid diagrams parsed, 77 relative links/anchors resolved, 27 shell blocks passed bash syntax checks and five JSON examples parsed. Demo fixtures passed three generated requests, two filter examples, thirteen positive/negative predicates and local transport/status/retry checks. No live events/subscriptions were created, and no application redeployment was needed. These documentation checks do not represent a fresh run of the Java/Python release suites above.

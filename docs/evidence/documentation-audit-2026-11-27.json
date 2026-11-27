@@ -1,0 +1,150 @@
+{
+  "verified_at_utc": "2026-11-27T07:37:39.928541+00:00",
+  "nodes": [
+    {
+      "node": 1,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11145,
+      "subscriptions": 17,
+      "delivery_identities": 23,
+      "hot_deliveries": 8,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    },
+    {
+      "node": 2,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11145,
+      "subscriptions": 17,
+      "delivery_identities": 23,
+      "hot_deliveries": 8,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    },
+    {
+      "node": 3,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11145,
+      "subscriptions": 17,
+      "delivery_identities": 23,
+      "hot_deliveries": 8,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    }
+  ],
+  "read_only_checks": [
+    {
+      "node": 1,
+      "metrics_status": 200,
+      "tables": [
+        "approved_webhook_origins",
+        "databasechangelog",
+        "databasechangeloglock",
+        "deliveries",
+        "delivery_attempts",
+        "delivery_dead_letters",
+        "delivery_history",
+        "delivery_identities",
+        "event_outbox",
+        "events",
+        "kafka_dead_letters",
+        "subscription_versions",
+        "subscriptions",
+        "webhook_origin_audit"
+      ],
+      "tools_image": "notification-ha-tools:f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "backup_timer": "active",
+      "successful_backups_last_30h": [],
+      "restore_helpers_equal": true,
+      "restore_supports_current_metadata": true
+    },
+    {
+      "node": 2,
+      "metrics_status": 200,
+      "tables": [
+        "approved_webhook_origins",
+        "databasechangelog",
+        "databasechangeloglock",
+        "deliveries",
+        "delivery_attempts",
+        "delivery_dead_letters",
+        "delivery_history",
+        "delivery_identities",
+        "event_outbox",
+        "events",
+        "kafka_dead_letters",
+        "subscription_versions",
+        "subscriptions",
+        "webhook_origin_audit"
+      ],
+      "tools_image": "notification-ha-tools:f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "backup_timer": "active",
+      "successful_backups_last_30h": [
+        {
+          "status": "backed_up",
+          "checked_at": "2026-11-26T02:00:16.018837+00:00",
+          "manifest_key": "postgres/daily/v1/20261126T020016Z-92100c81784f43b3a45bcb3b140f7463.json",
+          "expired_objects_deleted": 0
+        },
+        {
+          "status": "backed_up",
+          "checked_at": "2026-11-27T02:00:19.057984+00:00",
+          "manifest_key": "postgres/daily/v1/20261127T020019Z-505b11159a744981b4882fad2c8ce5fb.json",
+          "expired_objects_deleted": 2
+        }
+      ],
+      "restore_helpers_equal": true,
+      "restore_supports_current_metadata": true
+    },
+    {
+      "node": 3,
+      "metrics_status": 200,
+      "tables": [
+        "approved_webhook_origins",
+        "databasechangelog",
+        "databasechangeloglock",
+        "deliveries",
+        "delivery_attempts",
+        "delivery_dead_letters",
+        "delivery_history",
+        "delivery_identities",
+        "event_outbox",
+        "events",
+        "kafka_dead_letters",
+        "subscription_versions",
+        "subscriptions",
+        "webhook_origin_audit"
+      ],
+      "tools_image": "notification-ha-tools:f0c4d332cbe5dbeaa70142edc31f563c576c7b3c",
+      "backup_timer": "active",
+      "successful_backups_last_30h": [],
+      "restore_helpers_equal": true,
+      "restore_supports_current_metadata": true
+    }
+  ],
+  "audit_completed_at_utc": "2026-11-27T07:50:13.514890+00:00",
+  "scope": "Read-only live readiness/migrations/tables/backup/helper checks. No new event, subscription, deployment, failover or restore.",
+  "documented_runtime_resources_source": "Earlier same-day read-only Docker/host inspection; resource ceilings are configuration, not measured peak capacity.",
+  "new_digitalocean_resources": 0,
+  "public_lb_readiness": 200,
+  "documentation_checks": {
+    "canonical_markdown_files": 6,
+    "mermaid_diagrams_parsed": 8,
+    "relative_links_and_anchors": 77,
+    "bash_syntax_blocks": 27,
+    "json_examples_parsed": 5,
+    "demo_generated_requests": 3,
+    "demo_filter_examples": 2,
+    "demo_predicate_cases": 13,
+    "demo_local_transport_status_retry_checks": "passed",
+    "new_live_events": 0,
+    "new_live_subscriptions": 0,
+    "application_redeployed": false
+  }
+}
