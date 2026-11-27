@@ -1,5 +1,7 @@
 # Manual test: one event, two subscriptions, two webhook deliveries
 
+**Updated: 27 November 2026 (IST).** Source contracts and deployment evidence are linked below; this is a manual smoke-test guide, not a capacity or failover test.
+
 **Network access:** use the load-balancer URL below. Direct public Droplet application access is blocked; [current network hardening and remaining controls](network-hardening.md). Loopback metrics still require an authorized shell inside each Droplet.
 
 ## Open these health URLs directly in your browser
@@ -27,9 +29,60 @@ The examples use synthetic data and two distinct Webhook.site inboxes. Both subs
 | Inspect Java health, admin health or metrics on a specific instance | Authorized console/shell inside that Droplet | `127.0.0.1:8080` / `127.0.0.1:8081` |
 | Check direct public backend access | External client | Expected to fail on Droplet 80/443; use the LB for API traffic |
 
-[Short onboarding page](onboarding.md) | [Host policy, verification and outstanding provider/SSH/egress controls](network-hardening.md).
+[Short onboarding page](onboarding.md) | [Deployed ingress/egress policy, verification and retained SSH access](network-hardening.md).
 
 Do not replace the load-balancer IP with a Droplet IP in the API commands. Direct-backend blocking is intentional. The host firewall permits private VPC/interface traffic; a provider LB-identity-only rule is also deployed. SSH access remains key-only with broad source scope, so this is not a claim that all host ports are private. Preserve your existing operator access and never use the restricted CI identity as a general shell.
+
+## What this test exercises in the current design
+
+```mermaid
+sequenceDiagram
+    participant U as Your local terminal
+    participant L as Public load balancer
+    participant A as Dropwizard API
+    participant R as Shared Redis
+    participant P as PostgreSQL primary
+    participant K as Kafka and matcher
+    participant W as Delivery workers
+    participant H as Two webhook inboxes
+    U->>L: Create two subscriptions with tenant token
+    L->>A: Forward healthy backend request
+    A->>P: Commit subscriptions and tenant generation
+    A->>R: Best-effort subscription cache refresh
+    U->>L: POST one event with stable identities
+    L->>A: Authenticate, validate and shared tenant quota
+    A->>R: Check committed duplicate identity
+    A->>P: Atomically commit event and outbox on miss
+    A-->>U: 202 with canonical Event ID
+    P->>K: Outbox publisher sends event to Kafka
+    K->>P: Consumer matches current subscriptions and commits two jobs
+    W->>P: Lease each delivery and persist attempts
+    W->>H: Signed HTTPS POST with stable Delivery ID
+    H-->>W: 200 for each demo inbox
+    W->>P: Save delivered status
+    U->>L: GET event and delivery audit
+    L->>A: Authenticated tenant read
+    A-->>U: Read-replica results, possibly briefly delayed
+```
+
+| Design aspect | Current behavior and what the demo proves |
+| --- | --- |
+| Public entry point | Managed LB `174.138.121.225`, HTTPS 443. Three Droplets run one app each; direct backend HTTP/HTTPS is blocked. Public admin/metrics endpoints are unavailable. |
+| Authentication and isolation | Static tenant bearer credential; all resources are tenant-scoped. Supplying a tenant/user field does not change authenticated identity. No OAuth/OIDC, separate API gateway or per-user quota. |
+| Shared admission | Redis fixed-second quota: **1,000 authenticated requests per tenant per second across all three apps**, including reads and duplicate submissions. It is a quota, not measured throughput. Redis limiter failure rejects admission; optional cache failure falls back to PostgreSQL. |
+| Input validation | Body at most 256 KiB; nonblank type/source at most 128 characters; JSON depth at most 32; up to 20 payload equality conditions. HTTPS destinations require administrator-approved origin and safe DNS/TLS validation. |
+| Acceptance and queue | 202 follows the PostgreSQL event/outbox transaction. Kafka publication, matching and delivery happen later. Kafka is not the first durable store or a direct public producer endpoint. |
+| Kafka distribution | Six partitions, three consumers total (one/app); canonical internal Event UUID is the partition key. RF3, minimum ISR2, producer acknowledgements from all in-sync replicas. No per-source delivery ordering claim. |
+| Rule selection | Subscriptions visible in the successful consumer matching transaction determine recipients. Create before matching can include a new rule; delete before matching excludes it. Delete after matching does not cancel created deliveries. Keep both test subscriptions until the demo completes. |
+| Duplicate protection | Tenant-scoped explicit key and/or producer Event UUID, backed by PostgreSQL uniqueness. Redis retains admitted committed identities for up to 300 seconds from original acceptance; replay does not extend expiry. The bounded cache cannot guarantee every event fits for the full window; PostgreSQL is authoritative on misses. |
+| Subscription cache | Same Redis service, generation-scoped records, database fallback and subscription-only LRU; at most 20% of a tenant's active subscriptions cached. With only these two active subscriptions, the floor is zero; the demo does not require cache hits. No PUT/PATCH or ETag update API; delete/create replaces a subscription. |
+| Worker safety | Four bounded workers/app, twelve total; one active attempt per subscription across apps, fair scheduling and shared retry budget. Database leases and claim tokens reject stale saved results. These do not prevent a remote side effect after an ambiguous network failure. |
+| Retries and DLQ | Transient errors can use the initial attempt plus **five retries**, six total; backoff/jitter and retry budget can defer attempts. Non-retryable errors can fail earlier. Terminal failures are persisted in the delivery DLQ; Kafka DLQ publication retries independently. |
+| Audit and history | Terminal deliveries move after 24 hours to history in bounded atomic batches. Existing event/subscription/delivery URLs return the same IDs and attempts through a logical active/history view; pending jobs stay active. History has no automatic one-day deletion. |
+| Read replicas | Tenant GETs use standby-only reads; headers `X-Read-Source: replica` and `X-Read-Consistency: eventual`. Brief 404/empty reads can follow a successful write; no automatic read fallback to primary. |
+| Delivery guarantee | At-least-once HTTP attempts. A stable Delivery ID enables receiver-side deduplication; it does not establish exactly-once webhook effects. Two distinct subscriptions intentionally create two delivery identities. |
+
+The five-tenant target is 5,000 events/second aggregate, **not a validated limit on this fleet**. This guide creates one logical event, not load. For deeper contracts see [API](api.md), [matching/cache/history](async-cache-history.md), [reliability controls](reliability-controls.md), [capacity limits](capacity-1000-rps.md) and [current release evidence](submission-status.md).
 
 ## 1. Prepare the local terminal
 
@@ -70,7 +123,7 @@ Browser links: [liveness](https://174.138.121.225/health/live), [readiness](http
 
 ## 3. Create two independent external inboxes
 
-The active destination allowlist included `https://webhook.site:443` when checked on 26 November 2026. The paths below share this approved origin. You do not need to allowlist each inbox path. A different host/subdomain requires a private administrator operation; tenant API calls cannot approve it.
+The approved `https://webhook.site:443` origin was exercised by the successful 27 November cloud webhook test. An operator may subsequently revoke approval, so treat a policy rejection as a reason to check the current allowlist. The paths below share this approved origin. You do not need to allowlist each inbox path. A different host/subdomain requires a private administrator operation; tenant API calls cannot approve it.
 
 Create inbox 1:
 
@@ -139,7 +192,7 @@ test "$SUB_1" != "$SUB_2"
 jq . "$RUN_DIR/subscription-2.json"
 ```
 
-Each POST should return **201 Created**, a distinct `id` and a `Location` header. Filters use JSON Pointer paths, only `eq`, and AND semantics. Both filters match the event below. Subscription creation is committed before 201; waiting for a read replica is not required before sending the event.
+Each POST should return **201 Created**, a distinct `id` and a `Location` header. Filters use JSON Pointer paths, only `eq`, and AND semantics. Both filters match the event below. Save the responses and confirm HTTP 201 in each `subscription-*-headers.txt`; these saved responses identify the committed registrations. Subscription creation is committed before 201; waiting for a read replica is not required before sending the event.
 
 Confirm active subscriptions using the list endpoint:
 
@@ -164,8 +217,10 @@ curl --fail-with-body --silent --show-error --max-time 15 \
   -H "Authorization: Bearer $API_TOKEN" \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  -H "X-Request-ID: manual-$RUN_ID" \
   --data-binary "@$RUN_DIR/event-request.json" \
   > "$RUN_DIR/event-response.json"
+awk 'BEGIN{IGNORECASE=1} /^HTTP\// || /^([Xx]-[Ee]vent-[Ii][Dd]|[Xx]-[Rr]equest-[Ii][Dd]|[Ll]ocation|[Xx]-[Rr]ate[Ll]imit[^:]*):/ {sub(/\r$/, ""); print}' "$RUN_DIR/event-headers.txt"
 EVENT_ID=$(jq -er '.event.id' "$RUN_DIR/event-response.json")
 jq -e '.duplicate == false' "$RUN_DIR/event-response.json"
 jq . "$RUN_DIR/event-response.json"
@@ -174,6 +229,8 @@ printf 'Internal event ID: %s\nProducer event ID: %s\n' "$EVENT_ID" "$PRODUCER_E
 
 Expected: **202 Accepted**, `duplicate:false`, `event.id`, `event.acceptedAt`, and `Location: /v1/events/<internal-event-id>`. The system commits the event and transactional outbox before 202. Matching and delivery are asynchronous; 202 does not mean the webhooks have completed.
 
+The acceptance response also supplies `X-Event-ID` for correlation; the same canonical ID appears in downstream event logs, Kafka records, webhook headers/body and delivery audit. `X-Request-ID` identifies an HTTP request and is separate from Event ID. Retries may have new request IDs while preserving the same event and idempotency identities.
+
 Use **EVENT_ID from the response** in GET paths and webhook comparisons. The producer-supplied `PRODUCER_EVENT_ID` is a separate duplicate identity, not the REST lookup ID. Preserve the same body, producer ID and key if retrying an uncertain POST. Do not generate a new run when retrying the same logical event.
 
 ## 6. Confirm the committed event
@@ -181,10 +238,12 @@ Use **EVENT_ID from the response** in GET paths and webhook comparisons. The pro
 ```bash
 curl --fail-with-body --silent --show-error --max-time 10 \
   -H "Authorization: Bearer $API_TOKEN" \
+  -D "$RUN_DIR/event-read-headers.txt" \
   "$BASE_URL/v1/events/$EVENT_ID" | jq .
+cat "$RUN_DIR/event-read-headers.txt"
 ```
 
-Expected: **200** and the same `id`, payload, type and source. A fresh write can briefly return 404 on a lagging read replica; retry the GET rather than emitting a second new event. The saved 202 response already confirms the primary commit. A read-replica outage can return 503.
+Expected: **200** and the same `id`, payload, type and source. A fresh write can briefly return 404 on a lagging read replica; retry the GET rather than emitting a second new event. Look for `X-Read-Source: replica` and `X-Read-Consistency: eventual` in the saved headers. The saved 202 response already confirms the primary commit; there is no separate public Kafka-commit/status URL. A read-replica outage can return 503.
 
 ## 7. Wait for both deliveries and inspect attempts
 
@@ -209,6 +268,10 @@ jq --arg a "$SUB_1" --arg b "$SUB_2" \
   "$RUN_DIR/deliveries.json"
 DELIVERY_1=$(jq -er --arg sub "$SUB_1" '.items[] | select(.subscriptionId==$sub) | .id' "$RUN_DIR/deliveries.json")
 DELIVERY_2=$(jq -er --arg sub "$SUB_2" '.items[] | select(.subscriptionId==$sub) | .id' "$RUN_DIR/deliveries.json")
+test "$DELIVERY_1" != "$DELIVERY_2"
+jq -e --arg id "$EVENT_ID" --arg a "$SUB_1" --arg b "$SUB_2" \
+  '[.items[] | select(.subscriptionId==$a or .subscriptionId==$b)] | all(.[]; .eventId==$id and any(.attempts[]; .outcome=="delivered" and .httpStatus==200 and .startedAt!=null and .finishedAt!=null))' \
+  "$RUN_DIR/deliveries.json"
 ```
 
 Expected: two distinct delivery IDs, one per test subscription, the same event ID, `status:"delivered"`, and a completed attempt with `httpStatus:200` from each configured inbox. The polling loop is bounded; failed HTTP reads stop the commands rather than hiding errors. After diagnosing a transient GET failure, rerun this read-only section. After a delivery timeout/failure, inspect the saved statuses and attempts rather than recreating resources.
@@ -228,6 +291,8 @@ curl --fail-with-body --silent --show-error --max-time 10 \
   -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/v1/subscriptions/$SUB_2/deliveries?limit=100&offset=0" | jq .
 ```
 
+Transient timeouts, HTTP 408/429 and 5xx are retryable. Other non-2xx responses can fail immediately. The successful demo does not exercise exhaustion: for those tests use [validation](validation.md), rather than deliberately breaking another subscriber. Kafka consumer redelivery reuses committed matching results and the unique event/subscription delivery identity. Delivery claim tokens protect database updates; a consumer-specific fencing epoch is not implemented.
+
 ## 8. Independently verify the webhook receivers
 
 In each printed Webhook.site viewer, find the **POST** containing your `EVENT_ID`. Check `X-Event-ID`, `X-Delivery-ID`, `subscriptionId` and the payload. The event ID must match across both inboxes; delivery IDs and subscription IDs must differ. This proves receipt independently of our delivery audit. A 2xx delivery audit proves receiver acceptance, not an arbitrary downstream business action. Public inspection inboxes do not implement production subscriber-side delivery-ID deduplication or HMAC validation.
@@ -242,13 +307,14 @@ curl --fail-with-body --silent --show-error --max-time 10 \
   "https://webhook.site/token/$INBOX_2/requests?sorting=newest&per_page=100" \
   > "$RUN_DIR/inbox-2-requests.json"
 for inbox in 1 2; do
-  jq --arg id "$EVENT_ID" \
-    '[.data[] | select(.method=="POST") | {headers,body:(.content | fromjson?)} | select(.body.event.id==$id)]' \
+  if [ "$inbox" -eq 1 ]; then sub="$SUB_1"; delivery="$DELIVERY_1"; else sub="$SUB_2"; delivery="$DELIVERY_2"; fi
+  jq -e --arg id "$EVENT_ID" --arg sub "$sub" --arg delivery "$delivery" \
+    '[.data[] | select(.method=="POST") | {headers,body:(.content | fromjson?)} | select(.body.event.id==$id and .body.subscriptionId==$sub and .body.deliveryId==$delivery)] | if length>0 then . else error("Matching webhook capture not found") end' \
     "$RUN_DIR/inbox-$inbox-requests.json"
 done
 ```
 
-Each resulting array should contain a matching notification. For an inbox requiring provider authentication, use its authorized UI/API access; do not substitute the notification-service bearer token. Seeing `X-Webhook-Signature` is not cryptographic verification: signature validation requires the receiver's separately provisioned signing key. Raw HTTP attempts can exceed one after ambiguous failures; a stable delivery ID supports receiver deduplication.
+Each command must succeed and return at least one notification with the expected event, subscription and delivery IDs. An empty result fails the check. If provider history is delayed, repeat these read-only requests and follow its page parameter when needed; do not resend a new event. For an inbox requiring provider authentication, use its authorized UI/API access; do not substitute the notification-service bearer token. Seeing `X-Webhook-Signature` is not cryptographic verification: signature validation requires the receiver's separately provisioned signing key. Raw HTTP attempts can exceed one after ambiguous failures; a stable delivery ID supports receiver deduplication.
 
 ## 9. Optional idempotency replay
 
@@ -265,6 +331,40 @@ jq -e --arg id "$EVENT_ID" '.duplicate==true and .event.id==$id' "$RUN_DIR/event
 ```
 
 Expected: **202**, original internal ID, `duplicate:true`. Reusing an identity with changed content produces **409**. Redis accelerates duplicates for five minutes; PostgreSQL protects identities after cache expiry. The five-minute lifetime does not expire database identities. Existing delivery attempts can still retry independently of replay; this is at-least-once HTTP delivery, not exactly-once execution at the receiver.
+
+### Optional producer-ID duplicate without an explicit key
+
+Use the same file, including its producer `eventId`. Removing the header must not create a second logical event:
+
+```bash
+STATUS=$(curl --silent --show-error --max-time 15 \
+  -o "$RUN_DIR/event-no-key-replay.json" -w '%{http_code}' \
+  -X POST "$BASE_URL/v1/events" \
+  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  --data-binary "@$RUN_DIR/event-request.json")
+test "$STATUS" = '202'
+jq -e --arg id "$EVENT_ID" '.duplicate==true and .event.id==$id' "$RUN_DIR/event-no-key-replay.json"
+```
+
+When both explicit key and producer ID are absent, the service generates a key from canonical content and the configured authenticated identity. Distinct legitimate events with identical content need distinct producer IDs or explicit keys.
+
+### Optional conflicting-content rejection
+
+Change only the payload while keeping the original key and producer ID. This request must return 409; the accepted event remains unchanged:
+
+```bash
+jq '.payload.amount=126' "$RUN_DIR/event-request.json" > "$RUN_DIR/event-conflict-request.json"
+STATUS=$(curl --silent --show-error --max-time 15 \
+  -o "$RUN_DIR/event-conflict-response.json" -w '%{http_code}' \
+  -X POST "$BASE_URL/v1/events" \
+  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  --data-binary "@$RUN_DIR/event-conflict-request.json")
+test "$STATUS" = '409'
+jq . "$RUN_DIR/event-conflict-response.json"
+```
+
+The expected 409 is captured explicitly rather than using curl's fail option. Do not reuse the modified file in a success retry. Repeat the section 7 audit GETs to confirm the same two test Delivery IDs; replay is not a request to deliver again. Do not wait five minutes or flush shared Redis just to demonstrate expiry; database-fallback evidence is linked in [submission status](submission-status.md).
 
 ## 10. Metrics and operator health
 
@@ -340,7 +440,7 @@ Useful local names: `events.accepted`, `events.duplicates`, `delivery.succeeded`
 
 One event increments acceptance on the instance handling the POST; two successful deliveries may be processed on different instances. Do not expect each instance's counters to increase by the global totals. Counters can reset on process restart. Shared database backlog gauges describe the same work and must not be summed across replicas. Per-instance latency p95 is not a cluster-wide percentile.
 
-DigitalOcean resource monitoring: open [DigitalOcean](https://cloud.digitalocean.com/), select team **Blitz_team13_Hyd**, then the Droplet or load balancer monitoring page. These show available infrastructure metrics, not proof of an individual event's delivery. A custom metrics bridge is configured, but the last verified Insights export returned HTTP 404 and Metrics Explorer visibility is unproven. Do not rely on Explorer to validate this smoke test. No alarms/ticket creation is configured.
+DigitalOcean resource monitoring: open [DigitalOcean](https://cloud.digitalocean.com/), select team **Blitz_team13_Hyd**, then the Droplet or load balancer monitoring page. These show available infrastructure metrics, not proof of an individual event's delivery. The [load-balancer overview](https://cloud.digitalocean.com/networking/load_balancers/15a568f0-1172-4b6f-9ddb-6a4fad34ee1f) should show three Active backends; the [firewall page](https://cloud.digitalocean.com/networking/firewalls/9ebfb734-0687-4487-babd-8853bc73bb97) shows the provider rules. These links require your authorized DigitalOcean session. Verified LB settings are a private HTTP 9080 `/health/ready` probe every 5 seconds, timeout 3 seconds, unhealthy/healthy thresholds 2/2 and sticky sessions off; see [provider evidence](evidence/load-balancer-2026-11-25.json). A custom metrics bridge is configured, but the last verified Insights export returned HTTP 404 and Metrics Explorer visibility is unproven. Do not rely on Explorer to validate this smoke test. No alarms/ticket creation is configured.
 
 ## 11. URLs to keep handy
 
@@ -364,7 +464,7 @@ Replace UUID placeholders and send `Authorization: Bearer <tenant-token>` on eve
 
 ## 12. Clean up only these two subscriptions
 
-Do this after both deliveries finish. Deleting a subscription prevents future matching; it does not cancel work already created or remove the event/delivery audit.
+Do this after both deliveries finish. Deleting a subscription excludes it from matching transactions that observe the deletion; it does not cancel work already created or remove the event/delivery audit.
 
 ```bash
 curl --fail-with-body --silent --show-error --max-time 10 \
@@ -376,7 +476,7 @@ curl --fail-with-body --silent --show-error --max-time 10 \
 unset API_TOKEN
 ```
 
-Expected: **204** for each. Inbox expiry was requested as 24 hours; provider policy controls actual expiry. Do not delete unrelated subscriptions, clear Redis, or remove database records to reset a demo. API audit remains available after terminal deliveries move into history.
+Expected: **204** for each, including a repeated delete of a subscription owned by this tenant. Keep the two IDs and audit output if using this run in the interview. Inbox expiry was requested as 24 hours; provider policy controls actual expiry. Do not delete unrelated subscriptions, clear Redis, or remove database records to reset a demo. API audit remains available after terminal deliveries move into history.
 
 ## Troubleshooting
 
@@ -395,4 +495,16 @@ Expected: **204** for each. Inbox expiry was requested as 24 hours; provider pol
 | Receiver shows GET as well as POST | Receiving URL was opened in a browser; use viewer/history URLs instead |
 | Signature header present | Not proof of HMAC validation; the receiver must verify it using the appropriate key |
 
-Verification on 26 November 2026: public liveness/readiness returned 200; loopback metrics on all three Droplets returned 200 with the expected JSON sections, and Droplet 1 administrator healthcheck returned 200; active Webhook.site origin was confirmed. All 18 Bash blocks passed syntax checks. Both generated filter examples matched the generated event payload, and the delivery completion predicate passed success/pending/incomplete fixtures. The requests were checked against source contracts. This documentation task did not create inboxes/subscriptions or emit a new event. Run it with your own tenant token and inboxes to obtain end-to-end evidence for your demo. Earlier cloud delivery validations remain separate historical evidence.
+## Verification scope and acceptance checklist
+
+- Both subscription POSTs returned 201 with distinct IDs, and list pagination can find them.
+- The single new event returned 202 and `duplicate:false`; the saved response contains its canonical Event ID and acceptance timestamp.
+- Both distinct Delivery IDs reached `delivered`, with matching Event ID and HTTP 200 attempt timestamps.
+- Both external inbox histories contain the expected event/subscription/delivery IDs. Seeing an attempt in our database alone is insufficient receiver evidence.
+- Optional replays returned 202 with the original Event ID; the changed-body request returned 409. These checks do not establish exactly-once receiver side effects.
+- Local health/metrics were inspected on each Droplet where operator access is available. Provider LB health is checked independently; one public 200 does not verify all backends.
+- Only this run's subscriptions were deleted; no shared cache/database reset or firewall changes were made.
+
+Reviewed on 27 November 2026 against the current resource, authentication, matching, retry and metric source contracts. Local validation passed: all 20 Bash blocks parse; three generated JSON requests are valid; both filters match the sample event; 11 positive/negative delivery, capture and replay fixtures pass; all 16 relative file links resolve; and the Mermaid diagram parses (45 diagrams passed across the repository). This update does **not** create inboxes/subscriptions or emit a new event. Record actual outcomes when you run it; do not mark the checklist complete from reading this guide.
+
+Separate cloud evidence: [27 November callback](evidence/network-webhook-2026-11-27.json) records one temporary subscription, event 202, delivery 204, external capture and verified HMAC; it is not a fresh two-subscriber run. [Provider and host network checks](evidence/provider-network-hardening-2026-11-27.json) record all three backends Active and local readiness/metrics 200. [Final external protocol checks](evidence/network-hardening-final-2026-11-27.json) record LB readiness 200 and backend HTTP/HTTPS timeouts, including the corporate-gateway test limitation. [Submission status](submission-status.md) separates deployed revision evidence from later documentation commits.
