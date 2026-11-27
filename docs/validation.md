@@ -1,5 +1,9 @@
 # Requirements-to-verification matrix
 
+## Latest subscription release validation: 27 November
+
+98 Java and 63 Python tests passed locally; Java/Python/HA-config steps also passed in run 45943599738. Artifact upload failed on account storage quota; downstream hosted image/HA jobs were skipped. The local AMD64 image configuration, tested-JAR equality, current Trivy vulnerability gate, signed three-node promotion, keyed subscription replay/conflicts and two external signed deliveries were verified independently. [Cloud evidence](evidence/subscription-idempotency-cloud-2026-11-27.json). Existing HA/failover drills below remain historical; no new HA drill or Spaces restore was performed.
+
 **27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.

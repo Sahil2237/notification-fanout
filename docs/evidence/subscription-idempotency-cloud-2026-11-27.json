@@ -1,0 +1,218 @@
+{
+  "run_id": "e6e70b28-4542-4426-8b93-463a3e333e13",
+  "event_id": "be35433b-ebc0-4732-88b9-cca8fdba577a",
+  "producer_event_id": "bb03543b-16c6-4a35-9dcb-702c0b06ab12",
+  "event_type": "assessment.fresh.e6e70b28-4542-4426-8b93-463a3e333e13",
+  "subscription_replays": 2,
+  "subscription_conflicts_409": 2,
+  "event_duplicate_replay": true,
+  "event_initial_duplicate": false,
+  "deliveries": [
+    {
+      "subscription_id": "bc258d20-01b7-493c-aa51-e693a295a3fb",
+      "delivery_id": "6c9c0dc6-a55c-4c59-8df6-9eb22329a219",
+      "status": "delivered",
+      "attempt_count": 1,
+      "http_codes": [
+        204
+      ],
+      "capture_verified": true,
+      "hmac_verified": true,
+      "receiver_host": "webhook.site"
+    },
+    {
+      "subscription_id": "624b3eb7-016c-4c16-9d9d-2a7f3a9b5b99",
+      "delivery_id": "a8c4c5ec-f62d-4b42-afe9-146299b1b662",
+      "status": "delivered",
+      "attempt_count": 1,
+      "http_codes": [
+        204
+      ],
+      "capture_verified": true,
+      "hmac_verified": true,
+      "receiver_host": "webhook.site"
+    }
+  ],
+  "read_source": "replica",
+  "subscriptions_left_active_for_user_demo": true,
+  "inbox_expiry_requested_seconds": 86400,
+  "verified_at_utc": "2026-11-27T05:17:25.306615+00:00",
+  "source_revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+  "nodes": [
+    {
+      "node": 1,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11144,
+      "subscriptions": 15,
+      "delivery_identities": 21,
+      "hot_deliveries": 6,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    },
+    {
+      "node": 2,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11144,
+      "subscriptions": 15,
+      "delivery_identities": 21,
+      "hot_deliveries": 6,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    },
+    {
+      "node": 3,
+      "revision": "d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "drained": false,
+      "events": 11144,
+      "subscriptions": 15,
+      "delivery_identities": 21,
+      "hot_deliveries": 6,
+      "historical_deliveries": 15,
+      "migration_count": 11
+    }
+  ],
+  "per_instance_keyed_replay_and_metrics_checks": [
+    {
+      "node": 1,
+      "subscription_replay_201_original_id": true,
+      "application_image": "notification-fanout:d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "metrics": 200,
+      "event_delivery_count": 2,
+      "outbound_default_deny_preserved": true
+    },
+    {
+      "node": 2,
+      "subscription_replay_201_original_id": true,
+      "application_image": "notification-fanout:d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "metrics": 200,
+      "event_delivery_count": 2,
+      "outbound_default_deny_preserved": true
+    },
+    {
+      "node": 3,
+      "subscription_replay_201_original_id": true,
+      "application_image": "notification-fanout:d1612d82b64a6a66c2d1ae2ff3cd843525b90cb9",
+      "ready": 200,
+      "metrics": 200,
+      "event_delivery_count": 2,
+      "outbound_default_deny_preserved": true
+    }
+  ],
+  "load_balancer_readiness_samples": [
+    {
+      "status": 200,
+      "elapsed_ms": 341
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 185
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 204
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 1238
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 183
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 195
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 376
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 193
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 202
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 257
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 229
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 214
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 198
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 194
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 236
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 190
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 195
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 258
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 225
+    },
+    {
+      "status": 200,
+      "elapsed_ms": 437
+    }
+  ],
+  "automatic_deploy_gate_restored": "true",
+  "application_source_revision": "fa1a0b1ea664ce6136d8e7a1fc6c9c18ed21b917",
+  "local_validation": {
+    "java_tests": 98,
+    "python_tests": 63,
+    "failures": 0,
+    "mermaid_diagrams_parsed": 46
+  },
+  "build": {
+    "method": "Local Rancher prebuilt verified JAR, identical runtime instructions and pinned Java25 base digest via official Docker Hub, linux/amd64, apt upgrades; exact image exported, checksum/signature verified on every host",
+    "image_verification": {
+      "jar_sha256": "e9952803a53675717ebef3d52d22a4ea18e508f468ef2796c64ce32c74207fa4",
+      "image_config": "sha256:13a380d76957e951853a50c208ce386168dbb2d059378a2f351f56f3734dff5e",
+      "architecture": "amd64",
+      "tested_jar_verified": true
+    },
+    "security_tool": "Trivy0.76.2, current vulnerability and Java databases",
+    "fixable_high_critical_findings": 0
+  },
+  "deployment": {
+    "method": "Sequential signed promotion through existing root gateway; health checked after each node",
+    "automatic_deployment": false,
+    "ci_run_id": 45943599738,
+    "ci_java_python_config_steps": "passed",
+    "ci_overall": "failed: GitHub Actions artifact storage quota exhausted; release/HA-runtime jobs skipped",
+    "new_paid_resources": 0,
+    "new_credentials": 0
+  }
+}

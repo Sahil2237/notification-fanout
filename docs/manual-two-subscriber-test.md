@@ -107,6 +107,7 @@ cd /workspaces/notification-fanout
 set -euo pipefail
 umask 077
 BASE_URL='https://174.138.121.225'
+EXPECTED_WEBHOOK_STATUS=200
 read -r -s -p 'Tenant API token: ' API_TOKEN
 printf '\n'
 mkdir -p .deploy/manual-tests
@@ -337,11 +338,12 @@ DELIVERY_1=$(jq -er --arg sub "$SUB_1" '.items[] | select(.subscriptionId==$sub)
 DELIVERY_2=$(jq -er --arg sub "$SUB_2" '.items[] | select(.subscriptionId==$sub) | .id' "$RUN_DIR/deliveries.json")
 test "$DELIVERY_1" != "$DELIVERY_2"
 jq -e --arg id "$EVENT_ID" --arg a "$SUB_1" --arg b "$SUB_2" \
-  '[.items[] | select(.subscriptionId==$a or .subscriptionId==$b)] | all(.[]; .eventId==$id and any(.attempts[]; .outcome=="delivered" and .httpStatus==200 and .startedAt!=null and .finishedAt!=null))' \
+  --argjson expected "$EXPECTED_WEBHOOK_STATUS" \
+  '[.items[] | select(.subscriptionId==$a or .subscriptionId==$b)] | all(.[]; .eventId==$id and any(.attempts[]; .outcome=="delivered" and .httpStatus==$expected and .startedAt!=null and .finishedAt!=null))' \
   "$RUN_DIR/deliveries.json"
 ```
 
-Expected: two distinct delivery IDs, one per test subscription, the same event ID, `status:"delivered"`, and a completed attempt with `httpStatus:200` from each configured inbox. The polling loop is bounded; failed HTTP reads stop the commands rather than hiding errors. After diagnosing a transient GET failure, rerun this read-only section. After a delivery timeout/failure, inspect the saved statuses and attempts rather than recreating resources.
+Expected: two distinct delivery IDs, one per test subscription, the same event ID, `status:"delivered"`, and a completed attempt with the configured HTTP status from each inbox: `EXPECTED_WEBHOOK_STATUS=200` for inboxes created by this guide. The prepared cloud demonstration sets this variable to 204. The polling loop is bounded; failed HTTP reads stop the commands rather than hiding errors. After diagnosing a transient GET failure, rerun this read-only section. After a delivery timeout/failure, inspect the saved statuses and attempts rather than recreating resources.
 
 An initially empty delivery list can mean matching is not complete. `pending` can mean queued, leased or waiting to retry. `failed` is terminal; inspect `attempts` and `/v1/dead-letters`. Other broad subscriptions in this tenant may also match: the checks above select only the two IDs created by this test. With more than 100 matching deliveries, follow delivery pagination until both test IDs are found.
 
@@ -570,8 +572,27 @@ Expected: **204** for each, including a repeated delete of a subscription owned 
 - Both external inbox histories contain the expected event/subscription/delivery IDs. Seeing an attempt in our database alone is insufficient receiver evidence.
 - Optional replays returned 202 with the original Event ID; the changed-body request returned 409. These checks do not establish exactly-once receiver side effects.
 - Local health/metrics were inspected on each Droplet where operator access is available. Provider LB health is checked independently; one public 200 does not verify all backends.
-- Only this run's subscriptions were deleted; no shared cache/database reset or firewall changes were made.
+- After your demonstration, delete only this run's subscriptions if no longer needed. The prepared cloud run deliberately leaves its two subscriptions active; no shared cache/database reset or firewall changes were made.
 
-Reviewed on 27 November 2026 against the current resource, authentication, matching, retry and metric source contracts. Local validation passed: all Bash blocks parse; three generated JSON requests are valid; both filters match the sample event; 11 positive/negative delivery, capture and replay fixtures pass; relative file links resolve; and the Mermaid diagram parses (including the subscription retry diagram). This update does **not** create inboxes/subscriptions or emit a new event. Record actual outcomes when you run it; do not mark the checklist complete from reading this guide.
+Reviewed on 27 November 2026 against the current resource, authentication, matching, retry and metric source contracts. Local validation passed: all Bash blocks parse; three generated JSON requests are valid; both filters match the sample event; positive/negative delivery, capture and replay fixtures pass, including configured 200/204 receiver-status checks; relative file links resolve; and the Mermaid diagram parses (including the subscription retry diagram). The fresh deployed two-receiver run below was executed separately from these local guide checks. Record actual outcomes for your own new run; do not mark its checklist complete from reading this guide.
 
 Separate cloud evidence: [27 November callback](evidence/network-webhook-2026-11-27.json) records one temporary subscription, event 202, delivery 204, external capture and verified HMAC; it is not a fresh two-subscriber run. [Provider and host network checks](evidence/provider-network-hardening-2026-11-27.json) record all three backends Active and local readiness/metrics 200. [Final external protocol checks](evidence/network-hardening-final-2026-11-27.json) record LB readiness 200 and backend HTTP/HTTPS timeouts, including the corporate-gateway test limitation. [Submission status](submission-status.md) separates deployed revision evidence from later documentation commits.
+
+## Open the prepared fresh cloud demonstration
+
+The already-validated run has private files in your Rancher development container. In the same container Bash terminal:
+
+```bash
+source /workspaces/notification-fanout/.deploy/manual-tests/fresh-demo-e6e70b28-4542-4426-8b93-463a3e333e13/session.env
+printf 'Run directory: %s\nInbox metadata: %s/inbox-1.json\n' "$RUN_DIR" "$RUN_DIR"
+jq . "$RUN_DIR/demo-result.json"
+printf 'Viewer 1: https://webhook.site/#!/view/%s\nViewer 2: https://webhook.site/#!/view/%s\n' "$INBOX_1" "$INBOX_2"
+```
+
+This file sets only this run's IDs, keys and URLs; it contains no tenant API token. Keep or privately enter your existing service-tenant token before authenticated GET/replay requests. You can now use sections 6–8 to inspect the saved event and deliveries, and section 9 to replay the **saved** event-request.json. Do not regenerate its body under these same identities: this prepared event has its own payload and changed content should return 409. Its receivers return 204, and session.env sets `EXPECTED_WEBHOOK_STATUS=204` so section 7 checks that configured status automatically. The saved demo-result.json and deliveries.json already record both verified 204 outcomes.
+
+The folder contains provider inbox metadata retrieved after creation, the actual subscription request/response files, accepted event, delivery audit and receiver histories. It is ignored by Git and the inbox URLs expire according to provider policy; the creation request asked for 24 hours. The two test subscriptions remain active so you can inspect them or clean them up using section 12. For an entirely new demonstration, start section 1 with new identities and new/unexpired inboxes rather than sourcing this prior run.
+
+## Fresh deployed example from this release
+
+The [27 November keyed-registration demonstration](evidence/subscription-idempotency-cloud-2026-11-27.json) used two fresh external inboxes, two independently filtered subscriptions and one new event. Both subscription replays returned their original 201 representations, both conflicting requests returned 409, and both deliveries returned 204 with independently verified captures/HMACs. That validation configured 204 receivers. `EXPECTED_WEBHOOK_STATUS` selects 200 for a new guide-created run or 204 when you source the prepared session, so the audit assertion checks the appropriate receiver response. Viewer URLs are kept in the private run output, not committed inbox identifiers. This evidence is separate from your next run: follow section 1 to generate new identities and choose new/unexpired inboxes.

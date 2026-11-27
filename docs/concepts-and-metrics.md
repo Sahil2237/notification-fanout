@@ -29,7 +29,7 @@ flowchart TB
 | --- | --- | --- |
 | Durable ingestion and transactions |Event and outbox in one PostgreSQL commit; jobs and matching completion in the consumer transaction with synchronous standby apply |Transaction rollback/storage tests and preserved cloud data; no universal regional RPO 0 |
 | Asynchronous fanout |Kafka consumers create jobs after acceptance; HTTP outside DB transaction |KafkaIT journey and audit/receiver capture; matching is asynchronous |
-| Idempotency |Explicit key or generated content/identity key plus producer ID constraints |events.duplicates, same original event, 409 on conflict; subscription POST also supports an explicit tenant-scoped key and original201 replay/409 conflict |
+| Idempotency |Explicit key or generated content/identity key plus producer ID constraints |events.duplicates, same original event, 409 on conflict; subscription POST also supports an explicit tenant-scoped key and original 201 replay/409 conflict |
 | Deduplication |Unique event/subscription job and idempotent Kafka activation |Database constraints/replay tests; external receiver must deduplicate Delivery ID |
 | Shared request rate limit |Redis atomic fixed-second 1,000/tenant across all apps |http.rate.limited and shared cloud fixture; no independent per-user quota or strict failover accounting |
 | Bulkheads and fairness |Four worker loops/app, one live claim/subscription, least-recently-claimed reservation |Reservation/concurrency tests and pending age; not endpoint-wide or weighted fairness |
