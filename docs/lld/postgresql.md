@@ -1,5 +1,7 @@
 # PostgreSQL and Patroni low-level design
 
+**Subscription creation update:** [Tenant-scoped Idempotency-Key, original201 replay,409 conflicts and deletion semantics](../subscription-idempotency.md). Migration011 adds the durable key/hash to subscriptions without a new backup table.
+
 **27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](../network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.

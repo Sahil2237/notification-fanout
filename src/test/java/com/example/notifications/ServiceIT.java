@@ -131,9 +131,15 @@ class ServiceIT {
 
     private HttpResponse<String> api(String method, String path, String token, String body)
             throws Exception {
+        return api(method, path, token, body, null);
+    }
+
+    private HttpResponse<String> api(String method, String path, String token, String body, String key)
+            throws Exception {
         var builder =
                 HttpRequest.newBuilder(URI.create("http://localhost:" + APP.getLocalPort() + path))
                         .timeout(Duration.ofSeconds(10));
+        if (key != null) builder.header("Idempotency-Key", key);
         if (token != null) builder.header("Authorization", "Bearer " + token);
         if (body != null) builder.header("Content-Type", "application/json");
         builder.method(
@@ -142,6 +148,96 @@ class ServiceIT {
                         ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
         return HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void subscriptionHttpReplayReturnsOriginalCreationAndLocation() throws Exception {
+        var body = "{\"webhookUrl\":\"http://127.0.0.1:19090/hook\",\"filter\":{\"type\":\"order.created\"}}";
+        var first = api("POST", "/v1/subscriptions", TOKEN, body, "subscription-create");
+        var replay = api("POST", "/v1/subscriptions", TOKEN, body, "subscription-create");
+        assertEquals(201, first.statusCode());
+        assertEquals(201, replay.statusCode());
+        assertEquals(JSON.readTree(first.body()), JSON.readTree(replay.body()));
+        assertEquals(first.headers().firstValue("Location"), replay.headers().firstValue("Location"));
+        assertEquals(1, STORE.subscriptions("demo", 100, 0).size());
+        var id = JSON.readTree(first.body()).path("id").asText();
+        assertEquals(204, api("DELETE", "/v1/subscriptions/" + id, TOKEN, null).statusCode());
+        var deletedReplay = api("POST", "/v1/subscriptions", TOKEN, body, "subscription-create");
+        assertEquals(201, deletedReplay.statusCode());
+        assertEquals(JSON.readTree(first.body()), JSON.readTree(deletedReplay.body()));
+        assertTrue(STORE.subscriptions("demo", 100, 0).isEmpty(), "Replay must not reactivate a deleted subscription");
+    }
+
+    @Test
+    void subscriptionKeyConflictAndInvalidKeyAreRejected() throws Exception {
+        var body = "{\"webhookUrl\":\"http://127.0.0.1:19090/hook\"}";
+        assertEquals(201, api("POST", "/v1/subscriptions", TOKEN, body, "shared-key").statusCode());
+        assertEquals(409, api("POST", "/v1/subscriptions", TOKEN, body.replace("/hook", "/slow"), "shared-key").statusCode());
+        assertEquals(400, api("POST", "/v1/subscriptions", TOKEN, body, "x".repeat(201)).statusCode());
+        assertEquals(400, api("POST", "/v1/subscriptions", TOKEN, body, " ").statusCode());
+        assertEquals(401, api("POST", "/v1/subscriptions", null, body, "shared-key").statusCode());
+        assertEquals(1, STORE.subscriptions("demo", 100, 0).size());
+    }
+
+    @Test
+    void subscriptionIdempotencyIsTenantScopedAndOptional() {
+        var request = new SubscriptionInput("http://127.0.0.1:19090/hook", Rules.all());
+        var first = STORE.createSubscription("demo", request, "same");
+        var second = STORE.createSubscription("other", request, "same");
+        assertNotEquals(first.id(), second.id());
+        assertFalse(STORE.ingest("demo", new EventInput("order.created", "checkout", JSON.createObjectNode()), "same").duplicate(), "Event and subscription keys have separate operation scopes");
+        assertNotEquals(first.id(), STORE.createSubscription("demo", request, "another").id());
+        assertNotEquals(STORE.createSubscription("demo", request).id(), STORE.createSubscription("demo", request).id());
+    }
+
+    @Test
+    void subscriptionReplayCanonicalizesObjectFieldsAndDoesNotAdvanceGeneration() throws Exception {
+        var first = new SubscriptionInput("http://127.0.0.1:19090/hook", new Rules("order.created", null,
+                List.of(new Condition("/details", "eq", JSON.readTree("{\"a\":1,\"b\":2}")))));
+        var reordered = new SubscriptionInput(first.webhookUrl(), new Rules("order.created", null,
+                List.of(new Condition("/details", "eq", JSON.readTree("{\"b\":2,\"a\":1}")))));
+        var created = STORE.createSubscription("demo", first, "canonical");
+        var before = DB.withHandle(h -> h.createQuery("SELECT version FROM subscription_versions WHERE tenant_id='demo'").mapTo(Long.class).one());
+        assertEquals(created, new Store(DB, JSON).createSubscription("demo", reordered, "canonical"));
+        assertEquals(before, DB.withHandle(h -> h.createQuery("SELECT version FROM subscription_versions WHERE tenant_id='demo'").mapTo(Long.class).one()));
+        var changed = new SubscriptionInput(first.webhookUrl(), new Rules("another.type", null, first.filter().payloadConditions()));
+        var error = assertThrows(WebApplicationException.class, () -> STORE.createSubscription("demo", changed, "canonical"));
+        assertEquals(409, error.getResponse().getStatus());
+    }
+
+    @Test
+    void concurrentSubscriptionRetriesAcrossStoresCreateOneRecipient() throws Exception {
+        var request = new SubscriptionInput("http://127.0.0.1:19090/hook", Rules.all());
+        try (var pool = Executors.newFixedThreadPool(4)) {
+            var tasks = new java.util.ArrayList<java.util.concurrent.Future<UUID>>();
+            for (var i = 0; i < 12; i++) tasks.add(pool.submit(() -> new Store(DB, JSON).createSubscription("demo", request, "concurrent").id()));
+            var ids = new java.util.HashSet<UUID>();
+            for (var task : tasks) ids.add(task.get(15, TimeUnit.SECONDS));
+            assertEquals(1, ids.size());
+        }
+        var event = STORE.ingest("demo", input("{}"), "one-event").event();
+        assertEquals(1, STORE.deliveries("demo", event.id(), true, 100, 0).size());
+    }
+
+    @Test
+    void subscriptionReplaySucceedsAtCapWithoutCreatingOrChangingRules() {
+        var request = new SubscriptionInput("http://127.0.0.1:19090/hook", Rules.all());
+        var original = STORE.createSubscription("demo", request, "at-cap");
+        DB.useHandle(h -> h.execute("INSERT INTO subscriptions(id,tenant_id,webhook_url,filter) SELECT gen_random_uuid(),'demo','http://127.0.0.1:19090/hook','{}'::jsonb FROM generate_series(1,999)"));
+        assertEquals(original, STORE.createSubscription("demo", request, "at-cap"));
+        var error = assertThrows(WebApplicationException.class, () -> STORE.createSubscription("demo", request, "new-at-cap"));
+        assertEquals(409, error.getResponse().getStatus());
+    }
+
+    @Test
+    void failedSubscriptionTransactionDoesNotReserveKeyOrAdvanceVersion() {
+        var tenant = "rollback-" + UUID.randomUUID();
+        var bad = new SubscriptionInput(null, Rules.all());
+        assertThrows(RuntimeException.class, () -> STORE.createSubscription(tenant, bad, "retry-after-rollback"));
+        var versions = DB.withHandle(h -> h.createQuery("SELECT count(*) FROM subscription_versions WHERE tenant_id=:tenant").bind("tenant", tenant).mapTo(Integer.class).one());
+        assertEquals(0, versions.intValue());
+        var valid = new SubscriptionInput("http://127.0.0.1:19090/hook", Rules.all());
+        assertNotNull(STORE.createSubscription(tenant, valid, "retry-after-rollback"));
     }
 
     @Test

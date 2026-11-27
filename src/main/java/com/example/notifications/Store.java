@@ -112,12 +112,32 @@ public final class Store {
     }
 
     public Subscription createSubscription(String tenant, SubscriptionInput input) {
+        return createSubscription(tenant, input, null);
+    }
+
+    public Subscription createSubscription(String tenant, SubscriptionInput input, String key) {
+        JsonNode request = json.valueToTree(input);
+        var requestHash = hash(request);
         var created = db.inTransaction(
                 h -> {
                     h.createQuery("SELECT pg_advisory_xact_lock(hashtextextended(:tenant, 0))")
                             .bind("tenant", tenant)
                             .map((r, c) -> 0)
                             .list();
+                    // The tenant lock already serializes registration/cap checks across instances.
+                    // Check retries before the cap or generation change, including deleted rows.
+                    if (key != null) {
+                        var existing = h.createQuery("SELECT id FROM subscriptions WHERE tenant_id=:tenant AND idempotency_key=:key")
+                                .bind("tenant", tenant).bind("key", key).mapTo(UUID.class).findOne();
+                        if (existing.isPresent()) {
+                            var same = h.createQuery("SELECT creation_hash=:hash FROM subscriptions WHERE id=:id AND tenant_id=:tenant")
+                                    .bind("hash", requestHash).bind("id", existing.get()).bind("tenant", tenant).mapTo(Boolean.class).one();
+                            if (!same) throw new WebApplicationException("Subscription idempotency key conflicts with original content", 409);
+                            var original = subscription(h, tenant, existing.get());
+                            // Replay the original creation representation without reactivating it.
+                            return new Subscription(original.id(), original.webhookUrl(), original.filter(), original.createdAt(), null);
+                        }
+                    }
                     var count =
                             h.createQuery(
                                             "SELECT count(*) FROM subscriptions WHERE"
@@ -130,12 +150,14 @@ public final class Store {
                     advanceSubscriptionVersion(h,tenant);
                     var id = UUID.randomUUID();
                     h.createUpdate(
-                                    "INSERT INTO subscriptions(id,tenant_id,webhook_url,filter)"
-                                        + " VALUES(:id,:tenant,:url,CAST(:filter AS jsonb))")
+                                    "INSERT INTO subscriptions(id,tenant_id,webhook_url,filter,idempotency_key,creation_hash)"
+                                        + " VALUES(:id,:tenant,:url,CAST(:filter AS jsonb),:key,:hash)")
                             .bind("id", id)
                             .bind("tenant", tenant)
                             .bind("url", input.webhookUrl())
                             .bind("filter", encode(input.filter()))
+                            .bind("key", key)
+                            .bind("hash", key == null ? null : requestHash)
                             .execute();
                     return subscription(h, tenant, id);
                 });
@@ -795,10 +817,14 @@ public final class Store {
     }
 
     private String hash(EventInput input) {
+        var content = json.createObjectNode().put("type",input.type()).put("source",input.source());
+        content.set("payload",input.payload());
+        if (input.eventId() != null) content.put("eventId",input.eventId().toString());
+        return hash(content);
+    }
+
+    private String hash(JsonNode content) {
         try {
-            var content = json.createObjectNode().put("type",input.type()).put("source",input.source());
-            content.set("payload",input.payload());
-            if (input.eventId() != null) content.put("eventId",input.eventId().toString());
             var canonical = canonical(content);
             return HexFormat.of()
                     .formatHex(

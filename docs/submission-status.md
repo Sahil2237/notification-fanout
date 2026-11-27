@@ -67,7 +67,7 @@ Documentation refreshed25 November 2026 IST. Runtime evidence below is pinned to
 | Requirement | Implemented and deployed behavior | Evidence boundary |
 | --- | --- | --- |
 | Durable structured ingestion |202 follows synchronous PostgreSQL event/outbox acceptance transaction followed by asynchronous matching; Kafka outbox retries publication | Latest public HTTPS ingestion/replay and transaction/Kafka recovery integrations; no universal zero-loss disaster claim |
-| Dynamic subscriptions | Tenant create/list/delete and type/source/JSON Pointer equality filters without restart; separate durable origin policy | Lifecycle/filter/ownership/deletion tests; historical public cloud registration. POST subscription is not key-idempotent |
+| Dynamic subscriptions | Tenant create/list/delete and type/source/JSON Pointer equality filters without restart; separate durable origin policy | Lifecycle/filter/ownership/deletion tests; historical public cloud registration. Subscription POST now supports optional tenant-scoped key replay/409 conflicts |
 | Fanout/retry/state | Synchronous membership snapshot, Kafka activation, bounded/fair workers, persisted backoff, pending/delivered/failed, transient six-total-attempt limit and delivery DLQ | Real dependency integrations; latest cloud one successful webhook attempt. Exhaustion tests are automated; no new live six-failure webhook probe in this rollout |
 | Delivery audit | Event/subscription/delivery history and tenant DLQ query endpoints with attempt times/codes/outcomes | Latest external capture/HMAC agrees with delivery audit; unavailable response codes can be null; standby reads can lag |
 | Engineering artifacts | Mermaid full flows, README setup/filters/guarantees/trade-offs, tests and functional on-push CI | Current docs reconcile the previously stale Redis/SQL-counter/old-release descriptions; no exhaustive-testing claim |
@@ -107,7 +107,7 @@ Authentication is static tenant/admin bearer credentials, not OAuth/OIDC. Java/a
 ## Remaining capabilities and release limits
 
 - Managed queue, per-source ordered delivery, time-range replay API, independent per-user quotas, horizontal autoscaling and general response cache are not implemented.
-- Subscription creation lacks an Idempotency-Key contract; no resource update/ETag/If-Match API exists. Duplicate subscription registrations can intentionally yield multiple deliveries to one URL.
+- Subscription creation supports optional tenant-scoped Idempotency-Key replay/conflicts; unkeyed creates remain distinct; no resource update/ETag/If-Match API exists. Duplicate subscription registrations can intentionally yield multiple deliveries to one URL.
 - One-host HA with a surviving safe quorum is the tested durability boundary. Same-region deployment does not prove independent zones/hosts, regional RPO0 or zero interruption. Two whole-host failures remove safety quorum; no automatic Droplet replacement controller exists.
 - Redis asynchronous replication permits uncertain/lost recent quota updates and fixed windows allow boundary bursts. This does not turn Redis into event storage or exactly-once entitlement accounting.
 - Representative slow-receiver/fanout soak, agreed p95/p99/SLOs, full-service disaster RTO, continuous WAL/PITR, application retention, automatic internal-certificate renewal and durable secret escrow remain open. Alarms/tickets are deliberately excluded, not silently claimed complete.

@@ -78,3 +78,7 @@ Executed release result: 27 unit + 59 integration Java tests and 42 Python tests
 [Saved evidence](evidence/load-1000-per-minute-2026-11-26.json): f0c4d33 accepted all 1,000 unique requests in 59.993 seconds with 202, zero request retries/errors/generator drops, 1,000 persisted events/outbox rows and completed Kafka matches. No subscriptions matched and no notifications were sent. p95 acceptance was 77.63 ms and p99 121.16 ms. This is a one-minute, no-fanout observation, not a sustained or 10,000/s capacity certification.
 
 Retention follow-up local result: 27 unit plus 62 integration tests passed (89 Java tests). Three new cases protect identity TTL under subscription/cache pressure, verify non-refreshing expiry and protect legacy LRU identities during rolling upgrades. Hosted CI/deployment evidence is recorded after that revision completes.
+
+## Subscription creation idempotency
+
+ServiceIT covers keyed HTTP 201/Location replay, conflicting URL/filter 409, invalid/oversized keys 400, unauthenticated 401, tenant and operation scope, unkeyed distinct registrations, canonical object order, generation stability, deletion replay without reactivation, concurrent Store clients producing one recipient/delivery, replay at the 1,000 active cap and complete rollback of failed registration. Migration 011 is additive and preserves existing registrations. Cloud validation is recorded separately after deployment; local tests do not establish a deployed release. [Contract](subscription-idempotency.md), [manual fresh demo](manual-two-subscriber-test.md).

@@ -17,7 +17,7 @@ Neither URL requires a bearer token. Use HTTPS on the standard port 443; do not 
 
 This is a repeatable smoke test for the deployed application at **https://174.138.121.225**. Run the commands in order in the **same Bash session**. It creates two subscriptions under your token's tenant, sends one new event, checks its two deliveries, and optionally verifies idempotency and removes the test subscriptions. It does not require an application redeployment.
 
-The examples use synthetic data and two distinct Webhook.site inboxes. Both subscriptions belong to one authenticated tenant; they are not two new tenant accounts. The tenant is determined by the bearer token. Keep your token and inbox IDs private; do not commit run output. Only the two subscription POSTs and the single event POST create application resources. Subscription POST is not idempotent: do not rerun it blindly after a lost response; inspect the subscription list first.
+The examples use synthetic data and two distinct Webhook.site inboxes. Both subscriptions belong to one authenticated tenant; they are not two new tenant accounts. The tenant is determined by the bearer token. Keep your token and inbox IDs private; do not commit run output. Only the two subscription POSTs and the single event POST create application resources. Subscription POST is idempotent when you preserve the explicit key and identical body used below. Without a key, repeated creation intentionally creates distinct subscriptions. See [subscription retry rules](subscription-idempotency.md).
 
 ## Where to run each check after network hardening
 
@@ -75,7 +75,7 @@ sequenceDiagram
 | Kafka distribution | Six partitions, three consumers total (one/app); canonical internal Event UUID is the partition key. RF3, minimum ISR2, producer acknowledgements from all in-sync replicas. No per-source delivery ordering claim. |
 | Rule selection | Subscriptions visible in the successful consumer matching transaction determine recipients. Create before matching can include a new rule; delete before matching excludes it. Delete after matching does not cancel created deliveries. Keep both test subscriptions until the demo completes. |
 | Duplicate protection | Tenant-scoped explicit key and/or producer Event UUID, backed by PostgreSQL uniqueness. Redis retains admitted committed identities for up to 300 seconds from original acceptance; replay does not extend expiry. The bounded cache cannot guarantee every event fits for the full window; PostgreSQL is authoritative on misses. |
-| Subscription cache | Same Redis service, generation-scoped records, database fallback and subscription-only LRU; at most 20% of a tenant's active subscriptions cached. With only these two active subscriptions, the floor is zero; the demo does not require cache hits. No PUT/PATCH or ETag update API; delete/create replaces a subscription. |
+| Subscription cache | Same Redis service, generation-scoped records, database fallback and subscription-only LRU; at most 20% of a tenant's active subscriptions cached. With only these two active subscriptions, the floor is zero; the demo does not require cache hits. Keyed subscription creation replays 201/conflicts 409; no PUT/PATCH or ETag update API; delete/create replaces a subscription. |
 | Worker safety | Four bounded workers/app, twelve total; one active attempt per subscription across apps, fair scheduling and shared retry budget. Database leases and claim tokens reject stale saved results. These do not prevent a remote side effect after an ambiguous network failure. |
 | Retries and DLQ | Transient errors can use the initial attempt plus **five retries**, six total; backoff/jitter and retry budget can defer attempts. Non-retryable errors can fail earlier. Terminal failures are persisted in the delivery DLQ; Kafka DLQ publication retries independently. |
 | Audit and history | Terminal deliveries move after 24 hours to history in bounded atomic batches. Existing event/subscription/delivery URLs return the same IDs and attempts through a logical active/history view; pending jobs stay active. History has no automatic one-day deletion. |
@@ -83,6 +83,19 @@ sequenceDiagram
 | Delivery guarantee | At-least-once HTTP attempts. A stable Delivery ID enables receiver-side deduplication; it does not establish exactly-once webhook effects. Two distinct subscriptions intentionally create two delivery identities. |
 
 The five-tenant target is 5,000 events/second aggregate, **not a validated limit on this fleet**. This guide creates one logical event, not load. For deeper contracts see [API](api.md), [matching/cache/history](async-cache-history.md), [reliability controls](reliability-controls.md), [capacity limits](capacity-1000-rps.md) and [current release evidence](submission-status.md).
+
+## Start a fresh demonstration
+
+For each new demonstration, rerun section 1 once to generate a new run ID, Event ID, event key and two subscription keys. Create two fresh inboxes (or use two unexpired inboxes you own), register both filters for the new event type, verify creation replay, and then send one event. Reuse the saved variables/files only when retrying that same run. A fresh run intentionally creates new resources; preserve an uncertain prior run's identities rather than replacing them to retry.
+
+The `/workspaces` path exists inside the Rancher development container, not your Mac shell. In IntelliJ's container terminal, verify before proceeding:
+
+```bash
+uname -s
+cd /workspaces/notification-fanout && pwd
+```
+
+Expected: Linux and `/workspaces/notification-fanout`. Stop if either check fails. `BASE_URL` below is a plain URL; do not paste Markdown link formatting. The tenant-token prompt hides typing; paste only the tenant token and press Enter. The protected cloud token file is on a Droplet, not in this container; see [onboarding](onboarding.md).
 
 ## 1. Prepare the local terminal
 
@@ -103,6 +116,8 @@ EVENT_TYPE="assessment.demo.$RUN_ID"
 SOURCE='manual-interview-test'
 PRODUCER_EVENT_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
 IDEMPOTENCY_KEY="manual-$RUN_ID"
+SUB_KEY_1="subscription-1-$RUN_ID"
+SUB_KEY_2="subscription-2-$RUN_ID"
 printf 'Run files: %s\nEvent type: %s\n' "$RUN_DIR" "$EVENT_TYPE"
 ```
 
@@ -169,6 +184,7 @@ curl --fail-with-body --silent --show-error --max-time 15 \
   -D "$RUN_DIR/subscription-1-headers.txt" \
   -X POST "$BASE_URL/v1/subscriptions" \
   -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $SUB_KEY_1" \
   --data-binary "@$RUN_DIR/subscription-1-request.json" \
   > "$RUN_DIR/subscription-1.json"
 SUB_1=$(jq -er '.id' "$RUN_DIR/subscription-1.json")
@@ -185,6 +201,7 @@ curl --fail-with-body --silent --show-error --max-time 15 \
   -D "$RUN_DIR/subscription-2-headers.txt" \
   -X POST "$BASE_URL/v1/subscriptions" \
   -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $SUB_KEY_2" \
   --data-binary "@$RUN_DIR/subscription-2-request.json" \
   > "$RUN_DIR/subscription-2.json"
 SUB_2=$(jq -er '.id' "$RUN_DIR/subscription-2.json")
@@ -193,6 +210,27 @@ jq . "$RUN_DIR/subscription-2.json"
 ```
 
 Each POST should return **201 Created**, a distinct `id` and a `Location` header. Filters use JSON Pointer paths, only `eq`, and AND semantics. Both filters match the event below. Save the responses and confirm HTTP 201 in each `subscription-*-headers.txt`; these saved responses identify the committed registrations. Subscription creation is committed before 201; waiting for a read replica is not required before sending the event.
+
+### Verify subscription registration retries before sending the event
+
+Replay both identical registrations with their saved keys. Each must return 201 and exactly the original creation body; this must leave two test registrations, not four:
+
+```bash
+for n in 1 2; do
+  if [ "$n" -eq 1 ]; then key="$SUB_KEY_1"; else key="$SUB_KEY_2"; fi
+  STATUS=$(curl --silent --show-error --max-time 15 \
+    -o "$RUN_DIR/subscription-$n-replay.json" -w '%{http_code}' \
+    -X POST "$BASE_URL/v1/subscriptions" \
+    -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+    -H "Idempotency-Key: $key" \
+    --data-binary "@$RUN_DIR/subscription-$n-request.json")
+  test "$STATUS" = '201'
+  jq -e --slurpfile original "$RUN_DIR/subscription-$n.json" '. == $original[0]' \
+    "$RUN_DIR/subscription-$n-replay.json"
+done
+```
+
+A changed webhook URL or filter under the same key must return 409. To register another intended subscription, use another key. After deletion, replay returns the historical creation response without reactivating it; a fresh registration requires a new key. Keys persist in PostgreSQL and are separate from the five-minute event cache. Current authentication/destination validation still applies. Keep the two original request files and keys if a response is lost.
 
 Confirm active subscriptions using the list endpoint:
 
@@ -497,7 +535,7 @@ Expected: **204** for each, including a repeated delete of a subscription owned 
 
 ## Verification scope and acceptance checklist
 
-- Both subscription POSTs returned 201 with distinct IDs, and list pagination can find them.
+- Both subscription POSTs returned 201 with distinct IDs; keyed retries returned the same original bodies/IDs, and list pagination can find exactly those two test registrations.
 - The single new event returned 202 and `duplicate:false`; the saved response contains its canonical Event ID and acceptance timestamp.
 - Both distinct Delivery IDs reached `delivered`, with matching Event ID and HTTP 200 attempt timestamps.
 - Both external inbox histories contain the expected event/subscription/delivery IDs. Seeing an attempt in our database alone is insufficient receiver evidence.
@@ -505,6 +543,6 @@ Expected: **204** for each, including a repeated delete of a subscription owned 
 - Local health/metrics were inspected on each Droplet where operator access is available. Provider LB health is checked independently; one public 200 does not verify all backends.
 - Only this run's subscriptions were deleted; no shared cache/database reset or firewall changes were made.
 
-Reviewed on 27 November 2026 against the current resource, authentication, matching, retry and metric source contracts. Local validation passed: all 20 Bash blocks parse; three generated JSON requests are valid; both filters match the sample event; 11 positive/negative delivery, capture and replay fixtures pass; all 16 relative file links resolve; and the Mermaid diagram parses (45 diagrams passed across the repository). This update does **not** create inboxes/subscriptions or emit a new event. Record actual outcomes when you run it; do not mark the checklist complete from reading this guide.
+Reviewed on 27 November 2026 against the current resource, authentication, matching, retry and metric source contracts. Local validation passed: all Bash blocks parse; three generated JSON requests are valid; both filters match the sample event; 11 positive/negative delivery, capture and replay fixtures pass; relative file links resolve; and the Mermaid diagram parses (including the subscription retry diagram). This update does **not** create inboxes/subscriptions or emit a new event. Record actual outcomes when you run it; do not mark the checklist complete from reading this guide.
 
 Separate cloud evidence: [27 November callback](evidence/network-webhook-2026-11-27.json) records one temporary subscription, event 202, delivery 204, external capture and verified HMAC; it is not a fresh two-subscriber run. [Provider and host network checks](evidence/provider-network-hardening-2026-11-27.json) record all three backends Active and local readiness/metrics 200. [Final external protocol checks](evidence/network-hardening-final-2026-11-27.json) record LB readiness 200 and backend HTTP/HTTPS timeouts, including the corporate-gateway test limitation. [Submission status](submission-status.md) separates deployed revision evidence from later documentation commits.

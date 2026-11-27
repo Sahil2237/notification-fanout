@@ -35,10 +35,12 @@ public final class NotificationResource {
     @POST
     @Path("/subscriptions")
     public Response subscribe(
-            @Context SecurityContext user, @NotNull @Valid SubscriptionInput input) {
+            @Context SecurityContext user, @HeaderParam("Idempotency-Key") String key,
+            @NotNull @Valid SubscriptionInput input) {
+        validateIdempotencyKey(key);
         Filters.validate(input.filter());
         destinations.validate(input.webhookUrl());
-        var subscription = store.createSubscription(user.getUserPrincipal().getName(), input);
+        var subscription = store.createSubscription(user.getUserPrincipal().getName(), input, key);
         return Response.created(URI.create("/v1/subscriptions/" + subscription.id()))
                 .entity(subscription)
                 .build();
@@ -70,8 +72,7 @@ public final class NotificationResource {
             @Context SecurityContext user,
             @HeaderParam("Idempotency-Key") String key,
             @NotNull @Valid EventInput input, @Context jakarta.servlet.http.HttpServletRequest request) {
-        if (key != null && (key.isBlank() || key.length() > 200 || key.chars().anyMatch(Character::isISOControl)))
-            throw new BadRequestException("Idempotency-Key must contain 1..200 characters");
+        validateIdempotencyKey(key);
         try (var ignored = metrics.timer("events.acceptance_latency").time()) {
             var accepted = store.ingest(config.identity(user.getUserPrincipal().getName()), input, key);
             request.setAttribute("eventId", accepted.event().id());
@@ -137,6 +138,11 @@ public final class NotificationResource {
             @QueryParam("offset") @DefaultValue("0") int offset) {
         checkPage(limit, offset);
         return page(store.deadLetters(user.getUserPrincipal().getName(), limit + 1, offset), limit, offset);
+    }
+
+    private static void validateIdempotencyKey(String key) {
+        if (key != null && (key.isBlank() || key.length() > 200 || key.chars().anyMatch(Character::isISOControl)))
+            throw new BadRequestException("Idempotency-Key must contain 1..200 characters");
     }
 
     private static void checkPage(int limit, int offset) {

@@ -43,4 +43,7 @@ END $grant$;
     <sql>CREATE INDEX subscriptions_match_candidates ON subscriptions(tenant_id,(filter-&gt;&gt;'type'),(filter-&gt;&gt;'source'),id) WHERE deleted_at IS NULL;</sql>
     <sql>CREATE INDEX outbox_undispatched ON event_outbox(event_id) WHERE dispatched_at IS NULL;</sql>
   </changeSet>
+  <changeSet id="011-subscription-idempotency" author="notification-fanout">
+    <sqlFile path="migrations/011_subscription_idempotency.sql"/>
+  </changeSet>
 </databaseChangeLog>

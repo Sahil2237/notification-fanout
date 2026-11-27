@@ -10,7 +10,7 @@ All /v1 requests require `Authorization: Bearer <token>`. Tenant comes from that
 |---|---|---|
 |POST /v1/events|Event below; optional Idempotency-Key|202 Accepted object, Location header|
 |GET /v1/events/{id}|—|200 Event|
-|POST /v1/subscriptions|Subscription below|201 Subscription, Location header|
+|POST /v1/subscriptions|Subscription below; optional Idempotency-Key|201 Subscription, Location header|
 |GET /v1/subscriptions?limit=20&offset=0|—|200 Page of active subscriptions|
 |DELETE /v1/subscriptions/{id}|—|204; repeat delete remains 204|
 |GET /v1/deliveries/{id}|—|200 Delivery including attempts|
@@ -63,7 +63,7 @@ Event requests also accept optional producer `eventId` (UUID). Missing Idempoten
 
 ## Idempotency scope, updates and network access
 
-Only event ingestion has the explicit/generated Idempotency-Key contract. Repeating POST /v1/subscriptions can create another subscription for the same URL; distinct registrations intentionally produce distinct delivery jobs. Origin approval upserts policy state but has no general key-based response-replay contract. DELETE subscription is repeatable with 204. No PUT/PATCH, ETag or If-Match update contract is implemented.
+Event ingestion has the explicit/generated key contract. Subscription creation also supports an explicit tenant-scoped Idempotency-Key: same normalized request replays the original201 response; conflicting content returns409. Without a key, repeated registration creates distinct subscriptions and delivery jobs. See [subscription idempotency](subscription-idempotency.md), including deleted-resource replay and validation policy. Origin approval upserts policy state but has no general key-based response-replay contract. DELETE subscription is repeatable with 204. No PUT/PATCH, ETag or If-Match update contract is implemented.
 
 Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Direct public Droplet HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only ingress and restricted egress are deployed; SSH source scope is retained by user decision; see [network hardening](network-hardening.md).
 
