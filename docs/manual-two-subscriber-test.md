@@ -123,6 +123,20 @@ printf 'Run files: %s\nEvent type: %s\n' "$RUN_DIR" "$EVENT_TYPE"
 
 Use your existing tenant token, not the administrator token or a DigitalOcean token. An authorized operator can obtain the existing service-tenant token from the protected `api_token` field in `/opt/notification-fanout/ha/secrets.json` on a Droplet, or from the team's secure credential store. Do not print the full secrets file or paste credentials into GitHub/chat. No real token is embedded in this document. Keep this session open because subsequent commands use these variables.
 
+### Files and identities used by this run
+
+| File or value | Meaning |
+| --- | --- |
+| `$RUN_DIR/inbox-1.json`, `inbox-2.json` | Responses from Webhook.site; each UUID builds a receiving URL. These are not subscription or event input files. |
+| `subscription-1-request.json`, `subscription-2-request.json` | Inputs to our subscription POST: receiving URL and matching filter. |
+| `subscription-1.json`, `subscription-2.json` | Saved 201 creation responses containing Subscription IDs. |
+| `$SUB_KEY_1`, `$SUB_KEY_2` | Separate stable subscription-creation retry identities; do not regenerate them on a retry. |
+| `event-request.json` | Event input including the producer-generated `eventId`; retain it for retries. |
+| `event-response.json` and `$EVENT_ID` | Accepted response and service-generated canonical internal Event ID, used in GET URLs, logs and webhook comparisons. |
+| `$IDEMPOTENCY_KEY` | Event submission retry key; separate operation scope from subscription keys. |
+
+To locate the actual inbox response file, run `printf '%s/inbox-1.json\n' "$RUN_DIR"` in this same session after section 3. Never substitute an inbox UUID for an API bearer token. Each new logical event can match two subscriptions and therefore has two distinct Delivery IDs; a retry of one delivery preserves its Delivery ID.
+
 ## 2. Check public health
 
 ```bash
@@ -231,6 +245,21 @@ done
 ```
 
 A changed webhook URL or filter under the same key must return 409. To register another intended subscription, use another key. After deletion, replay returns the historical creation response without reactivating it; a fresh registration requires a new key. Keys persist in PostgreSQL and are separate from the five-minute event cache. Current authentication/destination validation still applies. Keep the two original request files and keys if a response is lost.
+
+Optional 409 check using subscription 1's original key and a changed filter (no new registration should be created):
+
+```bash
+jq '.filter.source="conflicting-source"' "$RUN_DIR/subscription-1-request.json" \
+  > "$RUN_DIR/subscription-conflict-request.json"
+STATUS=$(curl --silent --show-error --max-time 15 \
+  -o "$RUN_DIR/subscription-conflict-response.json" -w '%{http_code}' \
+  -X POST "$BASE_URL/v1/subscriptions" \
+  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $SUB_KEY_1" \
+  --data-binary "@$RUN_DIR/subscription-conflict-request.json")
+test "$STATUS" = '409'
+jq . "$RUN_DIR/subscription-conflict-response.json"
+```
 
 Confirm active subscriptions using the list endpoint:
 

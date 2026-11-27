@@ -20,3 +20,13 @@ class ImageIdentityTest(unittest.TestCase):
         with self.assertRaises(ValueError):image.verify(self.raw,self.digest,self.inspected)
     def test_changed_archive_config_digest_is_rejected(self):
         with self.assertRaises(ValueError):image.verify(self.raw,'sha256:wrong',self.inspected)
+
+    def test_legacy_parent_reference_is_not_execution_configuration(self):
+        self.config['config']['Image']='sha256:legacy-build-parent'
+        raw=json.dumps(self.config).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+        self.assertEqual(digest,image.verify(raw,digest,self.inspected)['verified_config_digest'])
+    def test_changed_environment_is_rejected_even_with_legacy_parent(self):
+        self.config['config']['Image']='sha256:legacy-build-parent'
+        raw=json.dumps(self.config).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+        self.inspected['Config']['Env']=['JAVA_HOME=/different/runtime']
+        with self.assertRaises(ValueError):image.verify(raw,digest,self.inspected)

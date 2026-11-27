@@ -3,7 +3,11 @@
 import hashlib,json,subprocess,sys,tarfile
 
 def normalized(config):
-    return {key:value for key,value in config.items() if value not in (None,False,0,"",[],{})}
+    # Legacy builders store the parent image reference in Config.Image. Docker28.2+
+    # removes this non-standard build metadata from inspect; it is not runtime config.
+    # Archive SHA-256, every filesystem layer and all execution settings remain checked.
+    # https://docs.docker.com/engine/deprecated/#non-standard-fields-in-image-inspect
+    return {key:value for key,value in config.items() if key != "Image" and value not in (None,False,0,"",[],{})}
 
 def identity(inspected):
     content={'architecture':inspected['Architecture'],'os':inspected['Os'],
