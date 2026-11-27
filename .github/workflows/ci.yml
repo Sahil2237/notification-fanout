@@ -1,6 +1,9 @@
 name: Java 25 verification
 on:
   push:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
 permissions:
   contents: read
@@ -87,7 +90,7 @@ jobs:
         with:
           name: verification-application
           path: target/notification-fanout.jar
-          retention-days: 7
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -148,7 +151,7 @@ jobs:
           name: droplet-release
           path: .release/
           include-hidden-files: true
-          retention-days: 7
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -261,7 +264,7 @@ jobs:
           name: ha-runtime
           path: .ha-runtime/
           include-hidden-files: true
-          retention-days: 7
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

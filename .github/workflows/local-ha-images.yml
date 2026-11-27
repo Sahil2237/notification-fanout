@@ -30,4 +30,4 @@ jobs:
         with:
           name: local-ha-vendor-arm64
           path: local-vendor/
-          retention-days: 3
+          retention-days: 1
