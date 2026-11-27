@@ -1,0 +1,197 @@
+{
+  "name": "notification-fanout",
+  "inbound_rules": [
+    {
+      "protocol": "tcp",
+      "ports": "22",
+      "sources": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "80",
+      "sources": {
+        "load_balancer_uids": [
+          "15a568f0-1172-4b6f-9ddb-6a4fad34ee1f"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "443",
+      "sources": {
+        "load_balancer_uids": [
+          "15a568f0-1172-4b6f-9ddb-6a4fad34ee1f"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "9080",
+      "sources": {
+        "load_balancer_uids": [
+          "15a568f0-1172-4b6f-9ddb-6a4fad34ee1f"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "2379-2380",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "5432",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "6379",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "8008",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "9092-9093",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "26379",
+      "sources": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    }
+  ],
+  "outbound_rules": [
+    {
+      "protocol": "icmp",
+      "ports": "0",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "0",
+      "destinations": {
+        "addresses": [
+          "10.122.0.2/32",
+          "10.122.0.5/32",
+          "10.122.0.6/32"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "53",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "80",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "443",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "udp",
+      "ports": "53",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "udp",
+      "ports": "67",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    },
+    {
+      "protocol": "udp",
+      "ports": "123",
+      "destinations": {
+        "addresses": [
+          "0.0.0.0/0",
+          "::/0"
+        ]
+      }
+    }
+  ],
+  "droplet_ids": [
+    622664599,
+    622797519,
+    622797520
+  ],
+  "tags": []
+}

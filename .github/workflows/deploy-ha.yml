@@ -8,10 +8,6 @@ on:
       verification_run_id:
         description: Successful trusted default-branch verification run
         required: true
-      access_only:
-        description: Verify CI SSH access and clean up without deploying
-        type: boolean
-        default: false
 permissions:
   contents: read
   actions: read
@@ -43,25 +39,13 @@ jobs:
           sha=$(jq -r .head_sha verified-run.json)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           printf 'RELEASE_SHA=%s\n' "$sha" >> "$GITHUB_ENV"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        if: vars.JIT_SSH_ENABLED == 'true'
-        with:
-          ref: ${{ github.workflow_sha }}
-          persist-credentials: false
-      - name: Open this runner's temporary SSH source
-        if: vars.JIT_SSH_ENABLED == 'true'
-        env:
-          DO_FIREWALL_TOKEN: ${{ secrets.DO_FIREWALL_TOKEN }}
-        run: python3 deploy/ha/jit-ssh.py open --state "$RUNNER_TEMP/notification-ssh-window.json"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        if: inputs.access_only != true
         with:
           name: droplet-release
           path: release
           run-id: ${{ env.VERIFICATION_RUN_ID }}
           github-token: ${{ github.token }}
       - name: Verify bundle revision and checksums
-        if: inputs.access_only != true
         run: |
           test "$(cat release/release-sha)" = "$RELEASE_SHA"
           (cd release && sha256sum --check SHA256SUMS)
@@ -75,18 +59,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Verify restricted CI SSH access without deployment
-        if: inputs.access_only == true
-        env:
-          HA_HOSTS: ${{ vars.HA_DROPLET_HOSTS }}
-        run: |
-          jq -e 'type == "array" and length == 3 and all(.[]; type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9.-]*$"))' <<< "$HA_HOSTS"
-          mapfile -t hosts < <(jq -r '.[]' <<< "$HA_HOSTS")
-          for host in "${hosts[@]}"; do
-            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "notification-deploy@$host" 'test "$(id -un)" = notification-deploy && test -x /usr/local/sbin/notification-promote'
-          done
       - name: Drain and promote one node at a time
-        if: inputs.access_only != true
         env:
           HA_HOSTS: ${{ vars.HA_DROPLET_HOSTS }}
         run: |
@@ -99,11 +72,6 @@ jobs:
             ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "notification-deploy@$host" "sudo /usr/local/sbin/notification-promote '$RELEASE_SHA'"
           done
           printf 'Promoted signed revision `%s` to three drained HA backends.\n' "$RELEASE_SHA" >> "$GITHUB_STEP_SUMMARY"
-      - name: Close this runner's temporary SSH source
-        if: always() && vars.JIT_SSH_ENABLED == 'true'
-        env:
-          DO_FIREWALL_TOKEN: ${{ secrets.DO_FIREWALL_TOKEN }}
-        run: python3 deploy/ha/jit-ssh.py close --state "$RUNNER_TEMP/notification-ssh-window.json"
       - name: Remove SSH credentials
         if: always()
         run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

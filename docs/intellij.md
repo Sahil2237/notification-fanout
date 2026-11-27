@@ -1,6 +1,6 @@
 # IntelliJ with Rancher Desktop
 
-**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](onboarding.md).
 

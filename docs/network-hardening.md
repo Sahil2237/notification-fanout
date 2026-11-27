@@ -1,101 +1,104 @@
-# Backend network hardening — deployed scope and remaining work
+# Production network access — current deployed policy
 
-**Provider follow-up, 27 November:** Cloud Firewall ports 80/443/9080 now accept only the managed load-balancer identity. All three provider backends were verified Active and the LB Healthy. Cloud outbound traffic is restricted to web/DNS, NTP/DHCP, ICMP and private peers; each host now has outbound default-deny with explicit service ports. [Current provider/host evidence](evidence/provider-network-hardening-2026-11-27.json). SSH source narrowing remains pending the [dedicated CI credential and access test](ci-ssh-window.md). The original host-only rollout below is historical where superseded.
+## Verified state: 27 November 2026
 
-## Current state: 27 November 2026
+Public clients use **https://174.138.121.225**. Provider Cloud Firewall rules now accept backend TCP **80, 443 and 9080 only from load balancer notification-fanout-ha**, using its resource identity rather than fixed LB private IPs. The firewall is attached to all three existing Droplets. The provider shows the LB **Healthy** and **all three backends Active** after the changes.
 
-The direct-public-backend exposure is closed on all three existing Droplets by active, persistent Ubuntu UFW policy. Public requests should use **https://174.138.121.225**. No additional paid resource was created and no application/container restart was required.
-
-This is a completed **host-ingress restriction**, not a claim that every proposed network control is finished. DigitalOcean CLI authentication is unavailable and the browser is signed out. Changing provider Cloud Firewall rules requires an authorized DigitalOcean session. SSH source restrictions and outbound allowlisting are not implemented by this change.
+All three hosts retain private-interface ingress restrictions and now have **outbound default-deny with explicit allowances**. No paid resource, new node, new API token or repository firewall secret was created. **SSH sources remain unchanged at the user's explicit request**; see [SSH access decision](ci-ssh-window.md).
 
 ```mermaid
-flowchart LR
-    User[Internet client] -->|HTTPS 443| LB[Public DigitalOcean load balancer]
-    LB -->|Private VPC backend traffic| UFW[Host firewall: eth1 / VPC sources only]
-    UFW --> Proxy[Caddy: TLS termination]
-    Proxy -->|Loopback 8080| App[Dropwizard application]
-    Direct[Direct public backend request] -->|Blocked: 80 / 443 / 9080| UFW
-    App -->|Private TLS connections| Cluster[PostgreSQL / Kafka / Redis]
-    Operator[Authorized operator or restricted CI] -->|Existing key-based SSH retained| Host[Droplet]
+flowchart TB
+    Client[Public client] -->|HTTPS 443| LB[174.138.121.225: managed load balancer]
+    LB -->|Private VPC backend connections| CF[Cloud Firewall: LB identity only on 80 / 443 / 9080]
+    CF --> UF[Host UFW: VPC sources on eth1]
+    UF --> Proxy[Caddy TLS proxy]
+    Proxy -->|Loopback HTTP 8080| API[Dropwizard API]
+    Direct[Direct internet or non-LB VPC backend request] -.->|Blocked| CF
+    Operator[Key-authenticated operator and existing CI] -->|SSH 22: source policy retained| Host[Droplet]
+    API --> OUT[Host default-deny egress plus Cloud Firewall]
+    OUT -->|Explicit cluster ports and private peers| Cluster[PostgreSQL / Kafka / Redis / etcd]
+    OUT -->|Allowed web / DNS / time / DHCP traffic| Dependencies[Required outbound services]
+    Host --> Metrics[Loopback 8081 metrics and admin health]
 ```
 
-| Control | Implemented state |
+## Inbound access
+
+| Surface | Provider Cloud Firewall | Host/application layer |
+| --- | --- | --- |
+| Backend HTTP 80, HTTPS 443 | Only LB UID `15a568f0-1172-4b6f-9ddb-6a4fad34ee1f` | eth1, VPC source 10.122.0.0/20, own private destination IP |
+| Private health 9080 | Same LB UID only | Same private-interface/source boundary; drain-aware `/health/ready` |
+| Java 8080 and admin/metrics 8081 | No public allowance | Loopback listeners only |
+| etcd 2379–2380, PostgreSQL 5432, Redis 6379, Patroni 8008, Kafka 9092–9093, Sentinel 26379 | Only 10.122.0.2/32, .5/32 and .6/32 | Private peer rules plus TLS/authentication |
+| SSH 22 | All IPv4/IPv6 sources retained | Key-only login, operator trust, restricted CI privileges; no password/keyboard-interactive login |
+
+Caddy still has wildcard listeners; the change enforces network ingress rather than changing bind addresses. Current proxy/Java/cluster containers use host networking. Docker bridge-published ports would need separate forwarding controls; the host ingress applicator refuses a non-host-network proxy.
+
+A TLS certificate mismatch alone never counted as isolation. Negative tests preserve the service TLS identity while connecting to each backend public IP. Non-LB VPC clients are now blocked too: a peer-host connection to another backend's private HTTPS address fails, while the LB remains healthy.
+
+## Outbound access
+
+| Layer | Allowed traffic |
 | --- | --- |
-| Public Droplet HTTP/HTTPS | Old any-source UFW allowances for 80/443 removed, including IPv6 counterparts |
-| Proxy backend ingress | TCP 80/443 only from 10.122.0.0/20 on eth1 to the node's private VPC address |
-| Load-balancer health ingress | TCP 9080 constrained to the same private interface, source subnet and destination address |
-| Java application/admin | Existing loopback 8080/8081 retained |
-| Cluster ports | Existing private peer rules, TLS and credentials retained |
-| SSH | Existing public 22/key-only policy retained, including the restricted CI promotion account |
-| Outbound connections | Existing default-allow policy retained; application webhook destination/DNS validation retained |
-| Provider firewall | Existing rules unchanged; load-balancer-UID-only backend source rules still pending |
+| Cloud Firewall, general destinations | TCP 53/80/443; UDP 53/67/123; existing ICMP allowance |
+| Cloud Firewall, private cluster destinations | TCP to the three exact private peer /32 addresses |
+| Host UFW | Outbound default-deny; TCP 53/80/443 and UDP 53/67/123; explicit peer TCP 22, 2379–2380, 5432, 6379, 8008, 9092–9093 and 26379 on eth1; existing loopback/established/essential ICMP framework behavior |
 
-The Caddy process still has wildcard listeners. Ingress is restricted by the host firewall; do not describe this release as changing its bind addresses. Current services use host networking, so these UFW INPUT controls apply. Docker bridge-published ports need separate forwarding controls; the applicator refuses an installation whose proxy is not host-networked.
+Cloud peer TCP allows all ports only to the three peer /32s; host rules narrow those connections to the listed service ports. This is combined-layer enforcement, not a claim that the provider peer rule enumerates every port. Existing stateful return traffic remains allowed.
 
-## What was verified
+General web/DNS ports allow all IPv4/IPv6 destinations; this is **port-restricted egress, not a hostname/destination allowlist or protection against every exfiltration path**. Application origin approval, connection-time DNS/address validation, TLS hostname checks and redirect refusal remain necessary for webhook SSRF protection. Current approved receivers use HTTPS443. Before approving another webhook port, update/review both host and provider policies; the API does not automatically provision network exceptions.
 
-See [machine-readable evidence](evidence/network-hardening-host-2026-11-27.json).
+Allowed web traffic preserves package repositories, image/CI access, certificate issuance, metrics export attempts, Spaces and registered webhook receivers. A successful Spaces HTTPS probe establishes connectivity, not a fresh authenticated backup/restore test. Provider metrics Explorer visibility remains unverified independently of network reachability.
 
-- All three direct public HTTPS probes failed even when preserving the valid service TLS identity. This is network blocking, not reliance on certificate mismatch.
-- All three direct public HTTP probes failed.
-- All 39 external TCP probes failed: 13 application, health, metrics and cluster ports per public Droplet IP.
-- Private proxy HTTPS and private health requests returned 200 for each node when tested from another cluster node.
-- Fresh verified-host-key SSH connections, loopback readiness and loopback metrics succeeded for every node.
-- The public load-balancer readiness endpoint returned 200 after every node change.
-- Public LB request access logs observed private source addresses 10.122.0.7 and 10.122.0.8 on nodes 1 and 3. The bounded sample did not record node 2 receiving those requests; provider-side membership/health remains to be inspected after sign-in. This is not proof that all three nodes were selected by the LB.
-- The rollback timer was cancelled on each node only after external/private/SSH checks passed. No rollback timer is left armed.
-- Authenticated subscription listing through the public LB returned 200. Replaying the historical event returned 202, duplicate=true and its original ID; no new event was created.
-- All three application readiness checks returned 200 and all nodes were undrained after hardening.
-- Local validation passed 41 HA and 12 single-host Python tests; both changed shell scripts passed Bash syntax checks. The Java application source was unchanged.
+## What passed
 
-An aggregate LB readiness response proves one routed backend is ready; it does not establish all three provider backend health states. Existing dependency readiness checks remained healthy. This task did not intentionally fail a database/Kafka member or create new events.
+- Before/after public probes: direct backend HTTP/HTTPS blocked on all three hosts; 39 public application/cluster port probes blocked in the host rollout.
+- Provider control panel: one firewall attached/up-to-date on all three Droplets; LB Healthy and all three backends Active after restrictions.
+- Post-provider checks on every host: app readiness 200, loopback metrics 200, GitHub HTTPS200, webhook-provider HTTPS200, Spaces HTTPS200, verified private PostgreSQL query, outbound default-deny and no armed rollback timer.
+- A non-LB VPC peer could not connect to the other backend's private HTTPS443, confirming the narrower provider boundary.
+- Before removing broad outbound rules, allowed service rules were installed. Each host policy was applied with a 180-second independent rollback; fresh SSH/dependency checks passed before cancelling rollback.
+- Authenticated API operation also passed end-to-end after provider/host restrictions: one synthetic event returned202, matched a temporary subscription and delivered with HTTP204 on its first attempt. The external receiver capture and tenant-derived HMAC signature were verified. The temporary subscription was then deleted. [Callback evidence](evidence/network-webhook-2026-11-27.json).
 
-## Reproducible host policy
+Evidence: [original host rollout](evidence/network-hardening-host-2026-11-27.json), [provider configuration and host egress](evidence/provider-network-hardening-2026-11-27.json), [current release](submission-status.md). The provider snapshot is recorded from the Control Panel's visible selected/saved state; it is not an API export or Terraform state.
 
-Source: [network-policy.py](../deploy/ha/network-policy.py), [tests](../deploy/ha/test_network_policy.py). The signed HA runtime packaging includes the operator helper. [HA bootstrap](../deploy/ha/bootstrap.sh) now creates private-interface web/health allowances rather than public web allowances for future hosts. Do not run the legacy single-host bootstrap over this HA cluster.
+## Source, reproduction and rollback
 
-Review a plan on a node, using its own private address (node 1 shown):
+- [Provider reference policy](../deploy/ha/firewall-policy.json): the reviewed request-body representation of current rules, firewall `9ebfb734-0687-4487-babd-8853bc73bb97`. It is not automatically applied. Compare newer live rules before using it; never overwrite a later tighter rule blindly.
+- [Host ingress policy](../deploy/ha/network-policy.py) and [tests](../deploy/ha/test_network_policy.py).
+- [Host egress policy](../deploy/ha/egress-policy.py) and [tests](../deploy/ha/test_egress_policy.py).
+- [HA bootstrap](../deploy/ha/bootstrap.sh) now creates restricted ingress and outbound allowances/default-deny for future hosts. Do not use the legacy single-host bootstrap on this cluster.
+
+Plan host ingress using that node's own private address; node 1 example:
 
 ```bash
 python3 network-policy.py --private-ip 10.122.0.2
 ```
 
-Operator application on an existing HA node:
+Plan host egress:
 
 ```bash
-sudo python3 network-policy.py --apply --private-ip 10.122.0.2 \
-  --snapshot /opt/notification-fanout/ha/network-policy-backup-<unique-timestamp>
+python3 egress-policy.py --peers 10.122.0.2 10.122.0.5 10.122.0.6
 ```
 
-The helper requires active UFW, IPv4/IPv6 default-deny ingress, an RFC1918 VPC, a real private-interface address and a host-networked proxy. It refuses using the default-route interface. It snapshots user.rules/user6.rules, arms a 180-second independent rollback timer, installs private rules first and then removes the old public allowances. It does not edit SSH, cluster or egress rules.
+Operator application adds `--apply --snapshot /opt/notification-fanout/ha/<unique-backup-directory>` to the appropriate command. The helpers require an existing active UFW installation and refuse unsafe/unreviewed input. Ingress preserves SSH and cluster rules. Egress refuses pre-existing explicit outbound allowances rather than silently replacing them. Snapshot user.rules/user6.rules; egress also snapshots `/etc/default/ufw` because it changes the default policy.
 
-**Before cancelling rollback:** verify direct public backend requests fail; private proxy/9080 requests work; public LB readiness works; fresh SSH and local app/metrics requests work. Then run on that node:
+After applying, verify public LB access, denied direct backend access, fresh SSH, local readiness/metrics and required outbound/private connections before cancelling the matching timer:
 
 ```bash
 sudo systemctl stop notification-network-rollback.timer
-sudo systemctl is-active notification-network-rollback.timer
+sudo systemctl stop notification-egress-rollback.timer
 ```
 
-Expected timer state: inactive. A failure during application restores the snapshot immediately; a lost caller session leaves the timer to restore it. Emergency rollback restores the former policy, which includes public web access, so use only to recover a verified connectivity failure:
+Both timers must be inactive in the verified steady state. A lost caller session leaves rollback armed. Emergency host rollback commands use the actual backup directory created on that host:
 
 ```bash
-sudo python3 /opt/notification-fanout/ha/network-stage/network-policy.py \
-  --restore /opt/notification-fanout/ha/network-policy-backup-<actual-timestamp>
+sudo python3 /opt/notification-fanout/ha/network-stage/network-policy.py --restore '/opt/notification-fanout/ha/network-policy-backup-<actual-timestamp>'
+sudo python3 /opt/notification-fanout/ha/egress-stage/egress-policy.py --restore '/opt/notification-fanout/ha/egress-backup-<actual-timestamp>'
 ```
 
-Backups are root-owned local operator state; do not commit their contents or unrelated secrets.
+Ingress rollback restores the earlier host web allowances; provider LB-only rules remain a separate boundary. Egress rollback restores the previous host outbound policy; provider egress restrictions also remain separate. Restoring one layer does not automatically revert the other. Do not disable either firewall as a routine diagnostic step. Roll provider changes back only to a reviewed snapshot while retaining the minimum necessary access.
 
-## Provider-side work still required
+## Remaining boundaries
 
-After authorized sign-in to **Blitz_team13_Hyd**:
+SSH source narrowing was explicitly declined; existing CI remains unchanged and no firewall token is stored in GitHub. No WAF, OIDC, VPN, bastion, static runner or new egress proxy is implied. Backends retain public IPs for existing SSH/outbound use, while public application ports are blocked. Same-region capacity/HA/backup limitations remain in [submission status](submission-status.md).
 
-1. Confirm LB 15a568f0-1172-4b6f-9ddb-6a4fad34ee1f, its VPC, forwarding rules, health configuration and all three backend memberships.
-2. Snapshot the existing firewall and find every firewall attached to these Droplets. Allow rules are additive; another broad firewall can defeat a narrow rule.
-3. Replace the backend allowances for TCP 80, 443 and 9080 with **this load balancer UID as source**, preserving cluster rules and existing deployment access. Add the narrower rules before removing broad rules.
-4. Verify all backend health states, public HTTPS and certificate/challenge routing, protected API authentication, direct-backend blocking, cluster readiness and CI SSH access.
-
-Use a provider LB identity rather than hard-coding its currently observed private IPs: managed nodes can be replaced or resized. The host firewall's VPC rule is a second boundary; the desired provider rule restricts it further to the LB.
-
-References: [DigitalOcean firewall rules](https://docs.digitalocean.com/products/networking/firewalls/how-to/configure-rules/), [LB private traffic and health checks](https://docs.digitalocean.com/support/how-to-troubleshoot-load-balancer-health-check-issues/).
-
-SSH narrowing needs an approved operator/VPN source and a deployment path compatible with GitHub-hosted runners' changing egress IPs. Restricting 22 to the workstation's current address would break the existing hosted-runner deployment path. No VPN, bastion, paid static runner or new credential was created. Outbound narrowing likewise needs the required provider/OS/backup/registry/metrics destinations and approved webhook ports preserved. These remain explicit gaps rather than assumed controls.
+Sources: [DigitalOcean firewall rules](https://docs.digitalocean.com/products/networking/firewalls/how-to/configure-rules/) and [LB private-network health](https://docs.digitalocean.com/support/how-to-troubleshoot-load-balancer-health-check-issues/).

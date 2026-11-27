@@ -168,6 +168,51 @@
       "fresh_ssh_verified": true
     }
   ],
-  "ssh_source_narrowing": "pending dedicated GitHub CI firewall credential approval",
-  "new_resources_created": false
+  "ssh_source_narrowing": "not applied: user explicitly selected Keep SSH sources unchanged",
+  "post_change_functional_checks": {
+    "verified_at_utc": "2026-11-27T03:13:02.214629+00:00",
+    "nodes": [
+      {
+        "node": 1,
+        "readiness": 200,
+        "metrics": 200,
+        "github": 200,
+        "webhook_provider": 200,
+        "spaces": 200,
+        "private_pg_tls_query": true,
+        "outbound_default_deny": true,
+        "rollback_timer_inactive": true,
+        "non_lb_peer_https_blocked": true
+      },
+      {
+        "node": 2,
+        "readiness": 200,
+        "metrics": 200,
+        "github": 200,
+        "webhook_provider": 200,
+        "spaces": 200,
+        "private_pg_tls_query": true,
+        "outbound_default_deny": true,
+        "rollback_timer_inactive": true,
+        "non_lb_peer_https_blocked": true
+      },
+      {
+        "node": 3,
+        "readiness": 200,
+        "metrics": 200,
+        "github": 200,
+        "webhook_provider": 200,
+        "spaces": 200,
+        "private_pg_tls_query": true,
+        "outbound_default_deny": true,
+        "rollback_timer_inactive": true,
+        "non_lb_peer_https_blocked": true
+      }
+    ],
+    "lb_only_rule_blocks_non_lb_vpc_clients": true,
+    "all_three_provider_backends_active_observed_in_control_panel": true
+  },
+  "new_github_firewall_secret_created": false,
+  "additional_digitalocean_paid_resources_created": false,
+  "new_digitalocean_api_token_created": false
 }

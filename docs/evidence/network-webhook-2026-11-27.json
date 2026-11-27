@@ -1,0 +1,18 @@
+{
+  "test_run": "network-73c3af51-e792-4bd1-8557-9cf5600d4bf0",
+  "receiver_host": "webhook.site",
+  "synthetic_data_only": true,
+  "receiver_expiry_requested_seconds": 3600,
+  "event_id": "f570ab22-d69b-40e5-a3e2-55c12ed49fb9",
+  "subscription_id": "dc12cde4-6cdb-4511-81de-5ac3b369cfd2",
+  "delivery_id": "34cdd74f-2424-490c-aa5f-2a9878e46088",
+  "ingestion_status": 202,
+  "delivery_status": "delivered",
+  "attempt_count": 1,
+  "attempt_http_codes": [
+    204
+  ],
+  "receiver_capture_verified": true,
+  "receiver_hmac_verified": true,
+  "temporary_subscription_deleted": true
+}

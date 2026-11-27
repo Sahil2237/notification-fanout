@@ -1,6 +1,6 @@
 # Caddy reverse-proxy low-level design
 
-**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](../network-hardening.md). Earlier network observations below are historical where superseded.
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](../network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
@@ -34,7 +34,7 @@ flowchart LR
     OP[Authorized Droplet operator shell] -->|Bypasses public proxy route| API
 ```
 
-The LB's own HTTP-to-HTTPS redirect setting is off; Caddy owns its redirect/ACME behavior. The public listener forwards approved routes but does not validate bearer tokens; the application does. Direct public 80/443 is blocked by host UFW. Caddy still has wildcard listeners, but ingress is accepted only from VPC sources on eth1. This is not yet a provider LB-UID-only source rule. Administrator rejection is not a replacement for tenant authorization. No per-user routing, rate-limit plugin, WAF or response cache is configured in Caddy.
+The LB's own HTTP-to-HTTPS redirect setting is off; Caddy owns its redirect/ACME behavior. The public listener forwards approved routes but does not validate bearer tokens; the application does. Direct public 80/443 is blocked by host UFW. Caddy still has wildcard listeners, but ingress is accepted only from VPC sources on eth1. The provider additionally permits only the load-balancer identity on backend 80/443/9080. Administrator rejection is not a replacement for tenant authorization. No per-user routing, rate-limit plugin, WAF or response cache is configured in Caddy.
 
 ## Shared certificate storage and cold-start boundary
 

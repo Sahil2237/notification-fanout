@@ -1,10 +1,10 @@
 # Ingress, authentication, networking and failure behavior
 
-**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](network-hardening.md). Earlier network observations below are historical where superseded.
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
-Checked against application `6474ad3`, effective node configuration and the DigitalOcean load-balancer overview during the 25 November 2026 IST documentation review. This is a description of actual deployment, not a proposed tighter firewall. No infrastructure rules were changed by this documentation task.
+Current network policy was changed and verified on 27 November 2026; [provider and host evidence](evidence/provider-network-hardening-2026-11-27.json) supersedes the older public-backend/broad-egress descriptions. The application release is tracked separately in submission-status.md.
 
 ## Load balancing and gateway boundary
 
@@ -36,7 +36,7 @@ There is no separately deployed API gateway product, WAF, service mesh or API-ma
 | Surface | Actual exposure |
 | --- | --- |
 | Tenant REST APIs and health | Public HTTPS through the load balancer; tenant APIs require a valid bearer credential, health does not |
-| Droplet Caddy80/443 | Public host ingress blocked; host accepts VPC sources only on eth1. Provider LB-UID-only source restriction is pending |
+| Droplet Caddy80/443 | Provider accepts only the LB identity; host additionally accepts VPC sources on eth1 |
 | Java application 8080 | Binds127.0.0.1, reached by local Caddy/operator tunnel, not directly published on public/private interfaces |
 | Dropwizard admin/metrics 8081 | Loopback only; no public metrics listener |
 | `/v1/admin/*` | Public Caddy rejects with 404; use an authorized SSH tunnel and independent admin bearer credential |
@@ -61,7 +61,7 @@ The deployment uses a DigitalOcean VPC and Cloud Firewall plus Ubuntu UFW on eac
 | TCP port | Allowed source | Purpose |
 | --- | --- | --- |
 |22 | Any IPv4/IPv6 | SSH, protected by keys; source CIDRs are not narrowed |
-|80,443 | VPC10.122.0.0/20, eth1 only | Private proxy ingress; provider LB-UID-only source restriction pending |
+|80,443 | VPC10.122.0.0/20, eth1 only | Private proxy ingress; provider LB-UID-only source restriction deployed |
 |2379-2380 | Three private peer IPs | etcd client/peer quorum with mutual TLS |
 |5432 | Three private peer IPs | PostgreSQL TLS connections/replication |
 |8008 | Three private peer IPs | Patroni control with mutual TLS |
@@ -71,9 +71,9 @@ The deployment uses a DigitalOcean VPC and Cloud Firewall plus Ubuntu UFW on eac
 
 Approved private peers are 10.122.0.2,10.122.0.6 and10.122.0.5. No public inbound5432/Kafka/Redis/admin ports are allowed. Service bind addresses and TLS/credentials provide additional boundaries behind the firewall.
 
-Outbound traffic is broadly allowed; the Cloud Firewall allows outbound TCP/UDP/ICMP and UFW defaults to outgoing allow. There is no destination-restricted egress gateway/firewall. Webhook code separately requires approved public HTTPS origins, rejects private/loopback/link-local/metadata DNS answers, validates addresses again at connection time, verifies TLS hostnames and disables redirects. This is application enforcement, not network-level egress isolation.
+Provider egress now allows general TCP53/80/443, UDP53/67/123 and the existing ICMP allowance, plus TCP to the three exact private peer /32s. Host UFW is outbound default-deny and narrows peer TCP to the required service/management ports. The general web/DNS ports still permit all destination addresses; this is port restriction, not a hostname or universal exfiltration allowlist. Webhook code continues to enforce approved HTTPS origins, reject private/loopback/link-local/metadata destination answers, verify TLS and refuse redirects. Additional approved webhook ports require an explicit host/provider policy update first. See [exact rules and rollback](network-hardening.md).
 
-Outstanding hardening includes SSH operator/VPN source restrictions, load-balancer-only backend ingress, controlled outbound dependencies and a WAF/gateway only if justified. A network allowlist alone cannot determine which bearer-token holder is legitimate. Broader IAM, rotation/expiry automation and granular permissions also remain evolution work.
+SSH operator/VPN source narrowing remains unimplemented by explicit user choice. Provider LB-only backend ingress and port-restricted egress are implemented. A WAF/gateway or finer destination-aware egress policy remains future work only if justified. A network allowlist alone cannot determine which bearer-token holder is legitimate. Broader IAM, rotation/expiry automation and granular permissions also remain evolution work.
 
 ## REST surfaces and conditional updates
 

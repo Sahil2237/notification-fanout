@@ -2,7 +2,7 @@
 
 **Start here:** [Current onboarding, public/private addresses, REST smoke test and per-Droplet metrics](docs/onboarding.md).
 
-**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](docs/network-hardening.md). Earlier network observations below are historical where superseded.
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](docs/network-hardening.md). Historical observations below remain version-pinned.
 
 [Hands-on test: one event → two subscribers → webhook verification](docs/manual-two-subscriber-test.md) — copy-and-paste REST requests, health checks, delivery audit and private metrics access.
 
@@ -18,7 +18,7 @@ The deployed application is **f0c4d33** on three existing 4-GB Ubuntu 24.04 Drop
 
 [CI passed](https://github.com/Sahil2237/notification-fanout/actions/runs/45839195205): 86 Java tests, 42 Python tests, runtime privileges/rollback/restore checks, real PostgreSQL/Redis HA drills and fixable HIGH/CRITICAL image gates. The current target is five tenants at 1,000 requests/second each; sustained 5,000/second is **not benchmark-certified**. The shared quota is 1,000 authenticated requests/tenant/second, with 12 delivery workers. Event identities use a 300-second TTL without early LRU eviction; insufficient cache capacity falls back to PostgreSQL; PostgreSQL identity remains authoritative. Earlier whole-Droplet and actual nine-table Spaces restore evidence remains historical; no new thirteen-table actual Spaces restore is claimed.
 
-**Important limits:** no managed queue, per-source ordering, replay API, per-user quota, horizontal autoscaler or general API-response cache. Targeted identity/subscription caches are implemented. POST subscription is not key-idempotent; no PUT/PATCH/ETag contract exists. Metrics emission is installed but DigitalOcean Explorer visibility remains unverified after provider 404. No alarms/tickets were requested. Direct public backend HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only ingress, SSH source restrictions and broad egress remain documented hardening gaps. Load distribution is provider-managed (the legacy algorithm selector is deprecated); live checks use HTTP 9080 /health/ready every 5 s, timeout 3 s, thresholds 2 failures/2 successes, and sticky sessions off. [Verified LB settings](docs/network-security.md#load-balancing-and-gateway-boundary).
+**Important limits:** no managed queue, per-source ordering, replay API, per-user quota, horizontal autoscaler or general API-response cache. Targeted identity/subscription caches are implemented. POST subscription is not key-idempotent; no PUT/PATCH/ETag contract exists. Metrics emission is installed but DigitalOcean Explorer visibility remains unverified after provider 404. No alarms/tickets were requested. Direct public backend HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only ingress and restricted egress are deployed. SSH source scope remains unchanged by explicit user decision. Load distribution is provider-managed (the legacy algorithm selector is deprecated); live checks use HTTP 9080 /health/ready every 5 s, timeout 3 s, thresholds 2 failures/2 successes, and sticky sessions off. [Verified LB settings](docs/network-security.md#load-balancing-and-gateway-boundary).
 
 ## Diagram-led design documents
 

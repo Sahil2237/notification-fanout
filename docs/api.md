@@ -1,6 +1,6 @@
 # REST API contract
 
-**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
@@ -65,7 +65,7 @@ Event requests also accept optional producer `eventId` (UUID). Missing Idempoten
 
 Only event ingestion has the explicit/generated Idempotency-Key contract. Repeating POST /v1/subscriptions can create another subscription for the same URL; distinct registrations intentionally produce distinct delivery jobs. Origin approval upserts policy state but has no general key-based response-replay contract. DELETE subscription is repeatable with 204. No PUT/PATCH, ETag or If-Match update contract is implemented.
 
-Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Direct public Droplet HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only restrictions, SSH-source narrowing and outbound narrowing remain pending; see [network hardening](network-hardening.md).
+Tenant APIs are reachable over public HTTPS, not only a private endpoint. Java 8080 and admin/metrics8081 bind loopback; Caddy fronts tenant APIs and rejects public administrator routes. There is no dedicated API gateway or OAuth/OIDC. Direct public Droplet HTTP/HTTPS is blocked by host VPC/interface rules. Provider LB-UID-only ingress and restricted egress are deployed; SSH source scope is retained by user decision; see [network hardening](network-hardening.md).
 
 ## Matching and history semantics after redesign
 

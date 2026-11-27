@@ -1,6 +1,6 @@
 # Assessment requirements and acceptance evidence
 
-**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **Revised target:** [five tenants at 1,000 events/second each; five-minute cache sizing](capacity-1000-rps.md); higher-rate validation is recorded separately from the earlier 1,000/minute test.
 
@@ -73,8 +73,9 @@ Code, diagrams and workflows are pushed to the personal private [GitHub reposito
 | Direct internet backend HTTP/HTTPS blocked | Implemented on all three hosts; valid-service-identity HTTPS probes fail at the network boundary |
 | LB path and private backend routing preserved | Public ready and authenticated API checks pass; per-node private proxy/health checks pass |
 | Java/admin/metrics not public | Loopback-only; operator access documented in onboarding |
-| Provider firewall allows only LB identity to backend ports | Pending authorized provider session; host currently accepts VPC sources on eth1 |
-| All provider backend memberships/health freshly verified | Pending provider session; local readiness is not provider health evidence |
-| SSH source restriction and restricted egress | Not implemented; key-only/restricted CI and application destination validation remain existing protections |
+| Provider firewall allows only LB identity to backend ports | Implemented:80/443/9080 source is LB UID; host additionally restricts VPC/interface ingress |
+| All provider backend memberships/health freshly verified | Provider inspection after changes: all three Active and LB Healthy; local/private probes also pass |
+| SSH source restriction | Sources retained by explicit user decision; key-only/restricted CI remain |
+| Restricted egress | Host default-deny/explicit service ports plus provider web/DNS/time/DHCP/private-peer rules; no universal destination allowlist |
 
 Source and evidence: [network hardening](network-hardening.md), [onboarding](onboarding.md), [host/network probes](evidence/network-hardening-host-2026-11-27.json). This is not a claim of complete network isolation.

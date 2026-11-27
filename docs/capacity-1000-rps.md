@@ -1,6 +1,6 @@
 # Capacity target: five tenants at 1,000 events/second each
 
-**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 The latest requested target is **5,000 events/second aggregate**, with a **300-second rolling duplicate-identity cache**. That is **1.5 million distinct events**, or **3 million aliases** if each event supplies both a producer event ID and an idempotency key. Expiry does not extend on duplicate reads. PostgreSQL remains authoritative after expiry or a cache miss.
 

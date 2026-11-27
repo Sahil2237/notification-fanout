@@ -1,6 +1,6 @@
 # DigitalOcean load-balancer low-level design
 
-**27 November network update:** [Direct public backend access is blocked by host VPC/interface rules; provider firewall and SSH/egress follow-up remain outstanding](../network-hardening.md). Earlier network observations below are historical where superseded.
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](../network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](../async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
@@ -27,7 +27,7 @@ flowchart TB
     FW --> B3[Caddy and app node3]
     DIRECT[Direct internet backend connection] -.->|Blocked| FW
     LB -.->|Private 9080 health checks| FW
-    RULE[Provider LB-UID-only source rule] -.->|Still pending| FW
+    RULE[Provider LB-UID-only source rule] -->|Enforced on backend 80 / 443 / 9080| FW
 ```
 
 DigitalOcean manages new connection/request distribution internally; the legacy round_robin/least_connections selector is deprecated. Do not infer traditional round-robin from an old API example. No internal algorithm name, exact equal request split or request-by-request rotation was established. Sticky sessions off does not disable ordinary connection reuse. Provider contract: [features](https://docs.digitalocean.com/products/networking/load-balancers/details/features/) and [API](https://docs.digitalocean.com/reference/api/reference/load-balancers/).
@@ -77,8 +77,8 @@ Two app-only failures do not imply data quorum loss; one ready app may continue 
 
 ## Network, telemetry and acceptance evidence
 
-Public ingress, no dedicated API gateway/WAF, host-blocked public backend 80/443, pending provider LB-UID-only ingress, key-only but broadly sourced SSH and broad egress are documented in [network/security](../network-security.md). Private readiness is VPC-restricted; no public Java/admin listener is exposed. Credential authentication remains in the app even for healthy backends.
+Public ingress, no dedicated API gateway/WAF, host-blocked public backend 80/443, deployed provider LB-UID-only ingress and restricted egress, with key-only SSH source scope retained by user decision are documented in [network/security](../network-security.md). Private readiness is VPC-restricted; no public Java/admin listener is exposed. Credential authentication remains in the app even for healthy backends.
 
 Provider-native health metrics include do.load_balancers.backend_up, backend_health_check_failures, backend_downtime and droplet_health. They are not app notification.* instruments and are not a Kafka event stream. DigitalOcean exposes health graphs and alert-policy capabilities, but current native metric samples/alert delivery were not validated/configured. No alarms/tickets by request. The application OTLP 404 issue is separate from whether native LB telemetry exists. [Provider telemetry](https://docs.digitalocean.com/products/insights/reference/telemetry/load-balancers/).
 
-The historical 25 November overview showed three Active backends and Healthy LB; read-only Settings inspection confirmed the table without saving changes. After host hardening on 27 November, aggregate public readiness passed, but provider-side membership/health still awaits authenticated inspection; do not infer all three provider backends are Active from a single readiness response. CI tests private proxy drain routing, and cloud HTTPS/replay/history probes verified public routing. No live equal-distribution benchmark or exact recovery-time SLA was measured. There is no versioned Terraform-managed LB resource in this repository: [sanitized observed configuration](../evidence/load-balancer-2026-11-25.json) is evidence, not an infrastructure provisioning module. Reconsider region topology, ingress filtering or scaling after explicit requirements and measurements.
+The historical 25 November overview showed three Active backends and Healthy LB; read-only Settings inspection confirmed the table without saving changes. After host hardening on 27 November, aggregate public readiness passed, but a subsequent authenticated provider inspection confirmed all three backends Active and the LB Healthy; a single readiness response alone would not prove that. CI tests private proxy drain routing, and cloud HTTPS/replay/history probes verified public routing. No live equal-distribution benchmark or exact recovery-time SLA was measured. There is no versioned Terraform-managed LB resource in this repository: [sanitized observed configuration](../evidence/load-balancer-2026-11-25.json) is evidence, not an infrastructure provisioning module. Reconsider region topology, ingress filtering or scaling after explicit requirements and measurements.

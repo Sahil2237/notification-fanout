@@ -1,6 +1,6 @@
 # Implemented system-design concepts and metrics catalogue
 
-**Network access (27 November):** [Host VPC/interface rules block direct public backend web access; provider LB-only, SSH-source and outbound controls remain pending](network-hardening.md).
+**27 November network update:** [Provider LB-only backend ingress and restricted egress are deployed; SSH sources remain unchanged by user decision](network-hardening.md). Historical observations below remain version-pinned.
 
 **November 26 redesign:** [Current asynchronous matching, 5-minute event identity cache, subscription consistency and delivery history contract](async-cache-history.md). Older revision-specific test/cloud evidence below remains historical until new release validation is recorded.
 
@@ -49,7 +49,7 @@ flowchart TB
 | CI/CD and safe release |Real-service tests, scans, signed artifacts, portable image verification, drain/promote |Version-specific CI and runtime evidence; app rollback must retain contracts and schema is not reversed |
 | Configuration/least privilege |Protected secrets, separate DB/Redis/control identities, bounded config and private ports |Configuration/role/ACL/gateway tests; active-data at-rest encryption not established |
 
-General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover remain absent. Committed-identity and subscription caches are now distinct implemented caches; see the redesign contract. No alarms/tickets were requested. Host VPC/interface ingress blocks direct public web traffic; provider LB-UID-only rules remain pending. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
+General response caching, managed queue, source ordering, replay, ETag updates, per-user quotas, autoscaling, full distributed tracing and regional failover remain absent. Committed-identity and subscription caches are now distinct implemented caches; see the redesign contract. No alarms/tickets were requested. Host VPC/interface ingress blocks direct public web traffic; provider LB-UID-only rules are deployed. The private VPC is not proof of exclusive LB ingress, and shared state is not a browser session.
 
 ## How observations leave each component
 

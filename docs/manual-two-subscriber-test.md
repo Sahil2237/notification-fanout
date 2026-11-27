@@ -29,7 +29,7 @@ The examples use synthetic data and two distinct Webhook.site inboxes. Both subs
 
 [Short onboarding page](onboarding.md) | [Host policy, verification and outstanding provider/SSH/egress controls](network-hardening.md).
 
-Do not replace the load-balancer IP with a Droplet IP in the API commands. Direct-backend blocking is intentional. The host firewall permits private VPC/interface traffic; a provider LB-identity-only rule is still pending. SSH access remains key-only with broad source scope, so this is not a claim that all host ports are private. Preserve your existing operator access and never use the restricted CI identity as a general shell.
+Do not replace the load-balancer IP with a Droplet IP in the API commands. Direct-backend blocking is intentional. The host firewall permits private VPC/interface traffic; a provider LB-identity-only rule is also deployed. SSH access remains key-only with broad source scope, so this is not a claim that all host ports are private. Preserve your existing operator access and never use the restricted CI identity as a general shell.
 
 ## 1. Prepare the local terminal
 

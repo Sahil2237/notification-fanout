@@ -32,7 +32,7 @@ flowchart LR
 | `127.0.0.1:8080` | Java application reachable inside the selected Droplet |
 | `127.0.0.1:8081` | Private admin health/metrics reachable inside the selected Droplet |
 
-Direct public Droplet HTTP/HTTPS is now blocked. A timeout/refused connection there is expected. Do not disable the firewall, expose 8080/8081 or disable TLS validation to make a direct-backend request succeed. The host policy accepts VPC/interface traffic; provider load-balancer-identity-only filtering is still pending. SSH 22 remains broadly sourced with key-only authentication and a restricted CI deployment identity; outbound narrowing also remains pending. Do not describe every Droplet port as private-only.
+Direct public Droplet HTTP/HTTPS is now blocked. A timeout/refused connection there is expected. Do not disable the firewall, expose 8080/8081 or disable TLS validation to make a direct-backend request succeed. The host policy accepts VPC/interface traffic; provider load-balancer-identity-only filtering is deployed. SSH 22 remains broadly sourced with key-only authentication and a restricted CI deployment identity; outbound default-deny and explicit service allowances are deployed. Do not describe every Droplet port as private-only.
 
 ## Run the functional smoke test
 
@@ -67,4 +67,4 @@ Use the [individual per-Droplet commands, health checks and metric interpretatio
 
 The shared fixed-second quota is 1,000 authenticated requests/tenant/second across application replicas; reads and writes count. Five simultaneous tenants is a 5,000/second target, not certified throughput. The five-minute identity cache remains bounded at 32 MiB accounted bytes / 50,000 entries, shared with subscription caching, so it cannot retain the full target working set. PostgreSQL protects duplicates on cache misses. No paid resize was performed.
 
-Provider Cloud Firewall LB-only rules, provider backend-membership reinspection, SSH source narrowing and outbound narrowing remain outstanding. All three apps' local readiness passed, but one successful public readiness response does not prove all three provider backends are Active. Review [deployment evidence](submission-status.md) and [network rollout/rollback instructions](network-hardening.md) before any infrastructure change.
+Provider LB-only rules, backend-health inspection and port-restricted outbound rules are complete. The provider showed all three backends Active after the changes, with local readiness checks also passing. SSH source narrowing was declined by the user. One successful public readiness response alone would not prove the provider status. Review [deployment evidence](submission-status.md) and [network rollout/rollback instructions](network-hardening.md) before any infrastructure change.
